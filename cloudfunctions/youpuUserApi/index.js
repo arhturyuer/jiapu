@@ -82,6 +82,12 @@ function hash(value, length) {
   return crypto.createHash('sha256').update(String(value)).digest('hex').slice(0, length || 32);
 }
 
+function documentData(value) {
+  const data = Object.assign({}, value || {});
+  delete data._id;
+  return data;
+}
+
 function randomToken(bytes) {
   return crypto.randomBytes(bytes || 24).toString('base64url');
 }
@@ -193,7 +199,6 @@ async function enforceRateLimit(openid, action) {
     } else {
       await transaction.collection('rate_limits').doc(id).set({
         data: {
-          _id: id,
           actorId: userId(openid),
           action: action,
           count: 1,
@@ -287,7 +292,7 @@ async function ensureUser(openid, scope) {
     createdAt: db.serverDate(),
     updatedAt: db.serverDate()
   };
-  await database.collection('users').doc(id).set({ data: user });
+  await database.collection('users').doc(id).set({ data: documentData(user) });
   return user;
 }
 
@@ -398,7 +403,6 @@ async function moderateText(openid, values) {
       const status = decision === 'risky' ? 'rejected' : 'review';
       await db.collection('moderation_tasks').doc(taskId).set({
         data: {
-          _id: taskId,
           type: 'text',
           content: content,
           contentHash: contentHash,
@@ -453,7 +457,6 @@ async function mutate(type, event, openid, handler) {
     assert(!existing || existing.status === 'failed', 'REQUEST_IN_PROGRESS', '操作正在处理中，请勿重复提交');
     await transaction.collection('idempotency_records').doc(recordId).set({
       data: {
-        _id: recordId,
         actorId: userId(openid),
         action: type,
         requestId: requestId,
@@ -479,7 +482,7 @@ async function createPersonTx(transaction, familyId, input, openid) {
   const normalized = normalizePerson(input);
   const id = 'p_' + randomToken(18);
   await transaction.collection('persons').doc(id).set({
-    data: Object.assign({ _id: id }, normalized, {
+    data: Object.assign({}, normalized, {
       familyId: familyId,
       status: 'active',
       createdBy: userId(openid),
@@ -521,7 +524,7 @@ async function createRelationTx(transaction, familyId, type, firstId, secondId, 
     createdAt: db.serverDate(),
     updatedAt: db.serverDate()
   };
-  await transaction.collection('relations').doc(id).set({ data: relation });
+  await transaction.collection('relations').doc(id).set({ data: documentData(relation) });
   return relation;
 }
 
@@ -579,7 +582,6 @@ async function authUpdateProfile(event) {
     const taskId = 'profile_' + user._id;
     await transaction.collection('profile_sync_tasks').doc(taskId).set({
       data: {
-        _id: taskId,
         userId: user._id,
         displayName: nickName || '家人',
         avatarAssetId: update.avatarAssetId,
@@ -653,7 +655,7 @@ async function accountRequestDeletion(event) {
       retryCount: 0,
       updatedAt: db.serverDate()
     };
-    await transaction.collection('account_deletion_requests').doc(id).set({ data: record });
+    await transaction.collection('account_deletion_requests').doc(id).set({ data: documentData(record) });
     await transaction.collection('users').doc(user._id).update({
       data: {
         status: 'pending_delete',
@@ -737,7 +739,6 @@ async function familyCreate(event) {
     const memberId = membershipId(familyId, openid);
     await transaction.collection('family_memberships').doc(memberId).set({
       data: {
-        _id: memberId,
         familyId: familyId,
         userId: user._id,
         role: 'admin',
@@ -888,7 +889,6 @@ async function familySetPreference(event) {
     const id = preferenceId(event.familyId, openid);
     await transaction.collection('user_family_preferences').doc(id).set({
       data: {
-        _id: id,
         familyId: event.familyId,
         userId: userId(openid),
         viewMode: event.viewMode === 'perspective' ? 'perspective' : 'full',
@@ -1510,7 +1510,6 @@ async function inviteAccept(event) {
     const role = existing && ['admin', 'member'].includes(existing.role) ? existing.role : invitation.role;
     await transaction.collection('family_memberships').doc(id).set({
       data: {
-        _id: id,
         familyId: family._id,
         userId: user._id,
         role: role,
@@ -1719,7 +1718,6 @@ async function mediaComplete(event) {
       const taskId = 'mt_' + asset._id;
       await transaction.collection('moderation_tasks').doc(taskId).set({
         data: {
-          _id: taskId,
           familyId: asset.familyId || '',
           assetId: asset._id,
           traceId: traceId,

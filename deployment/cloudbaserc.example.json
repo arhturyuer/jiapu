@@ -4,7 +4,7 @@
   "functions": [
     {
       "name": "youpuUserApi",
-      "dir": "youpuUserApi",
+      "dir": "cloudfunctions/youpuUserApi",
       "handler": "index.main",
       "runtime": "Nodejs20.19",
       "timeout": 15,
@@ -16,7 +16,7 @@
     },
     {
       "name": "youpuOpsApi",
-      "dir": "youpuOpsApi",
+      "dir": "cloudfunctions/youpuOpsApi",
       "handler": "index.main",
       "runtime": "Nodejs20.19",
       "timeout": 20,
@@ -26,7 +26,7 @@
     },
     {
       "name": "youpuJobs",
-      "dir": "youpuJobs",
+      "dir": "cloudfunctions/youpuJobs",
       "handler": "index.main",
       "runtime": "Nodejs20.19",
       "timeout": 60,

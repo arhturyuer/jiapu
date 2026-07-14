@@ -78,7 +78,6 @@ async function opsMutate(operator, action, event, handler) {
     assert(!existing, 'REQUEST_IN_PROGRESS', '操作正在处理中，请勿重复提交');
     await transaction.collection('idempotency_records').doc(recordId).set({
       data: {
-        _id: recordId,
         actorId: 'operator_' + operator._id,
         action: action,
         requestId: requestId,
@@ -546,7 +545,6 @@ async function operatorsCreate(event, context) {
     assert(!existing || existing.status !== 'active', 'OPERATOR_EXISTS', '该认证账号已在运营白名单中');
     await transaction.collection('operators').doc(id).set({
       data: {
-        _id: id,
         authUid: authUid,
         displayName: displayName,
         email: email,

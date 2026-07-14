@@ -3,15 +3,15 @@
     "invoke": false
   },
   "youpuUserApi": {
-    "invoke": "auth != null && auth.loginType != 'ANONYMOUS'"
+    "invoke": "auth.loginType != 'ANONYMOUS' && auth != null"
   },
   "youpuOpsApi": {
-    "invoke": "auth != null && auth.loginType != 'ANONYMOUS'"
+    "invoke": "auth.loginType != 'ANONYMOUS' && auth != null"
   },
   "youpuJobs": {
     "invoke": false
   },
   "familyFunctions": {
-    "invoke": "auth != null && auth.loginType != 'ANONYMOUS'"
+    "invoke": "auth.loginType != 'ANONYMOUS' && auth != null"
   }
 }

@@ -6,3 +6,5 @@ admin/dist/
 .DS_Store
 project.private.config.json
 deployment/*.local.env
+deployment/*.local.json
+deployment/backups/

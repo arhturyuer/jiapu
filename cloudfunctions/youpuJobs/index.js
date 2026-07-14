@@ -89,7 +89,6 @@ async function ensureCollections(event) {
   }
   await db.collection('system_config').doc('schema').set({
     data: {
-      _id: 'schema',
       version: 3,
       graphPersonLimit: 500,
       archiveRetentionDays: 30,
@@ -105,7 +104,6 @@ async function ensureCollections(event) {
       const operatorId = 'op_' + hash(authUid, 32);
       await db.collection('operators').doc(operatorId).set({
         data: {
-          _id: operatorId,
           authUid: authUid,
           email: String(event.initialOperatorEmail || '').trim().toLowerCase().slice(0, 120),
           displayName: String(event.initialOperatorName || '初始超级管理员').trim().slice(0, 30),
@@ -504,7 +502,6 @@ async function createBackupManifest() {
   const date = new Date().toISOString().slice(0, 10);
   await db.collection('backup_manifests').doc('backup_' + date).set({
     data: {
-      _id: 'backup_' + date,
       date: date,
       counts: counts,
       platformBackupRequired: true,
@@ -561,7 +558,6 @@ async function moderationCallback(event) {
   const taskId = 'mt_' + asset._id;
   await db.collection('moderation_tasks').doc(taskId).set({
     data: {
-      _id: taskId,
       familyId: asset.familyId || '',
       assetId: asset._id,
       traceId: traceId,
