@@ -1,16 +1,58 @@
 {
   "pages": [
-    "pages/index/index",
-    "pages/example/index"
+    "pages/tree/index",
+    "pages/members/index",
+    "pages/profile/index",
+    "pages/create-family/index",
+    "pages/add-member/index",
+    "pages/edit-member/index",
+    "pages/member-detail/index",
+    "pages/invite/index",
+    "pages/privacy/index",
+    "pages/family-manage/index",
+    "pages/report/index",
+    "pages/legal/index"
   ],
   "window": {
-    "backgroundColor": "#F6F6F6",
-    "backgroundTextStyle": "light",
-    "navigationBarBackgroundColor": "#F6F6F6",
-    "navigationBarTitleText": "云开发 QuickStart",
+    "backgroundColor": "#F7F4EC",
+    "backgroundTextStyle": "dark",
+    "navigationBarBackgroundColor": "#F7F4EC",
+    "navigationBarTitleText": "有谱",
     "navigationBarTextStyle": "black"
   },
+  "tabBar": {
+    "color": "#7B8580",
+    "selectedColor": "#245C4A",
+    "backgroundColor": "#FFFEFA",
+    "borderStyle": "white",
+    "list": [
+      {
+        "pagePath": "pages/tree/index",
+        "text": "家谱",
+        "iconPath": "images/icons/tree.png",
+        "selectedIconPath": "images/icons/tree-active.png"
+      },
+      {
+        "pagePath": "pages/members/index",
+        "text": "家庭",
+        "iconPath": "images/icons/family.png",
+        "selectedIconPath": "images/icons/family-active.png"
+      },
+      {
+        "pagePath": "pages/profile/index",
+        "text": "我的",
+        "iconPath": "images/icons/profile.png",
+        "selectedIconPath": "images/icons/profile-active.png"
+      }
+    ]
+  },
   "sitemapLocation": "sitemap.json",
+  "__usePrivacyCheck__": true,
+  "permission": {
+    "scope.camera": {
+      "desc": "仅在你主动为家谱人物选择拍照时使用相机"
+    }
+  },
   "style": "v2",
   "lazyCodeLoading": "requiredComponents"
 }

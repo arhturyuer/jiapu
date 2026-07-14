@@ -1,0 +1,61 @@
+<view class="create-page page-shell">
+  <view class="step-header">
+    <view class="step-progress">
+      <view class="step-bar {{step >= 1 ? 'active' : ''}}"></view>
+      <view class="step-bar {{step >= 2 ? 'active' : ''}}"></view>
+      <view class="step-bar {{step >= 3 ? 'active' : ''}}"></view>
+    </view>
+    <text class="step-count">第 {{step}} 步，共 3 步</text>
+  </view>
+
+  <view wx:if="{{step === 1}}">
+    <text class="page-title">先添加一个你熟悉的人</text>
+    <text class="page-description">可以是自己，也可以是家里的长辈。以后随时能修改。</text>
+    <view class="form-card surface-card">
+      <text class="field-label">姓名或家人称呼</text>
+      <input class="field-input" placeholder="例如：张建国" value="{{startName}}" data-field="startName" bindinput="inputField" maxlength="30" focus />
+      <text class="field-label second-label">性别（可稍后补充）</text>
+      <view class="choice-row">
+        <view class="choice-item {{startGender === 'male' ? 'selected' : ''}}" data-gender="male" bindtap="chooseGender">男</view>
+        <view class="choice-item {{startGender === 'female' ? 'selected' : ''}}" data-gender="female" bindtap="chooseGender">女</view>
+        <view class="choice-item {{startGender === 'unknown' ? 'selected' : ''}}" data-gender="unknown" bindtap="chooseGender">暂不填写</view>
+      </view>
+    </view>
+  </view>
+
+  <view wx:elif="{{step === 2}}">
+    <text class="page-title">把最熟悉的家人连起来</text>
+    <text class="page-description">这些信息都可以跳过，创建后在家谱图上继续添加。</text>
+    <view class="form-card surface-card">
+      <text class="field-label">{{startName}}的父亲</text>
+      <input class="field-input" placeholder="可选" value="{{fatherName}}" data-field="fatherName" bindinput="inputField" maxlength="30" />
+      <text class="field-label second-label">{{startName}}的母亲</text>
+      <input class="field-input" placeholder="可选" value="{{motherName}}" data-field="motherName" bindinput="inputField" maxlength="30" />
+      <text class="field-label second-label">{{startName}}的伴侣</text>
+      <input class="field-input" placeholder="可选" value="{{spouseName}}" data-field="spouseName" bindinput="inputField" maxlength="30" />
+    </view>
+  </view>
+
+  <view wx:else>
+    <text class="page-title">给这份家谱起个名字</text>
+    <text class="page-description">名称会显示在家庭群分享卡片和家谱顶部。</text>
+    <view class="form-card surface-card">
+      <text class="field-label">家谱名称</text>
+      <input class="field-input" placeholder="例如：张氏家谱" value="{{familyName}}" data-field="familyName" bindinput="inputField" maxlength="40" />
+      <text class="field-label second-label">一句介绍（可选）</text>
+      <textarea class="field-textarea" placeholder="例如：记录我们一家人的故事" value="{{description}}" data-field="description" bindinput="inputField" maxlength="200"></textarea>
+    </view>
+    <view class="preview-card surface-card">
+      <text class="preview-label">预览</text>
+      <text class="preview-name">{{familyName || '家谱名称'}}</text>
+      <text class="preview-desc">{{description || '一家人，共修一份家谱'}}</text>
+      <text class="preview-count">已准备 {{1 + (fatherName ? 1 : 0) + (motherName ? 1 : 0) + (spouseName ? 1 : 0)}} 位家庭成员</text>
+    </view>
+  </view>
+
+  <view class="footer-actions">
+    <button class="secondary-button back-button" wx:if="{{step > 1}}" bindtap="previousStep">上一步</button>
+    <button class="primary-button next-button" wx:if="{{step < 3}}" bindtap="nextStep">继续</button>
+    <button class="primary-button next-button" wx:else loading="{{submitting}}" bindtap="createFamily">创建家谱</button>
+  </view>
+</view>

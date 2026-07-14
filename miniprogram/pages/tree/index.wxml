@@ -1,0 +1,186 @@
+<view class="tree-page">
+  <view class="loading-panel" wx:if="{{loading}}">
+    <view class="loading-dot"></view>
+    <text>正在整理家谱...</text>
+  </view>
+
+  <view class="empty-panel" wx:elif="{{accountPending}}">
+    <view class="empty-mark">隐</view>
+    <text class="empty-title">账户正在注销冷静期</text>
+    <text class="empty-description">当前已暂停家谱操作。你可以前往隐私中心查看进度或撤销注销。</text>
+    <button class="primary-button empty-action" bindtap="openPrivacy">查看账户状态</button>
+  </view>
+
+  <view class="empty-panel" wx:elif="{{loadError}}">
+    <view class="empty-mark">!</view>
+    <text class="empty-title">家谱暂时没有打开</text>
+    <text class="empty-description">{{loadError}}</text>
+    <button class="primary-button empty-action" bindtap="loadPage">重新加载</button>
+  </view>
+
+  <view class="empty-panel" wx:elif="{{!currentFamily}}">
+    <view class="empty-mark">谱</view>
+    <text class="empty-title">从一个人开始</text>
+    <text class="empty-description">几分钟建立第一张家谱，再邀请家人一起补完整。</text>
+    <button class="primary-button empty-action" bindtap="openCreateFamily">创建家谱</button>
+    <button class="secondary-button empty-action" bindtap="showAcceptInviteHelp">接受家人邀请</button>
+  </view>
+
+  <block wx:else>
+    <view class="tree-toolbar">
+      <view class="family-switch" bindtap="openFamilySheet">
+        <text class="family-switch-name">{{currentFamily.name}}</text>
+        <text class="family-switch-arrow">⌄</text>
+      </view>
+      <view class="mode-switch">
+        <view class="mode-item {{viewMode === 'full' ? 'active' : ''}}" bindtap="showFullGraph">全谱</view>
+        <view class="mode-item {{viewMode === 'perspective' ? 'active' : ''}}" bindtap="openPerspectiveSheet">
+          {{viewMode === 'perspective' ? '从' + viewpointName + '看' : '以某人看'}}
+        </view>
+      </view>
+      <view class="toolbar-share" wx:if="{{currentRole === 'admin'}}" bindtap="startShare">分享</view>
+    </view>
+
+    <view class="graph-empty" wx:if="{{nodes.length === 0}}">
+      <text class="graph-empty-title">家谱还是空的</text>
+      <text class="muted-text">先添加第一位家庭成员</text>
+    </view>
+
+    <movable-area class="graph-viewport" wx:else>
+      <movable-view class="graph-movable" style="width:{{canvasWidth}}rpx;height:{{canvasHeight}}rpx;" direction="all" scale scale-min="0.5" scale-max="1.6" out-of-bounds>
+        <view class="graph-canvas" style="width:{{canvasWidth}}rpx;height:{{canvasHeight}}rpx;">
+        <view
+          wx:for="{{lines}}"
+          wx:key="_id"
+          class="relation-line {{item.type === 'spouse' ? 'spouse-line' : 'parent-line'}}"
+          style="{{item.style}}"
+        ></view>
+
+        <view
+          wx:for="{{nodes}}"
+          wx:key="_id"
+          class="person-node {{item.isViewpoint ? 'is-viewpoint' : ''}}"
+          style="{{item.style}}"
+          data-id="{{item._id}}"
+          bindtap="showPerson"
+        >
+          <image class="node-avatar" wx:if="{{item.avatar}}" src="{{item.avatar}}" mode="aspectFill"></image>
+          <view class="node-avatar node-placeholder" wx:else>{{item.initial}}</view>
+          <text class="node-name">{{item.name}}</text>
+          <text class="node-meta" wx:if="{{viewMode === 'perspective' && item.relationLabel}}">{{item.relationLabel}}</text>
+          <text class="node-meta" wx:elif="{{item.metaText}}">{{item.metaText}}</text>
+        </view>
+        </view>
+      </movable-view>
+    </movable-area>
+
+    <view class="graph-help" wx:if="{{nodes.length > 0}}">
+      <text wx:if="{{graphRendering}}">正在分批绘制 {{renderedCount}} / {{totalVisibleCount}} 人</text>
+      <text wx:elif="{{hiddenBranchCount > 0}}">已折叠 {{hiddenBranchCount}} 人，点击分支成员可展开</text>
+      <text wx:else>{{viewMode === 'full' ? '拖动查看全谱，点击成员进行操作' : '当前从' + viewpointName + '查看关系'}}</text>
+    </view>
+  </block>
+
+  <view class="sheet-mask" wx:if="{{showFamilySheet}}" bindtap="closeFamilySheet">
+    <view class="bottom-sheet" catchtap="stopEvent">
+      <view class="sheet-handle"></view>
+      <view class="sheet-title">选择家谱</view>
+      <view class="family-option {{item._id === currentFamily._id ? 'selected' : ''}}" wx:for="{{familyList}}" wx:key="_id" data-id="{{item._id}}" bindtap="switchFamily">
+        <view>
+          <text class="family-option-name">{{item.name}}</text>
+          <text class="family-option-role">{{item.currentRole === 'admin' ? '管理员' : item.currentRole === 'member' ? '家庭成员' : '访客'}}</text>
+        </view>
+        <text class="family-option-check" wx:if="{{item._id === currentFamily._id}}">已选择</text>
+      </view>
+      <button class="secondary-button sheet-button" bindtap="openCreateFamily">创建另一份家谱</button>
+    </view>
+  </view>
+
+  <view class="sheet-mask" wx:if="{{showMemberSheet}}" bindtap="closeMemberSheet">
+    <view class="bottom-sheet person-sheet" catchtap="stopEvent">
+      <view class="sheet-handle"></view>
+      <view class="person-sheet-head">
+        <image class="person-sheet-avatar" wx:if="{{selectedPerson.avatar}}" src="{{selectedPerson.avatar}}" mode="aspectFill"></image>
+        <view class="person-sheet-avatar person-sheet-placeholder" wx:else>{{selectedPerson.initial}}</view>
+        <view class="person-sheet-copy">
+          <text class="person-sheet-name">{{selectedPerson.name}}</text>
+          <text class="muted-text">{{selectedPerson.birthDate || '家庭成员'}}</text>
+        </view>
+      </view>
+      <view class="action-grid">
+        <view class="action-cell" bindtap="useSelectedPerspective">
+          <text class="action-title">从他/她看</text>
+          <text class="action-desc">切换成员视角</text>
+        </view>
+        <view class="action-cell" bindtap="openMemberDetail">
+          <text class="action-title">查看资料</text>
+          <text class="action-desc">关系与人物信息</text>
+        </view>
+        <view class="action-cell" bindtap="toggleSelectedBranch">
+          <text class="action-title">{{selectedPerson.isCollapsed ? '展开后代' : '折叠后代'}}</text>
+          <text class="action-desc">{{selectedPerson.isCollapsed ? '恢复显示这个分支' : '暂时收起这个分支'}}</text>
+        </view>
+        <view class="action-cell" bindtap="openRelationSheet" wx:if="{{canEdit}}">
+          <text class="action-title">添加亲属</text>
+          <text class="action-desc">从此人继续补全</text>
+        </view>
+        <view class="action-cell" bindtap="openEditMember" wx:if="{{canEdit}}">
+          <text class="action-title">编辑资料</text>
+          <text class="action-desc">补充或纠正信息</text>
+        </view>
+        <view class="action-cell action-cell-wide" wx:if="{{currentRole === 'admin'}}" bindtap="shareSelectedPerson">
+          <text class="action-title">从此人分享</text>
+          <text class="action-desc">家人打开后直接看到此人视角</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <view class="sheet-mask" wx:if="{{showPerspectiveSheet}}" bindtap="closePerspectiveSheet">
+    <view class="bottom-sheet perspective-sheet" catchtap="stopEvent">
+      <view class="sheet-handle"></view>
+      <view class="sheet-title">以某位成员看家谱</view>
+      <input class="person-search" placeholder="输入姓名查找" value="{{perspectiveKeyword}}" bindinput="filterPerspectives" />
+      <scroll-view class="perspective-list" scroll-y>
+        <view class="perspective-option" wx:for="{{perspectiveResults}}" wx:key="_id" data-id="{{item._id}}" bindtap="selectPerspective">
+          <view class="small-avatar">{{item.initial}}</view>
+          <text>{{item.name}}</text>
+        </view>
+      </scroll-view>
+    </view>
+  </view>
+
+  <view class="sheet-mask" wx:if="{{showRelationSheet}}" bindtap="closeRelationSheet">
+    <view class="bottom-sheet" catchtap="stopEvent">
+      <view class="sheet-handle"></view>
+      <view class="sheet-title">添加{{selectedPerson.name}}的亲属</view>
+      <view class="relation-grid">
+        <view class="relation-option" wx:for="{{relationOptions}}" wx:key="key" data-type="{{item.key}}" bindtap="chooseRelation">{{item.label}}</view>
+      </view>
+    </view>
+  </view>
+
+  <view class="sheet-mask" wx:if="{{showShareSheet}}" bindtap="closeShareSheet">
+    <view class="bottom-sheet" catchtap="stopEvent">
+      <view class="sheet-handle"></view>
+      <view class="sheet-title">分享给家人</view>
+      <view class="share-summary surface-card">
+        <text class="share-summary-title">{{shareMode === 'perspective' ? '从' + sharePersonName + '看家谱' : '分享完整家谱'}}</text>
+        <text class="share-summary-desc">分享卡片将在 30 天后失效，可在后台撤销。</text>
+      </view>
+      <text class="share-label">家人打开后的权限</text>
+      <view class="share-role-options">
+        <view class="share-role {{shareRole === 'member' ? 'selected' : ''}}" data-role="member" bindtap="chooseShareRole" wx:if="{{currentRole === 'admin'}}">
+          <text class="share-role-title">共同补全</text>
+          <text class="share-role-desc">可补资料，关键修改需审核</text>
+        </view>
+        <view class="share-role {{shareRole === 'viewer' ? 'selected' : ''}}" data-role="viewer" bindtap="chooseShareRole">
+          <text class="share-role-title">仅查看</text>
+          <text class="share-role-desc">可以看全谱和切换视角</text>
+        </view>
+      </view>
+      <button class="primary-button sheet-button" wx:if="{{!shareReady}}" loading="{{shareCreating}}" bindtap="prepareShare">生成微信邀请</button>
+      <button class="primary-button sheet-button" wx:else open-type="share">发送给家人</button>
+    </view>
+  </view>
+</view>

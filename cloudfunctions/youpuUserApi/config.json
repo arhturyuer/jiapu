@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "openapi": [
+      "security.msgSecCheck",
+      "security.mediaCheckAsync"
+    ]
+  },
+  "envVariables": {
+    "CONTENT_MODERATION_MODE": "strict"
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "envId": "REPLACE_WITH_STAGING_ENV_ID",
+  "functionRoot": "./cloudfunctions",
+  "functions": [
+    {
+      "name": "youpuUserApi",
+      "dir": "youpuUserApi",
+      "handler": "index.main",
+      "runtime": "Nodejs20.19",
+      "timeout": 15,
+      "memorySize": 512,
+      "installDependency": true,
+      "envVariables": {
+        "CONTENT_MODERATION_MODE": "strict"
+      }
+    },
+    {
+      "name": "youpuOpsApi",
+      "dir": "youpuOpsApi",
+      "handler": "index.main",
+      "runtime": "Nodejs20.19",
+      "timeout": 20,
+      "memorySize": 512,
+      "installDependency": true,
+      "envVariables": {}
+    },
+    {
+      "name": "youpuJobs",
+      "dir": "youpuJobs",
+      "handler": "index.main",
+      "runtime": "Nodejs20.19",
+      "timeout": 60,
+      "memorySize": 512,
+      "installDependency": true,
+      "envVariables": {
+        "BOOTSTRAP_SECRET": "REPLACE_WITH_A_RANDOM_SECRET"
+      },
+      "triggers": [
+        { "name": "youpu-frequent-maintenance", "type": "timer", "config": "0 */5 * * * * *" },
+        { "name": "youpu-daily-maintenance", "type": "timer", "config": "0 0 3 * * * *" }
+      ]
+    }
+  ]
+}

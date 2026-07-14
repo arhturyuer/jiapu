@@ -1,0 +1,26 @@
+.profile-page { padding-bottom: calc(56rpx + env(safe-area-inset-bottom)); }
+.profile-card { padding: 32rpx; display: flex; gap: 28rpx; }
+.avatar-button { width: 168rpx; flex: none; display: flex; flex-direction: column; align-items: center; background: transparent; }
+.profile-avatar { width: 144rpx; height: 144rpx; border-radius: 44rpx; }
+.profile-placeholder { display: flex; align-items: center; justify-content: center; color: #245C4A; background: #E4EFEA; font-size: 52rpx; font-weight: 600; }
+.avatar-edit { margin-top: 10rpx; color: #245C4A; font-size: 24rpx; }
+.profile-form { flex: 1; }
+.profile-label { color: #65706A; font-size: 26rpx; }
+.nickname-input { height: 84rpx; margin-top: 8rpx; padding: 0 20rpx; background: #F3F2EC; border: 2rpx solid #D8DED9; border-radius: 18rpx; }
+.save-profile { min-height: 76rpx; margin-top: 16rpx; font-size: 28rpx; }
+.section-block { margin-top: 40rpx; }
+.setting-list { padding: 0 24rpx; }
+.setting-row { min-height: 116rpx; display: flex; align-items: center; justify-content: space-between; border-bottom: 2rpx solid #EEF0ED; }
+.setting-row:last-child { border-bottom: none; }
+.setting-title, .setting-desc { display: block; }
+.setting-title { font-weight: 600; }
+.setting-desc { margin-top: 6rpx; color: #65706A; font-size: 26rpx; }
+.setting-arrow { color: #9AA39E; font-size: 48rpx; }
+.version-text { margin-top: 48rpx; display: block; color: #9AA39E; font-size: 24rpx; text-align: center; }
+.family-option { min-height: 108rpx; padding: 20rpx; display: flex; align-items: center; justify-content: space-between; border-bottom: 2rpx solid #EEF0ED; }
+.family-option.selected { background: #E4EFEA; border-radius: 20rpx; }
+.family-option-name, .family-option-role { display: block; }
+.family-option-name { font-weight: 600; }
+.family-option-role { margin-top: 6rpx; color: #65706A; font-size: 26rpx; }
+.selected-text { color: #245C4A; font-size: 26rpx; }
+.create-family-button { width: 100%; margin-top: 28rpx; }

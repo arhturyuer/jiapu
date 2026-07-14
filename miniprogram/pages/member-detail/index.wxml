@@ -1,0 +1,43 @@
+<view class="loading-panel" wx:if="{{loading}}"><view class="loading-dot"></view><text>正在读取资料...</text></view>
+<view class="page-shell" wx:elif="{{error}}"><view class="empty-panel"><view class="empty-mark">!</view><text class="empty-title">无法打开人物资料</text><text class="empty-description">{{error}}</text><button class="secondary-button" bindtap="loadPerson">重新加载</button></view></view>
+<view class="detail-page page-shell" wx:elif="{{person}}">
+  <view class="hero-card surface-card">
+    <image class="hero-avatar" wx:if="{{person.avatar}}" src="{{person.avatar}}" mode="aspectFill"></image>
+    <view class="hero-avatar hero-placeholder" wx:else>{{person.initial}}</view>
+    <text class="hero-name">{{person.name}}</text>
+    <view class="hero-tags">
+      <text class="status-tag">{{person.genderText}}</text>
+      <text class="status-tag">{{person.lifeText}}</text>
+    </view>
+    <button class="secondary-button perspective-button" bindtap="viewFromPerson">从他/她看家谱</button>
+  </view>
+
+  <view class="detail-section">
+    <view class="section-heading"><text class="section-title">基本资料</text></view>
+    <view class="info-card surface-card">
+      <view class="info-row"><text class="info-label">出生日期</text><text class="info-value">{{person.birthDate || '暂未填写'}}</text></view>
+      <view class="info-row"><text class="info-label">籍贯</text><text class="info-value">{{person.birthPlace || '暂未填写'}}</text></view>
+      <view class="info-row info-row-last"><text class="info-label">人物简介</text><text class="info-value bio-value">{{person.bio || '暂未填写'}}</text></view>
+    </view>
+  </view>
+
+  <view class="detail-section">
+    <view class="section-heading"><text class="section-title">直接关系</text><text class="muted-text">{{relatives.length}} 人</text></view>
+    <view class="relation-list surface-card" wx:if="{{relatives.length}}">
+      <view class="relation-row" wx:for="{{relatives}}" wx:key="relationId" data-id="{{item.person._id}}" bindtap="openRelative">
+        <image class="relation-avatar" wx:if="{{item.person.avatar}}" src="{{item.person.avatar}}" mode="aspectFill"></image>
+        <view class="relation-avatar relation-placeholder" wx:else>{{item.initial}}</view>
+        <view class="relation-copy"><text class="relation-name">{{item.person.name}}</text><text class="relation-label">{{item.label}}</text></view>
+        <text class="relation-arrow">›</text>
+      </view>
+    </view>
+    <view class="empty-relation surface-card" wx:else>还没有录入直接亲属</view>
+  </view>
+
+  <view class="detail-actions" wx:if="{{canEdit}}">
+    <button class="primary-button" bindtap="editPerson">编辑资料</button>
+    <button class="danger-button" wx:if="{{isAdmin}}" bindtap="deletePerson">删除成员</button>
+  </view>
+  <button class="secondary-button report-button" bindtap="reportPerson">举报资料问题</button>
+  <button class="secondary-button report-button" wx:if="{{person.avatarAssetId}}" bindtap="reportAvatar">举报人物头像</button>
+</view>

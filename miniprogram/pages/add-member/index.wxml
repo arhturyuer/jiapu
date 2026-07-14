@@ -1,0 +1,37 @@
+<view class="form-page page-shell">
+  <view class="relation-context surface-card">
+    <text class="context-label">正在添加</text>
+    <text class="context-value">{{anchorName}}的{{relationLabel}}</text>
+  </view>
+
+  <view class="avatar-section" bindtap="chooseAvatar">
+    <image class="avatar-preview" wx:if="{{avatar}}" src="{{avatar}}" mode="aspectFill"></image>
+    <view class="avatar-preview avatar-empty" wx:else>
+      <text class="avatar-add">＋</text>
+      <text class="avatar-hint">添加照片</text>
+    </view>
+    <text class="upload-state" wx:if="{{uploading}}">正在上传...</text>
+  </view>
+
+  <view class="form-card surface-card">
+    <text class="field-label">姓名</text>
+    <input class="field-input" placeholder="请输入姓名" value="{{name}}" data-field="name" bindinput="inputField" maxlength="30" />
+    <text class="field-label second-label">性别</text>
+    <view class="choice-row">
+      <view class="choice-item {{gender === 'male' ? 'selected' : ''}}" data-gender="male" bindtap="chooseGender">男</view>
+      <view class="choice-item {{gender === 'female' ? 'selected' : ''}}" data-gender="female" bindtap="chooseGender">女</view>
+      <view class="choice-item {{gender === 'unknown' ? 'selected' : ''}}" data-gender="unknown" bindtap="chooseGender">未填写</view>
+    </view>
+    <text class="field-label second-label">出生日期</text>
+    <picker mode="date" value="{{birthDate}}" bindchange="chooseDate">
+      <view class="field-input picker-value {{birthDate ? '' : 'placeholder'}}">{{birthDate || '稍后补充'}}</view>
+    </picker>
+    <text class="field-label second-label">籍贯</text>
+    <input class="field-input" placeholder="可选" value="{{birthPlace}}" data-field="birthPlace" bindinput="inputField" maxlength="80" />
+    <text class="field-label second-label">人物简介</text>
+    <textarea class="field-textarea" placeholder="可选，写下一些想被家人记住的事" value="{{bio}}" data-field="bio" bindinput="inputField" maxlength="500"></textarea>
+  </view>
+
+  <text class="permission-note">普通家庭成员添加的新关系会提交给管理员确认。</text>
+  <button class="primary-button submit-button" loading="{{submitting}}" disabled="{{!name || uploading}}" bindtap="submit">添加这位家人</button>
+</view>

@@ -1,0 +1,13 @@
+{
+  "name": "youpu-jobs",
+  "version": "1.0.0",
+  "private": true,
+  "description": "有谱后台维护任务",
+  "main": "index.js",
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "dependencies": {
+    "wx-server-sdk": "4.0.2"
+  }
+}

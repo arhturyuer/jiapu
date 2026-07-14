@@ -1,0 +1,13 @@
+{
+  "name": "youpu-user-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "有谱小程序用户端生产 API",
+  "main": "index.js",
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "dependencies": {
+    "wx-server-sdk": "4.0.2"
+  }
+}

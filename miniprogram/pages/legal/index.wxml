@@ -1,0 +1,15 @@
+<view class="legal-page page-shell">
+  <view class="legal-head surface-card">
+    <text class="legal-title">{{content.title}}</text>
+    <text class="legal-intro">{{content.intro}}</text>
+    <text class="legal-meta">版本 {{legal.privacyVersion}} · {{legal.effectiveDate}} 生效</text>
+  </view>
+  <view class="legal-section surface-card" wx:for="{{content.sections}}" wx:key="title">
+    <text class="legal-section-title">{{item.title}}</text>
+    <text class="legal-body">{{item.body}}</text>
+  </view>
+  <view class="legal-footer surface-card">
+    <text>运营者：{{legal.operatorName}}</text>
+    <text>联系渠道：{{legal.contactChannel}}</text>
+  </view>
+</view>

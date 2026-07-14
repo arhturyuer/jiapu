@@ -1,0 +1,61 @@
+<view class="loading-panel" wx:if="{{loading}}"><view class="loading-dot"></view><text>正在整理家庭动态...</text></view>
+<view class="page-shell" wx:elif="{{!currentFamily}}">
+  <view class="empty-panel"><view class="empty-mark">家</view><text class="empty-title">还没有家谱</text><text class="empty-description">创建一份家谱后，就可以邀请家人一起维护。</text><button class="primary-button empty-action" bindtap="createFamily">创建家谱</button></view>
+</view>
+<view class="family-page page-shell" wx:else>
+  <view class="family-hero surface-card">
+    <view class="family-hero-top"><view><text class="family-name">{{currentFamily.name}}</text><text class="family-role">{{isAdmin ? '你是家谱管理员' : currentRole === 'member' ? '你是家庭成员' : '你是访客'}}</text></view><button class="invite-button" wx:if="{{isAdmin}}" bindtap="openShareSheet">邀请家人</button></view>
+    <text class="family-description">{{currentFamily.description || '一家人，共修一份家谱'}}</text>
+    <view class="progress-track"><view class="progress-value" style="width:{{stats.completion}}%;"></view></view>
+    <text class="progress-text">资料完整度 {{stats.completion}}%</text>
+  </view>
+
+  <view class="stats-grid">
+    <view class="stat-card surface-card"><text class="stat-value">{{stats.personCount}}</text><text class="stat-label">谱中成员</text></view>
+    <view class="stat-card surface-card"><text class="stat-value">{{stats.relationCount}}</text><text class="stat-label">家庭关系</text></view>
+    <view class="stat-card surface-card"><text class="stat-value">{{stats.collaboratorCount}}</text><text class="stat-label">共同维护</text></view>
+    <view class="stat-card surface-card"><text class="stat-value">{{stats.pendingCount}}</text><text class="stat-label">待处理</text></view>
+  </view>
+
+  <view class="section-block" wx:if="{{pendingChanges.length}}">
+    <view class="section-heading"><text class="section-title">{{isAdmin ? '待你确认' : '我的申请'}}</text><text class="status-tag">{{pendingChanges.length}} 项</text></view>
+    <view class="change-card surface-card" wx:for="{{pendingChanges}}" wx:key="_id">
+      <view class="change-copy"><text class="change-title">{{item.title}}</text><text class="change-requester">由 {{item.requesterName || '家人'}} 提交</text></view>
+      <view class="review-actions" wx:if="{{isAdmin}}"><button class="review-button reject" data-id="{{item._id}}" data-decision="reject" bindtap="reviewChange">拒绝</button><button class="review-button approve" data-id="{{item._id}}" data-decision="approve" bindtap="reviewChange">通过</button></view>
+    </view>
+  </view>
+
+  <view class="section-block">
+    <view class="section-heading"><text class="section-title">共同维护</text><text class="muted-text">{{collaborators.length}} 人</text></view>
+    <scroll-view class="collaborator-scroll" scroll-x enhanced show-scrollbar="{{false}}">
+      <view class="collaborator-row">
+        <view class="collaborator-card surface-card" wx:for="{{collaborators}}" wx:key="_id">
+          <image class="collaborator-avatar" wx:if="{{item.avatarUrl}}" src="{{item.avatarUrl}}" mode="aspectFill"></image>
+          <view class="collaborator-avatar collaborator-placeholder" wx:else>{{item.initial}}</view>
+          <text class="collaborator-name">{{item.displayName}}</text><text class="collaborator-role">{{item.roleText}}</text>
+        </view>
+      </view>
+    </scroll-view>
+  </view>
+
+  <view class="section-block">
+    <view class="section-heading"><text class="section-title">最近动态</text></view>
+    <view class="activity-list surface-card" wx:if="{{recentActivities.length}}">
+      <view class="activity-row" wx:for="{{recentActivities}}" wx:key="_id"><view class="activity-dot"></view><view class="activity-copy"><text class="activity-summary">{{item.actorName || '一位家人'}} {{item.summary}}</text><text class="activity-time">{{item.timeText}}</text></view></view>
+    </view>
+    <view class="empty-activity surface-card" wx:else>家谱的修改记录会显示在这里</view>
+  </view>
+
+  <button class="secondary-button graph-button" bindtap="openGraph">查看完整家谱</button>
+  <button class="secondary-button graph-button" bindtap="openFamilyManage">家庭与权限管理</button>
+
+  <view class="sheet-mask" wx:if="{{showShareSheet}}" bindtap="closeShareSheet">
+    <view class="bottom-sheet" catchtap="stopEvent"><view class="sheet-handle"></view><view class="sheet-title">邀请家人</view>
+      <text class="share-help">家人将从完整家谱进入，可以随时切换任意成员视角。</text>
+      <view class="share-role {{shareRole === 'member' ? 'selected' : ''}}" data-role="member" bindtap="chooseShareRole" wx:if="{{isAdmin}}"><text class="share-role-title">共同补全</text><text class="share-role-desc">可补普通资料，关键修改需审核</text></view>
+      <view class="share-role {{shareRole === 'viewer' ? 'selected' : ''}}" data-role="viewer" bindtap="chooseShareRole"><text class="share-role-title">仅查看</text><text class="share-role-desc">可以看全谱和切换视角</text></view>
+      <button class="primary-button share-button" wx:if="{{!shareReady}}" loading="{{shareCreating}}" bindtap="prepareShare">生成微信邀请</button>
+      <button class="primary-button share-button" wx:else open-type="share">发送给家人</button>
+    </view>
+  </view>
+</view>

@@ -1,4 +1,7 @@
 node_modules/
+admin/dist/
+.pnpm-store/
 .miniprogram/
+.trae/
 .DS_Store
 project.private.config.json

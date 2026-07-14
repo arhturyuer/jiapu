@@ -1,0 +1,14 @@
+.report-page { padding-bottom: calc(56rpx + env(safe-area-inset-bottom)); }
+.target-card { padding: 30rpx; display: flex; flex-direction: column; }
+.target-label { color: #65706A; font-size: 25rpx; }
+.target-name { margin-top: 8rpx; font-size: 38rpx; font-weight: 650; }
+.target-help { margin-top: 12rpx; color: #65706A; font-size: 25rpx; line-height: 1.6; }
+.report-section { margin-top: 36rpx; }
+.report-section > .section-title { margin-bottom: 16rpx; display: block; }
+.reason-list { padding: 0 24rpx; }
+.reason-row { min-height: 96rpx; display: flex; align-items: center; justify-content: space-between; border-bottom: 2rpx solid #EEF0ED; }
+.reason-row:last-child { border-bottom: none; }
+.reason-row.selected { color: #245C4A; font-weight: 650; }
+.reason-check { color: #245C4A; }
+.detail-input { width: 100%; height: 240rpx; padding: 24rpx; background: #FFFEFA; border: 2rpx solid #D8DED9; border-radius: 24rpx; line-height: 1.6; }
+.submit-report { width: 100%; margin-top: 36rpx; }

@@ -1,0 +1,26 @@
+.privacy-page { padding-bottom: calc(64rpx + env(safe-area-inset-bottom)); }
+.privacy-hero { padding: 38rpx 32rpx; display: flex; flex-direction: column; }
+.privacy-eyebrow { color: #245C4A; font-size: 25rpx; font-weight: 600; }
+.privacy-title { margin-top: 12rpx; font-size: 42rpx; font-weight: 650; line-height: 1.35; }
+.privacy-desc { margin-top: 18rpx; color: #65706A; line-height: 1.7; }
+.privacy-version { margin-top: 22rpx; color: #8B948F; font-size: 24rpx; }
+.pending-card { margin-top: 24rpx; padding: 28rpx; display: flex; flex-direction: column; gap: 16rpx; border-color: #E7B66E; }
+.pending-title { color: #8A5A16; font-weight: 650; }
+.pending-desc { color: #765E3A; font-size: 27rpx; line-height: 1.6; }
+.policy-section { margin-top: 38rpx; }
+.policy-section > .section-title { margin-bottom: 16rpx; display: block; }
+.policy-card { padding: 0 28rpx; }
+.policy-row { padding: 26rpx 0; display: flex; flex-direction: column; gap: 8rpx; border-bottom: 2rpx solid #EEF0ED; }
+.policy-row:last-child { border-bottom: none; }
+.policy-label { font-weight: 650; }
+.policy-copy { color: #65706A; font-size: 27rpx; line-height: 1.65; }
+.action-list { padding: 0 24rpx; }
+.action-row { width: 100%; min-height: 116rpx; padding: 20rpx 0; display: flex; align-items: center; justify-content: space-between; background: transparent; border-bottom: 2rpx solid #EEF0ED; text-align: left; }
+.action-row:last-child { border-bottom: none; }
+.contact-row { border-radius: 0; }
+.action-title, .action-desc { display: block; }
+.action-title { font-weight: 650; }
+.action-desc { margin-top: 6rpx; color: #65706A; font-size: 25rpx; }
+.action-arrow { color: #9AA39E; font-size: 48rpx; }
+.operator-note { margin-top: 38rpx; padding: 28rpx; display: flex; flex-direction: column; gap: 10rpx; color: #65706A; font-size: 25rpx; line-height: 1.6; }
+.deletion-button { width: 100%; margin-top: 30rpx; }

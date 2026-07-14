@@ -1,0 +1,50 @@
+<view class="loading-panel" wx:if="{{loading}}"><view class="loading-dot"></view><text>正在读取家庭权限...</text></view>
+<view class="page-shell" wx:elif="{{error}}"><view class="empty-panel"><view class="empty-mark">!</view><text class="empty-title">无法打开</text><text class="empty-description">{{error}}</text><button class="secondary-button" bindtap="loadPage">重新加载</button></view></view>
+<view class="manage-page page-shell" wx:else>
+  <view class="archive-card surface-card" wx:if="{{family.status === 'archived'}}">
+    <text class="archive-title">这份家谱在回收站中</text>
+    <text class="archive-desc">恢复后，原家庭成员和资料可以继续使用。</text>
+    <button class="primary-button" bindtap="restoreFamily">恢复家谱</button>
+    <button class="secondary-button" bindtap="leaveFamily">退出这份归档家谱</button>
+  </view>
+
+  <block wx:if="{{family.status === 'active'}}">
+    <view class="manage-section" wx:if="{{isAdmin}}">
+      <view class="section-heading"><text class="section-title">家谱资料</text></view>
+      <view class="form-card surface-card">
+        <text class="field-label">家谱名称</text><input class="field-input" maxlength="40" value="{{name}}" data-field="name" bindinput="inputField" />
+        <text class="field-label second-label">一句介绍</text><textarea class="field-textarea" maxlength="200" value="{{description}}" data-field="description" bindinput="inputField"></textarea>
+        <button class="primary-button save-button" loading="{{saving}}" bindtap="saveFamily">保存资料</button>
+      </view>
+    </view>
+
+    <view class="manage-section">
+      <view class="section-heading"><text class="section-title">共同维护</text><text class="muted-text">{{collaborators.length}} 人</text></view>
+      <view class="member-list surface-card">
+        <view class="member-row" wx:for="{{collaborators}}" wx:key="_id">
+          <view class="member-avatar">{{item.initial}}</view>
+          <view class="member-copy"><text class="member-name">{{item.displayName}}</text><text class="member-role">{{item.roleText}}</text></view>
+          <view class="member-actions" wx:if="{{isAdmin}}"><text class="member-action" data-id="{{item._id}}" bindtap="changeRole">改角色</text><text class="member-action" wx:if="{{item.role !== 'admin'}}" data-id="{{item._id}}" bindtap="transferAdmin">设管理员</text><text class="member-action" wx:if="{{item.role !== 'admin'}}" data-id="{{item._id}}" bindtap="transferOwnership">转让</text></view>
+        </view>
+      </view>
+    </view>
+
+    <view class="manage-section" wx:if="{{isAdmin}}">
+      <view class="section-heading"><text class="section-title">邀请管理</text><text class="muted-text">{{invitations.length}} 条</text></view>
+      <view class="empty-invite surface-card" wx:if="{{!invitations.length}}">还没有生成过邀请</view>
+      <view class="invite-list surface-card" wx:else>
+        <view class="invite-row" wx:for="{{invitations}}" wx:key="_id"><view class="invite-copy"><text class="invite-name">{{item.roleText}} · {{item.viewMode === 'perspective' ? item.viewPersonName + '视角' : '完整家谱'}}</text><text class="invite-meta">{{item.statusText}} · 已使用 {{item.useCount}}/{{item.maxUses}}</text></view><button class="revoke-button" wx:if="{{item.displayStatus === 'active'}}" data-id="{{item._id}}" bindtap="revokeInvite">撤销</button></view>
+        <button class="secondary-button" wx:if="{{hasMoreInvites}}" loading="{{loadingMoreInvites}}" bindtap="loadMoreInvites">加载更多邀请</button>
+      </view>
+    </view>
+
+    <view class="manage-section">
+      <view class="section-heading"><text class="section-title">数据与退出</text></view>
+      <view class="danger-zone surface-card">
+        <view class="danger-row" bindtap="reportFamily"><view><text class="danger-title">举报家谱描述</text><text class="danger-desc">向运营人员反馈不当内容</text></view><text class="danger-arrow">›</text></view>
+        <view class="danger-row" wx:if="{{isAdmin}}" bindtap="archiveFamily"><view><text class="danger-title">移入回收站</text><text class="danger-desc">30 天内可以恢复</text></view><text class="danger-arrow">›</text></view>
+        <view class="danger-row" bindtap="leaveFamily"><view><text class="danger-title">退出家谱</text><text class="danger-desc">退出后需要重新接受邀请</text></view><text class="danger-arrow">›</text></view>
+      </view>
+    </view>
+  </block>
+</view>

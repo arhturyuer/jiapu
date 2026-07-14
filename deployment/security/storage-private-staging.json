@@ -1,0 +1,4 @@
+{
+  "read": false,
+  "write": "auth != null && auth.loginType != 'ANONYMOUS' && (resource.openid == auth.openid || resource.openid == auth.uid) && /^staging\\//.test(resource.path) && resource.size <= 5242880 && (/\\.jpg$/.test(resource.path) || /\\.jpeg$/.test(resource.path) || /\\.png$/.test(resource.path) || /\\.webp$/.test(resource.path))"
+}

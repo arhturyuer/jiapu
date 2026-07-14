@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 3,
+  "indexes": {
+    "users": [
+      { "name": "openid_unique", "unique": true, "sparse": true, "fields": [{ "field": "openid", "order": "asc" }] },
+      { "name": "status_created", "fields": [{ "field": "status", "order": "asc" }, { "field": "createdAt", "order": "desc" }] },
+      { "name": "status_id", "fields": [{ "field": "status", "order": "asc" }, { "field": "_id", "order": "asc" }] }
+    ],
+    "families": [
+      { "name": "status_created", "fields": [{ "field": "status", "order": "asc" }, { "field": "createdAt", "order": "desc" }] },
+      { "name": "status_purge", "fields": [{ "field": "status", "order": "asc" }, { "field": "purgeAt", "order": "asc" }] },
+      { "name": "status_deletion_started", "fields": [{ "field": "status", "order": "asc" }, { "field": "deletionStartedAt", "order": "asc" }] },
+      { "name": "status_id", "fields": [{ "field": "status", "order": "asc" }, { "field": "_id", "order": "asc" }] }
+    ],
+    "family_memberships": [
+      { "name": "family_user_unique", "unique": true, "fields": [{ "field": "familyId", "order": "asc" }, { "field": "userId", "order": "asc" }] },
+      { "name": "user_status", "fields": [{ "field": "userId", "order": "asc" }, { "field": "status", "order": "asc" }] },
+      { "name": "user_status_id", "fields": [{ "field": "userId", "order": "asc" }, { "field": "status", "order": "asc" }, { "field": "_id", "order": "asc" }] },
+      { "name": "family_status_role", "fields": [{ "field": "familyId", "order": "asc" }, { "field": "status", "order": "asc" }, { "field": "role", "order": "asc" }] },
+      { "name": "family_status_id", "fields": [{ "field": "familyId", "order": "asc" }, { "field": "status", "order": "asc" }, { "field": "_id", "order": "asc" }] }
+    ],
+    "user_family_preferences": [
+      { "name": "family_user_unique", "unique": true, "fields": [{ "field": "familyId", "order": "asc" }, { "field": "userId", "order": "asc" }] },
+      { "name": "family_id", "fields": [{ "field": "familyId", "order": "asc" }, { "field": "_id", "order": "asc" }] }
+    ],
+    "persons": [
+      { "name": "family_status", "fields": [{ "field": "familyId", "order": "asc" }, { "field": "status", "order": "asc" }] },
+      { "name": "family_status_id", "fields": [{ "field": "familyId", "order": "asc" }, { "field": "status", "order": "asc" }, { "field": "_id", "order": "asc" }] }
+    ],
+    "relations": [
+      { "name": "relation_unique", "unique": true, "fields": [{ "field": "familyId", "order": "asc" }, { "field": "type", "order": "asc" }, { "field": "fromPersonId", "order": "asc" }, { "field": "toPersonId", "order": "asc" }] },
+      { "name": "family_status", "fields": [{ "field": "familyId", "order": "asc" }, { "field": "status", "order": "asc" }] },
+      { "name": "family_status_id", "fields": [{ "field": "familyId", "order": "asc" }, { "field": "status", "order": "asc" }, { "field": "_id", "order": "asc" }] }
+    ],
+    "invitations": [
+      { "name": "token_hash_unique", "unique": true, "fields": [{ "field": "tokenHash", "order": "asc" }] },
+      { "name": "family_status_created", "fields": [{ "field": "familyId", "order": "asc" }, { "field": "status", "order": "asc" }, { "field": "createdAt", "order": "desc" }] },
+      { "name": "status_expires", "fields": [{ "field": "status", "order": "asc" }, { "field": "expiresAt", "order": "asc" }] },
+      { "name": "family_status_id", "fields": [{ "field": "familyId", "order": "asc" }, { "field": "status", "order": "asc" }, { "field": "_id", "order": "asc" }] },
+      { "name": "family_id", "fields": [{ "field": "familyId", "order": "asc" }, { "field": "_id", "order": "asc" }] }
+    ],
+    "change_requests": [
+      { "name": "family_status_created", "fields": [{ "field": "familyId", "order": "asc" }, { "field": "status", "order": "asc" }, { "field": "createdAt", "order": "desc" }] },
+      { "name": "creator_status", "fields": [{ "field": "createdBy", "order": "asc" }, { "field": "status", "order": "asc" }] },
+      { "name": "family_status_id", "fields": [{ "field": "familyId", "order": "asc" }, { "field": "status", "order": "asc" }, { "field": "_id", "order": "asc" }] },
+      { "name": "family_status_creator_id", "fields": [{ "field": "familyId", "order": "asc" }, { "field": "status", "order": "asc" }, { "field": "createdBy", "order": "asc" }, { "field": "_id", "order": "asc" }] }
+    ],
+    "reports": [
+      { "name": "reporter_created", "fields": [{ "field": "reporterId", "order": "asc" }, { "field": "createdAt", "order": "desc" }] },
+      { "name": "reporter_id", "fields": [{ "field": "reporterId", "order": "asc" }, { "field": "_id", "order": "asc" }] },
+      { "name": "status_created", "fields": [{ "field": "status", "order": "asc" }, { "field": "createdAt", "order": "asc" }] },
+      { "name": "status_id", "fields": [{ "field": "status", "order": "asc" }, { "field": "_id", "order": "asc" }] },
+      { "name": "family_id", "fields": [{ "field": "familyId", "order": "asc" }, { "field": "_id", "order": "asc" }] }
+    ],
+    "media_assets": [
+      { "name": "family_moderation", "fields": [{ "field": "familyId", "order": "asc" }, { "field": "moderationStatus", "order": "asc" }] },
+      { "name": "owner_status", "fields": [{ "field": "ownerId", "order": "asc" }, { "field": "status", "order": "asc" }] },
+      { "name": "trace_unique", "unique": true, "sparse": true, "fields": [{ "field": "traceId", "order": "asc" }] },
+      { "name": "moderation_updated", "fields": [{ "field": "moderationStatus", "order": "asc" }, { "field": "updatedAt", "order": "asc" }] },
+      { "name": "family_file", "fields": [{ "field": "familyId", "order": "asc" }, { "field": "fileId", "order": "asc" }] }
+    ],
+    "moderation_tasks": [
+      { "name": "status_updated", "fields": [{ "field": "status", "order": "asc" }, { "field": "updatedAt", "order": "asc" }] },
+      { "name": "type_status_updated", "fields": [{ "field": "type", "order": "asc" }, { "field": "status", "order": "asc" }, { "field": "updatedAt", "order": "asc" }] },
+      { "name": "status_id", "fields": [{ "field": "status", "order": "asc" }, { "field": "_id", "order": "asc" }] },
+      { "name": "family_id", "fields": [{ "field": "familyId", "order": "asc" }, { "field": "_id", "order": "asc" }] }
+    ],
+    "account_deletion_requests": [
+      { "name": "status_execute", "fields": [{ "field": "status", "order": "asc" }, { "field": "executeAt", "order": "asc" }] },
+      { "name": "status_started", "fields": [{ "field": "status", "order": "asc" }, { "field": "startedAt", "order": "asc" }] },
+      { "name": "status_id", "fields": [{ "field": "status", "order": "asc" }, { "field": "_id", "order": "asc" }] }
+    ],
+    "idempotency_records": [
+      { "name": "actor_action_request_unique", "unique": true, "fields": [{ "field": "actorId", "order": "asc" }, { "field": "action", "order": "asc" }, { "field": "requestId", "order": "asc" }] },
+      { "name": "expires", "fields": [{ "field": "expiresAt", "order": "asc" }] }
+    ],
+    "rate_limits": [
+      { "name": "expires", "fields": [{ "field": "expiresAt", "order": "asc" }] }
+    ],
+    "operators": [
+      { "name": "auth_uid_unique", "unique": true, "fields": [{ "field": "authUid", "order": "asc" }] },
+      { "name": "status_role", "fields": [{ "field": "status", "order": "asc" }, { "field": "role", "order": "asc" }] },
+      { "name": "status_id", "fields": [{ "field": "status", "order": "asc" }, { "field": "_id", "order": "asc" }] }
+    ],
+    "audit_logs": [
+      { "name": "family_created", "fields": [{ "field": "familyId", "order": "asc" }, { "field": "createdAt", "order": "desc" }] },
+      { "name": "operator_created", "fields": [{ "field": "operatorAudit", "order": "asc" }, { "field": "createdAt", "order": "desc" }] },
+      { "name": "actor_id", "fields": [{ "field": "actorId", "order": "asc" }, { "field": "_id", "order": "asc" }] },
+      { "name": "operator_id", "fields": [{ "field": "operatorAudit", "order": "asc" }, { "field": "_id", "order": "asc" }] }
+    ],
+    "profile_sync_tasks": [
+      { "name": "status_id", "fields": [{ "field": "status", "order": "asc" }, { "field": "_id", "order": "asc" }] }
+    ],
+    "notifications": [
+      { "name": "family_id", "fields": [{ "field": "familyId", "order": "asc" }, { "field": "_id", "order": "asc" }] }
+    ]
+  }
+}
