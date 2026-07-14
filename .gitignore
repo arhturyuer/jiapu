@@ -5,3 +5,4 @@ admin/dist/
 .trae/
 .DS_Store
 project.private.config.json
+deployment/*.local.env
