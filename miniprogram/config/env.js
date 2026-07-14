@@ -1,5 +1,5 @@
 module.exports = {
-  active: 'production',
+  active: 'staging',
   environments: {
     production: {
       cloudEnv: 'cloud1-d5gs5yj4l283d9c6d',
@@ -7,7 +7,7 @@ module.exports = {
       moderationMode: 'strict'
     },
     staging: {
-      cloudEnv: '',
+      cloudEnv: 'cloud1-d5gs5yj4l283d9c6d',
       userApi: 'youpuUserApi',
       moderationMode: 'strict'
     }
