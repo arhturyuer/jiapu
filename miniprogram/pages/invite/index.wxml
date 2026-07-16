@@ -1,0 +1,24 @@
+<view class="invite-page page-shell">
+  <view class="loading-panel" wx:if="{{loading}}"><view class="loading-dot"></view><text>正在打开家庭邀请...</text></view>
+
+  <view class="invalid-panel" wx:elif="{{invalid}}">
+    <view class="invite-mark muted">谱</view>
+    <text class="invite-title">邀请无法打开</text>
+    <text class="invite-description">{{errorMessage}}</text>
+    <button class="secondary-button home-button" bindtap="goHome">进入有谱</button>
+  </view>
+
+  <view wx:else>
+    <view class="brand-line"><view class="brand-mark">谱</view><text class="brand-name">有谱</text></view>
+    <view class="invite-card surface-card">
+      <text class="eyebrow">{{preview.inviterName}} 邀请你</text>
+      <text class="family-name">{{preview.family.name}}</text>
+      <text class="family-description">{{preview.family.description || '一家人，共修一份家谱'}}</text>
+      <view class="family-stats"><text>{{preview.personCount}} 位家人</text><text class="dot">·</text><text>{{roleText}}</text></view>
+      <view class="view-note">{{viewText}}</view>
+    </view>
+    <view class="privacy-note"><text class="privacy-title">家谱默认私密</text><text class="privacy-copy">只有通过邀请加入的家人才能访问。切换成员视角不会改变你的权限。</text></view>
+    <button class="primary-button accept-button" loading="{{accepting}}" bindtap="acceptInvite">{{preview.role === 'member' ? '加入并共同补全' : '加入并查看家谱'}}</button>
+    <button class="secondary-button" bindtap="reportInvite">举报这条邀请</button>
+  </view>
+</view>

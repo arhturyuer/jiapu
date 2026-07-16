@@ -1,0 +1,9 @@
+.legal-page { padding-bottom: calc(64rpx + env(safe-area-inset-bottom)); }
+.legal-head { padding: 36rpx 30rpx; display: flex; flex-direction: column; gap: 14rpx; }
+.legal-title { font-size: 42rpx; font-weight: 700; }
+.legal-intro, .legal-body { color: #59645f; line-height: 1.75; }
+.legal-meta { color: #8b948f; font-size: 24rpx; }
+.legal-section { margin-top: 22rpx; padding: 28rpx 30rpx; display: flex; flex-direction: column; gap: 12rpx; }
+.legal-section-title { font-size: 31rpx; font-weight: 650; }
+.legal-body { font-size: 27rpx; }
+.legal-footer { margin-top: 28rpx; padding: 26rpx 30rpx; display: flex; flex-direction: column; gap: 8rpx; color: #727c77; font-size: 24rpx; }

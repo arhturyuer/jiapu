@@ -1,0 +1,156 @@
+.create-page {
+  padding-bottom: 180rpx;
+}
+
+.step-header {
+  margin-bottom: 52rpx;
+}
+
+.step-progress {
+  display: flex;
+  gap: 12rpx;
+}
+
+.step-bar {
+  flex: 1;
+  height: 8rpx;
+  background: #D8DED9;
+  border-radius: 8rpx;
+}
+
+.step-bar.active {
+  background: #245C4A;
+}
+
+.step-count {
+  margin-top: 16rpx;
+  display: block;
+  color: #65706A;
+  font-size: 26rpx;
+}
+
+.page-title {
+  display: block;
+  color: #202824;
+  font-size: 48rpx;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.page-description {
+  margin-top: 16rpx;
+  display: block;
+  color: #65706A;
+  line-height: 1.7;
+}
+
+.form-card {
+  margin-top: 40rpx;
+  padding: 32rpx;
+}
+
+.field-label {
+  margin-bottom: 14rpx;
+  display: block;
+  font-weight: 600;
+}
+
+.second-label {
+  margin-top: 32rpx;
+}
+
+.field-input,
+.field-textarea {
+  width: 100%;
+  background: #F3F2EC;
+  border: 2rpx solid #D8DED9;
+  border-radius: 20rpx;
+}
+
+.field-input {
+  height: 96rpx;
+  padding: 0 24rpx;
+}
+
+.field-textarea {
+  height: 200rpx;
+  padding: 24rpx;
+  line-height: 1.6;
+}
+
+.choice-row {
+  display: flex;
+  gap: 12rpx;
+}
+
+.choice-item {
+  flex: 1;
+  min-height: 84rpx;
+  padding: 0 12rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #65706A;
+  background: #F3F2EC;
+  border: 2rpx solid #D8DED9;
+  border-radius: 20rpx;
+  font-size: 28rpx;
+}
+
+.choice-item.selected {
+  color: #245C4A;
+  background: #E4EFEA;
+  border-color: #245C4A;
+  font-weight: 600;
+}
+
+.preview-card {
+  margin-top: 24rpx;
+  padding: 32rpx;
+  display: flex;
+  flex-direction: column;
+}
+
+.preview-label {
+  margin-bottom: 20rpx;
+  color: #65706A;
+  font-size: 26rpx;
+}
+
+.preview-name {
+  font-size: 40rpx;
+  font-weight: 600;
+}
+
+.preview-desc,
+.preview-count {
+  margin-top: 10rpx;
+  color: #65706A;
+}
+
+.preview-count {
+  margin-top: 24rpx;
+  color: #245C4A;
+  font-size: 28rpx;
+}
+
+.footer-actions {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  padding: 20rpx 32rpx calc(24rpx + env(safe-area-inset-bottom));
+  display: flex;
+  gap: 16rpx;
+  background: rgba(247, 244, 236, 0.96);
+  border-top: 2rpx solid #E1E4E0;
+}
+
+.back-button {
+  width: 220rpx;
+}
+
+.next-button {
+  flex: 1;
+}

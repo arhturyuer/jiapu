@@ -1,0 +1,66 @@
+<view class="loading-panel" wx:if="{{loading}}"><view class="loading-dot"></view><text>正在读取隐私设置...</text></view>
+<view class="privacy-page page-shell" wx:else>
+  <view class="privacy-hero surface-card">
+    <text class="privacy-eyebrow">隐私保护中心</text>
+    <text class="privacy-title">你的家庭资料，只用于共同维护家谱</text>
+    <text class="privacy-desc">家谱默认仅受邀家人可访问。切换成员视角不会改变任何访问权限。</text>
+    <text class="privacy-version">隐私版本 {{legal.privacyVersion}} · {{legal.effectiveDate}} 生效</text>
+  </view>
+
+  <view class="pending-card surface-card" wx:if="{{accountState === 'pending_delete'}}">
+    <text class="pending-title">账户处于注销冷静期</text>
+    <text class="pending-desc">冷静期结束后，账户昵称、头像和登录身份会被清除。你可以在执行前撤销申请。</text>
+    <button class="primary-button" loading="{{cancelling}}" bindtap="cancelDeletion">撤销注销</button>
+  </view>
+
+  <view class="policy-section">
+    <text class="section-title">协议与政策</text>
+    <view class="action-list surface-card">
+      <view class="action-row" data-type="privacy" bindtap="openLegal"><view><text class="action-title">隐私政策</text><text class="action-desc">了解信息处理、保存与权利</text></view><text class="action-arrow">›</text></view>
+      <view class="action-row" data-type="terms" bindtap="openLegal"><view><text class="action-title">服务协议</text><text class="action-desc">了解家庭协作规则与使用边界</text></view><text class="action-arrow">›</text></view>
+    </view>
+  </view>
+
+  <view class="policy-section">
+    <text class="section-title">我们处理的信息</text>
+    <view class="policy-card surface-card">
+      <view class="policy-row"><text class="policy-label">账户资料</text><text class="policy-copy">微信登录标识、你主动填写的昵称和头像，用于识别家庭协作者。</text></view>
+      <view class="policy-row"><text class="policy-label">家谱资料</text><text class="policy-copy">人物姓名、关系、出生信息、简介和照片，用于生成和维护私密家谱。</text></view>
+      <view class="policy-row"><text class="policy-label">操作记录</text><text class="policy-copy">邀请、审核、修改和举报记录，用于维护家庭秩序与安全审计。</text></view>
+    </view>
+  </view>
+
+  <view class="policy-section">
+    <text class="section-title">权限与保存</text>
+    <view class="policy-card surface-card">
+      <view class="policy-row"><text class="policy-label">相册与相机</text><text class="policy-copy">只在你主动选择人物照片时调用；拒绝后仍可使用文字家谱功能。</text></view>
+      <view class="policy-row"><text class="policy-label">内容安全</text><text class="policy-copy">用户提交的文字和图片会进行必要的内容安全检查，疑似内容由运营人员复核。</text></view>
+      <view class="policy-row"><text class="policy-label">保存期限</text><text class="policy-copy">账户注销有 7 天冷静期；归档家谱保留 30 天后删除；审计记录会进行匿名化。</text></view>
+    </view>
+  </view>
+
+  <view class="policy-section">
+    <text class="section-title">你的权利</text>
+    <view class="action-list surface-card">
+      <view class="action-row" bindtap="exportData"><view><text class="action-title">导出个人信息</text><text class="action-desc">生成并分享你的 JSON 数据文件</text></view><text class="action-arrow">›</text></view>
+      <view class="action-row" bindtap="openPermissionSettings"><view><text class="action-title">管理系统权限</text><text class="action-desc">查看或撤回相机、相册等授权</text></view><text class="action-arrow">›</text></view>
+      <button class="action-row contact-row" open-type="contact"><view><text class="action-title">联系微信客服</text><text class="action-desc">更正、删除、投诉或申诉</text></view><text class="action-arrow">›</text></button>
+    </view>
+  </view>
+
+  <view class="policy-section" wx:if="{{reports.length}}">
+    <text class="section-title">我的举报</text>
+    <view class="action-list surface-card">
+      <view class="action-row" wx:for="{{reports}}" wx:key="_id" data-id="{{item._id}}" bindtap="openReportTarget"><view><text class="action-title">{{item.reason}}</text><text class="action-desc">{{item.targetType}} · {{item.statusText}}</text></view><text class="action-arrow">›</text></view>
+      <button class="secondary-button" wx:if="{{hasMoreReports}}" bindtap="loadMoreReports">加载更多</button>
+    </view>
+  </view>
+
+  <view class="operator-note surface-card">
+    <text>运营者：{{legal.operatorName}}</text>
+    <text>联系渠道：{{legal.contactChannel}}</text>
+    <text>我们不会公开出售家谱资料，也不会因你拒绝非必要权限而停止基本浏览功能。</text>
+  </view>
+
+  <button class="danger-button deletion-button" wx:if="{{accountState === 'active'}}" loading="{{deleting}}" bindtap="requestDeletion">申请注销账户</button>
+</view>

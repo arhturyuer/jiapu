@@ -1,0 +1,9 @@
+{
+  "name": "familyFunctions",
+  "version": "1.0.0",
+  "description": "有谱家谱协作云函数",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

@@ -1,0 +1,41 @@
+<view class="loading-panel" wx:if="{{loading}}"><view class="loading-dot"></view><text>正在整理成员...</text></view>
+<view class="page-shell" wx:elif="{{error}}"><view class="empty-panel"><view class="empty-mark">!</view><text class="empty-title">无法打开成员列表</text><text class="empty-description">{{error}}</text><button class="secondary-button" bindtap="loadPage">重新加载</button></view></view>
+<view class="person-list-page page-shell" wx:else>
+  <view class="list-summary"><view><text class="summary-title">{{family.name}}</text><text class="summary-copy">共 {{persons.length}} 位谱中成员</text></view><text class="summary-action" bindtap="openGraph">查看全谱</text></view>
+
+  <view class="search-box surface-card">
+    <text class="search-icon">⌕</text>
+    <input class="search-input" placeholder="输入姓名查找成员" value="{{keyword}}" bindinput="inputKeyword" />
+    <text class="clear-action" wx:if="{{keyword}}" bindtap="clearKeyword">清除</text>
+  </view>
+
+  <view class="view-switch">
+    <view class="view-option {{viewMode === item.key ? 'active' : ''}}" wx:for="{{viewOptions}}" wx:key="key" data-mode="{{item.key}}" bindtap="switchView">{{item.label}}</view>
+  </view>
+
+  <view class="search-result-copy" wx:if="{{searching}}">找到 {{displayedPersons.length}} 位成员</view>
+
+  <block wx:if="{{!showEmpty && !searching && viewMode === 'generation'}}">
+    <view class="generation-section" wx:for="{{generationSections}}" wx:key="key" wx:for-item="section">
+      <view class="generation-heading"><text class="generation-title">{{section.label}}</text><text class="generation-count">{{section.persons.length}} 人</text></view>
+      <view class="member-list surface-card">
+        <view class="member-row" wx:for="{{section.persons}}" wx:key="_id" wx:for-item="member" data-id="{{member._id}}" hover-class="member-row-active" bindtap="openMember">
+          <image class="member-avatar" wx:if="{{member.avatar}}" src="{{member.avatar}}" mode="aspectFill"></image>
+          <view class="member-avatar member-placeholder" wx:else>{{member.initial}}</view>
+          <view class="member-copy"><text class="member-name">{{member.name}}</text><text class="member-meta">{{member.metaText}}</text></view>
+          <text class="member-arrow">›</text>
+        </view>
+      </view>
+    </view>
+  </block>
+
+  <view class="member-list flat-list surface-card" wx:if="{{!showEmpty && (searching || viewMode !== 'generation')}}">
+    <view class="member-row" wx:for="{{displayedPersons}}" wx:key="_id" data-id="{{item._id}}" hover-class="member-row-active" bindtap="openMember">
+      <image class="member-avatar" wx:if="{{item.avatar}}" src="{{item.avatar}}" mode="aspectFill"></image>
+      <view class="member-avatar member-placeholder" wx:else>{{item.initial}}</view>
+      <view class="member-copy"><text class="member-name">{{item.name}}</text><text class="member-meta {{viewMode === 'missing' ? 'missing-meta' : ''}}">{{viewMode === 'missing' ? item.missingText : (viewMode === 'name' || searching) ? item.nameMetaText : item.metaText}}</text></view>
+      <text class="member-arrow">›</text>
+    </view>
+  </view>
+  <view class="search-empty surface-card" wx:if="{{showEmpty}}"><text class="search-empty-title">{{searching ? '没有找到“' + keyword + '”' : viewMode === 'missing' ? '成员资料都比较完整' : '谱中暂无成员'}}</text><text class="search-empty-copy">{{searching ? '换一个姓名试试' : viewMode === 'missing' ? '暂时没有需要补充的资料' : '可以从完整家谱中添加家庭成员'}}</text></view>
+</view>

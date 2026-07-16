@@ -1,0 +1,7 @@
+<view class="page-shell" wx:if="{{invalid}}"><view class="empty-panel"><view class="empty-mark">!</view><text class="empty-title">无法提交举报</text><text class="empty-description">举报对象信息不完整，请返回后重试。</text></view></view>
+<view class="report-page page-shell" wx:else>
+  <view class="target-card surface-card"><text class="target-label">举报对象</text><text class="target-name">{{targetName}}</text><text class="target-help">举报不会通知被举报人，处理过程会写入安全审计。</text></view>
+  <view class="report-section"><text class="section-title">问题类型</text><view class="reason-list surface-card"><view class="reason-row {{reason === item ? 'selected' : ''}}" wx:for="{{reasons}}" wx:key="*this" data-reason="{{item}}" bindtap="chooseReason"><text>{{item}}</text><text class="reason-check">{{reason === item ? '✓' : ''}}</text></view></view></view>
+  <view class="report-section"><text class="section-title">补充说明</text><textarea class="detail-input" maxlength="300" placeholder="请说明具体问题，便于运营人员判断" value="{{detail}}" bindinput="inputDetail"></textarea></view>
+  <button class="primary-button submit-report" loading="{{submitting}}" bindtap="submit">提交举报</button>
+</view>

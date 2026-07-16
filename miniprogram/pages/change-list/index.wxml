@@ -1,0 +1,25 @@
+<view class="loading-panel" wx:if="{{loading}}"><view class="loading-dot"></view><text>正在读取申请...</text></view>
+<view class="page-shell" wx:elif="{{error}}"><view class="empty-panel"><view class="empty-mark">!</view><text class="empty-title">无法打开申请列表</text><text class="empty-description">{{error}}</text><button class="secondary-button" bindtap="loadPage">重新加载</button></view></view>
+<view class="change-page page-shell" wx:else>
+  <view class="page-intro"><text class="intro-title">{{isAdmin ? '家庭修改申请' : currentRole === 'member' ? '我的修改申请' : '家庭修改申请'}}</text><text class="intro-copy">{{isAdmin ? '审核家人提交的关键修改' : currentRole === 'member' ? '查看你提交的申请和处理结果' : '仅共同补全成员可以提交修改申请'}}</text></view>
+
+  <view class="status-tabs" wx:if="{{currentRole !== 'viewer'}}">
+    <view class="status-tab {{activeStatus === item.key ? 'active' : ''}}" wx:for="{{statusTabs}}" wx:key="key" data-status="{{item.key}}" bindtap="switchStatus">{{item.label}}</view>
+  </view>
+
+  <view class="change-list" wx:if="{{changes.length}}">
+    <view class="change-card surface-card" wx:for="{{changes}}" wx:key="_id">
+      <view class="change-head"><text class="change-title">{{item.title}}</text><text class="change-status {{item.status}}">{{item.statusText}}</text></view>
+      <text class="change-meta">由 {{item.requesterName || '家人'}} 提交 · {{item.timeText}}</text>
+      <text class="review-note" wx:if="{{item.reviewNote}}">处理说明：{{item.reviewNote}}</text>
+      <view class="review-actions" wx:if="{{isAdmin && item.status === 'pending'}}"><button class="review-button reject" data-id="{{item._id}}" data-decision="reject" disabled="{{reviewingId !== ''}}" bindtap="reviewChange">拒绝</button><button class="review-button approve" data-id="{{item._id}}" data-decision="approve" disabled="{{reviewingId !== ''}}" loading="{{reviewingId === item._id}}" bindtap="reviewChange">通过</button></view>
+    </view>
+    <button class="secondary-button more-button" wx:if="{{hasMore}}" loading="{{loadingMore}}" bindtap="loadMore">加载更多</button>
+  </view>
+
+  <view class="empty-state surface-card" wx:else>
+    <view class="empty-state-mark">{{activeStatus === 'pending' ? '✓' : '记'}}</view>
+    <text class="empty-state-title">{{currentRole === 'viewer' ? '暂无可处理事项' : activeStatus === 'pending' ? '当前没有待处理申请' : '暂无相关记录'}}</text>
+    <text class="empty-state-copy">{{currentRole === 'viewer' ? '你可以浏览家谱，但不能提交关键修改' : isAdmin ? '新的家庭修改申请会显示在这里' : '你提交的修改申请会显示在这里'}}</text>
+  </view>
+</view>

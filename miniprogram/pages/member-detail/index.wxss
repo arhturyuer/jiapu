@@ -1,0 +1,31 @@
+.detail-page { padding-bottom: calc(56rpx + env(safe-area-inset-bottom)); }
+.hero-card { padding: 40rpx 32rpx; display: flex; flex-direction: column; align-items: center; }
+.hero-avatar { width: 184rpx; height: 184rpx; border-radius: 52rpx; }
+.hero-placeholder { display: flex; align-items: center; justify-content: center; color: #245C4A; background: #E4EFEA; font-size: 64rpx; font-weight: 600; }
+.hero-name { margin-top: 24rpx; font-size: 48rpx; font-weight: 600; }
+.hero-tags { margin-top: 14rpx; display: flex; gap: 12rpx; }
+.perspective-button { width: 360rpx; margin-top: 28rpx; }
+.detail-section { margin-top: 40rpx; }
+.info-card { padding: 0 28rpx; }
+.info-row { min-height: 96rpx; padding: 22rpx 0; display: flex; align-items: flex-start; justify-content: space-between; border-bottom: 2rpx solid #EEF0ED; }
+.info-row-last { border-bottom: none; }
+.info-label { width: 180rpx; color: #65706A; }
+.info-value { flex: 1; text-align: right; }
+.bio-value { line-height: 1.6; }
+.relation-list { padding: 0; }
+.relation-swipe { position: relative; min-height: 112rpx; overflow: hidden; border-bottom: 2rpx solid #EEF0ED; background: #B43D3D; }
+.relation-swipe:last-child { border-bottom: none; }
+.relation-remove-action { position: absolute; z-index: 0; top: 0; right: 0; width: 208rpx; height: 100%; display: flex; align-items: center; justify-content: center; overflow: hidden; color: #FFFFFF; background: #B43D3D; }
+.relation-remove-action.disabled { color: rgba(255, 255, 255, 0.76); background: #A86A65; }
+.relation-remove-text { width: 100%; display: block; color: inherit; font-size: 28rpx; font-weight: 600; line-height: 1.2; text-align: center; white-space: nowrap; }
+.relation-row { position: relative; z-index: 1; min-height: 112rpx; padding: 0 24rpx; display: flex; align-items: center; background: #FFFEFA; transition: transform 180ms ease; }
+.relation-row.swiped { transform: translateX(-208rpx); }
+.relation-avatar { width: 72rpx; height: 72rpx; margin-right: 20rpx; border-radius: 22rpx; }
+.relation-placeholder { display: flex; align-items: center; justify-content: center; color: #245C4A; background: #E4EFEA; font-weight: 600; }
+.relation-copy { flex: 1; display: flex; flex-direction: column; }
+.relation-name { font-weight: 600; }
+.relation-label { margin-top: 4rpx; color: #65706A; font-size: 26rpx; }
+.relation-arrow { color: #9AA39E; font-size: 48rpx; }
+.empty-relation { padding: 40rpx; color: #65706A; text-align: center; }
+.detail-actions { margin-top: 40rpx; display: flex; flex-direction: column; gap: 16rpx; }
+.report-button { width: 100%; margin-top: 20rpx; color: #65706A; border-color: #C9CFCA; }

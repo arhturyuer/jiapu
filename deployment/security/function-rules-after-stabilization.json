@@ -1,0 +1,17 @@
+{
+  "*": {
+    "invoke": false
+  },
+  "youpuUserApi": {
+    "invoke": "auth.loginType != 'ANONYMOUS' && auth != null"
+  },
+  "youpuOpsApi": {
+    "invoke": "auth.loginType != 'ANONYMOUS' && auth != null"
+  },
+  "youpuJobs": {
+    "invoke": false
+  },
+  "familyFunctions": {
+    "invoke": false
+  }
+}

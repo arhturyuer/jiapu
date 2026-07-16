@@ -1,0 +1,26 @@
+.form-page { padding-bottom: calc(56rpx + env(safe-area-inset-bottom)); }
+.avatar-section { margin: 16rpx 0 32rpx; display: flex; flex-direction: column; align-items: center; }
+.avatar-section.avatar-busy { pointer-events: none; }
+.avatar-preview { width: 176rpx; height: 176rpx; border-radius: 48rpx; }
+.avatar-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; color: #245C4A; background: #E4EFEA; border: 2rpx dashed #86A99A; }
+.avatar-add { font-size: 52rpx; }
+.avatar-hint, .avatar-action { margin-top: 4rpx; font-size: 24rpx; }
+.avatar-action { color: #245C4A; }
+.avatar-state { margin-top: 12rpx; padding: 9rpx 16rpx; display: flex; align-items: center; gap: 10rpx; color: #65706A; background: #EEF1EF; border-radius: 999rpx; font-size: 24rpx; }
+.avatar-state.pending, .avatar-state.review, .avatar-state.family-review { color: #8A5A16; background: #FFF2DA; }
+.avatar-state.approved { color: #2E6A4C; background: #E5F1EB; }
+.avatar-state.failed, .avatar-state.rejected { color: #A13A34; background: #FBE9E6; }
+.avatar-retry { font-weight: 700; text-decoration: underline; }
+.form-card { padding: 32rpx; }
+.field-label { margin-bottom: 14rpx; display: block; font-weight: 600; }
+.second-label { margin-top: 32rpx; }
+.field-input, .field-textarea { width: 100%; background: #F3F2EC; border: 2rpx solid #D8DED9; border-radius: 20rpx; }
+.field-input { height: 96rpx; padding: 0 24rpx; }
+.picker-value { display: flex; align-items: center; }
+.placeholder { color: #9AA39E; }
+.field-textarea { height: 220rpx; padding: 24rpx; line-height: 1.6; }
+.choice-row { display: flex; gap: 12rpx; }
+.choice-item { flex: 1; height: 84rpx; display: flex; align-items: center; justify-content: center; color: #65706A; background: #F3F2EC; border: 2rpx solid #D8DED9; border-radius: 20rpx; font-size: 28rpx; }
+.choice-item.selected { color: #245C4A; background: #E4EFEA; border-color: #245C4A; font-weight: 600; }
+.permission-note { margin: 24rpx 8rpx; display: block; color: #65706A; font-size: 26rpx; line-height: 1.6; }
+.submit-button { width: 100%; }

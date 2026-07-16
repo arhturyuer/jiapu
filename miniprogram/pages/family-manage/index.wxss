@@ -1,0 +1,29 @@
+.manage-page { padding-bottom: calc(64rpx + env(safe-area-inset-bottom)); }
+.archive-card { padding: 34rpx; display: flex; flex-direction: column; gap: 18rpx; }
+.archive-title { color: #8A5A16; font-size: 36rpx; font-weight: 650; }
+.archive-desc { color: #765E3A; line-height: 1.6; }
+.manage-section { margin-top: 34rpx; }
+.form-card { padding: 30rpx; }
+.field-label { margin-bottom: 12rpx; display: block; font-weight: 650; }
+.second-label { margin-top: 28rpx; }
+.field-input, .field-textarea { width: 100%; padding: 0 22rpx; background: #F3F2EC; border: 2rpx solid #D8DED9; border-radius: 20rpx; }
+.field-input { height: 92rpx; }
+.field-textarea { height: 180rpx; padding-top: 20rpx; }
+.save-button { width: 100%; margin-top: 28rpx; }
+.member-list, .invite-list, .danger-zone { padding: 0 24rpx; }
+.member-row, .invite-row, .danger-row { min-height: 116rpx; display: flex; align-items: center; border-bottom: 2rpx solid #EEF0ED; }
+.invite-row { gap: 16rpx; }
+.member-row:last-child, .invite-row:last-child, .danger-row:last-child { border-bottom: none; }
+.member-avatar { width: 72rpx; height: 72rpx; margin-right: 18rpx; display: flex; align-items: center; justify-content: center; color: #245C4A; background: #E4EFEA; border-radius: 22rpx; font-weight: 650; }
+.member-copy, .invite-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; }
+.member-name, .invite-name { font-weight: 650; }
+.invite-name, .invite-meta { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.member-role, .invite-meta, .danger-desc { margin-top: 5rpx; color: #65706A; font-size: 24rpx; }
+.member-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 8rpx; }
+.member-action { color: #245C4A; font-size: 25rpx; font-weight: 600; }
+.empty-invite { padding: 36rpx; color: #65706A; text-align: center; }
+.revoke-button { width: 112rpx; height: 62rpx; padding: 0; display: inline-flex; flex: none; align-items: center; justify-content: center; color: #B43D3D; background: #FBEDEC; border: 2rpx solid rgba(180, 61, 61, 0.16); border-radius: 18rpx; font-size: 25rpx; font-weight: 600; line-height: 1; }
+.revoke-button:active { background: #F5DAD8; }
+.danger-row { justify-content: space-between; }
+.danger-title { display: block; color: #B43D3D; font-weight: 650; }
+.danger-arrow { color: #B43D3D; font-size: 48rpx; }

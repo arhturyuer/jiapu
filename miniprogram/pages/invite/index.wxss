@@ -1,0 +1,21 @@
+.invite-page { min-height: 100vh; padding-top: 48rpx; }
+.brand-line { display: flex; align-items: center; justify-content: center; margin-bottom: 40rpx; }
+.brand-mark { width: 64rpx; height: 64rpx; margin-right: 16rpx; display: flex; align-items: center; justify-content: center; color: #FFFFFF; background: #245C4A; border-radius: 18rpx; font-weight: 600; }
+.brand-name { font-size: 40rpx; font-weight: 600; }
+.invite-card { padding: 44rpx 36rpx; text-align: center; }
+.eyebrow { color: #65706A; font-size: 28rpx; }
+.family-name { margin-top: 18rpx; display: block; font-size: 52rpx; font-weight: 600; }
+.family-description { margin-top: 16rpx; display: block; color: #65706A; line-height: 1.6; }
+.family-stats { margin-top: 30rpx; display: flex; align-items: center; justify-content: center; color: #245C4A; font-weight: 600; }
+.dot { margin: 0 14rpx; }
+.view-note { margin-top: 30rpx; padding: 20rpx; color: #245C4A; background: #E4EFEA; border-radius: 18rpx; font-size: 28rpx; }
+.privacy-note { margin: 28rpx 12rpx; padding: 24rpx; display: flex; flex-direction: column; }
+.privacy-title { font-weight: 600; }
+.privacy-copy { margin-top: 8rpx; color: #65706A; font-size: 26rpx; line-height: 1.6; }
+.accept-button { width: 100%; margin-top: 32rpx; }
+.invalid-panel { min-height: 760rpx; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+.invite-mark { width: 120rpx; height: 120rpx; display: flex; align-items: center; justify-content: center; color: #245C4A; background: #E4EFEA; border-radius: 36rpx; font-size: 52rpx; font-weight: 600; }
+.invite-mark.muted { color: #65706A; background: #E8E9E5; }
+.invite-title { margin-top: 30rpx; font-size: 40rpx; font-weight: 600; }
+.invite-description { margin-top: 14rpx; color: #65706A; }
+.home-button { width: 320rpx; margin-top: 40rpx; }
