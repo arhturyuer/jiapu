@@ -14,6 +14,7 @@ function decorateInvitations(items) {
 Page({
   data: {
     familyId: '',
+    focusSection: '',
     loading: true,
     error: '',
     family: null,
@@ -35,7 +36,7 @@ Page({
       this.setData({ loading: false, error: '缺少家谱信息，请返回后重试。' });
       return;
     }
-    this.setData({ familyId: familyId });
+    this.setData({ familyId: familyId, focusSection: options.section || '' });
   },
 
   onShow: function () {
@@ -80,6 +81,11 @@ Page({
         invitations: decorateInvitations(data.invitations),
         inviteCursor: data.inviteCursor || '',
         hasMoreInvites: Boolean(data.hasMoreInvites)
+      }, function () {
+        if (self.data.focusSection === 'collaborators') {
+          wx.pageScrollTo({ selector: '#collaborator-section', duration: 260 });
+          self.setData({ focusSection: '' });
+        }
       });
     }).catch(function (error) {
       self.setData({ loading: false, error: error.message || '加载失败' });

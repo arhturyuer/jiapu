@@ -148,6 +148,14 @@ App({
     });
   },
 
+  openFullGraph: function (family) {
+    if (family) this.setCurrentFamily(family);
+    wx.setStorageSync('youpu_pending_view', {
+      mode: 'full',
+      personId: ''
+    });
+  },
+
   consumePendingView: function () {
     const view = wx.getStorageSync('youpu_pending_view') || null;
     wx.removeStorageSync('youpu_pending_view');

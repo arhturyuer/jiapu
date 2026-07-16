@@ -1,6 +1,14 @@
 const app = getApp();
 const api = require('../../utils/api');
 const privacy = require('../../utils/privacy');
+const formState = require('../../utils/form-state');
+
+function profileAvatarState(status) {
+  if (status === 'approved') return { state: 'approved', text: '头像已保存并通过审核' };
+  if (status === 'rejected' || status === 'deleted') return { state: 'rejected', text: '头像未通过，请重新选择' };
+  if (status === 'pending' || status === 'review') return { state: 'pending', text: '头像已保存，审核通过后自动展示' };
+  return { state: '', text: '' };
+}
 
 Page({
   data: {
@@ -9,6 +17,11 @@ Page({
     nickName: '',
     avatarUrl: '',
     avatarAssetId: '',
+    avatarState: '',
+    avatarStateText: '',
+    avatarError: '',
+    savingAvatar: false,
+    hasNameChanges: false,
     familyList: [],
     archivedFamilies: [],
     currentFamily: null,
@@ -18,6 +31,10 @@ Page({
 
   onShow: function () {
     this.loadPage();
+  },
+
+  onUnload: function () {
+    formState.clearLeaveAlert(this);
   },
 
   loadPage: function () {
@@ -41,12 +58,29 @@ Page({
         nickName: user.nickName || '',
         avatarUrl: '',
         avatarAssetId: avatarAssetId,
+        avatarState: '',
+        avatarStateText: '',
+        avatarError: '',
+        savingAvatar: false,
+        hasNameChanges: false,
         familyList: families,
         archivedFamilies: familyData.archived,
         currentFamily: app.getCurrentFamily()
       });
-      return api.getMediaUrls([avatarAssetId]).then(function (urls) {
-        if (urls[avatarAssetId]) self.setData({ avatarUrl: urls[avatarAssetId] });
+      self._initialNickName = user.nickName || '';
+      formState.clearLeaveAlert(self);
+      return Promise.all([
+        api.getMediaUrls([avatarAssetId]),
+        api.getMediaStates([avatarAssetId])
+      ]).then(function (results) {
+        const urls = results[0];
+        const states = results[1];
+        const presentation = profileAvatarState(states[avatarAssetId] || '');
+        self.setData({
+          avatarUrl: urls[avatarAssetId] || '',
+          avatarState: presentation.state,
+          avatarStateText: presentation.text
+        });
       });
     }).catch(function (error) {
       self.setData({ loading: false });
@@ -55,42 +89,115 @@ Page({
   },
 
   inputNickname: function (event) {
-    this.setData({ nickName: event.detail.value });
+    const self = this;
+    this.setData({ nickName: event.detail.value }, function () { self.refreshProfileState(); });
+  },
+
+  refreshProfileState: function () {
+    const hasNameChanges = String(this.data.nickName || '').trim() !== String(this._initialNickName || '');
+    if (this.data.hasNameChanges !== hasNameChanges) this.setData({ hasNameChanges: hasNameChanges });
+    formState.syncLeaveAlert(
+      this,
+      hasNameChanges || this.data.savingAvatar || this.data.avatarState === 'failed',
+      '名字或头像尚未保存，确定离开吗？'
+    );
   },
 
   chooseAvatar: function () {
     const self = this;
-    privacy.ensurePrivacyAuthorized().then(function () {
+    if (this.data.savingAvatar || this.data.savingProfile) return Promise.resolve();
+    let selectedPath = '';
+    return privacy.ensurePrivacyAuthorized().then(function () {
       return wx.chooseMedia({ count: 1, mediaType: ['image'], sourceType: ['album', 'camera'] });
     }).then(function (result) {
-      wx.showLoading({ title: '上传中' });
       const file = result.tempFiles[0];
+      selectedPath = file.tempFilePath;
+      self.setData({
+        avatarUrl: selectedPath,
+        savingAvatar: true,
+        avatarState: 'uploading',
+        avatarStateText: '正在上传头像…',
+        avatarError: ''
+      }, function () { self.refreshProfileState(); });
       return api.uploadImage(file.tempFilePath, 'user-avatars', {
         kind: 'user_avatar',
         size: file.size || 0
       });
     }).then(function (media) {
-      self.setData({ avatarUrl: media.previewUrl, avatarAssetId: media.assetId });
-      if (!media.ready) wx.showToast({ title: '头像将在审核通过后展示', icon: 'none' });
+      self._pendingAvatarMedia = media;
+      return self.saveProfileAvatar(media);
     }).catch(function (error) {
       if (error && error.errMsg && error.errMsg.indexOf('cancel') >= 0) return;
-      wx.showToast({ title: error.message || '头像上传失败', icon: 'none' });
-    }).then(function () {
-      wx.hideLoading();
+      self.setData({
+        avatarUrl: selectedPath || self.data.avatarUrl,
+        savingAvatar: false,
+        avatarState: 'failed',
+        avatarStateText: '头像保存失败，点击重试',
+        avatarError: error.message || error.errMsg || '头像保存失败'
+      }, function () { self.refreshProfileState(); });
+      wx.showToast({ title: error.message || error.errMsg || '头像上传失败', icon: 'none' });
     });
+  },
+
+  saveProfileAvatar: function (media) {
+    const self = this;
+    this.setData({
+      avatarUrl: media.previewUrl || this.data.avatarUrl,
+      avatarAssetId: media.assetId,
+      savingAvatar: true,
+      avatarState: 'saving',
+      avatarStateText: '正在保存头像…',
+      avatarError: ''
+    }, function () { self.refreshProfileState(); });
+    return api.call('auth.updateAvatar', { avatarAssetId: media.assetId }).then(function (data) {
+      self._pendingAvatarMedia = null;
+      app.setUser(data.user);
+      const presentation = profileAvatarState(data.moderationStatus || media.moderationStatus);
+      self.setData({
+        user: data.user,
+        savingAvatar: false,
+        avatarState: presentation.state,
+        avatarStateText: presentation.text
+      }, function () { self.refreshProfileState(); });
+      wx.showToast({
+        title: media.ready ? '头像已更新' : '头像已保存，等待审核',
+        icon: media.ready ? 'success' : 'none'
+      });
+      return data;
+    });
+  },
+
+  retryAvatarSave: function () {
+    if (this.data.savingAvatar || this.data.savingProfile) return;
+    if (this._pendingAvatarMedia) {
+      const self = this;
+      this.saveProfileAvatar(this._pendingAvatarMedia).catch(function (error) {
+        self.setData({
+          savingAvatar: false,
+          avatarState: 'failed',
+          avatarStateText: '头像保存失败，点击重试',
+          avatarError: error.message || '头像保存失败'
+        }, function () { self.refreshProfileState(); });
+      });
+      return;
+    }
+    this.chooseAvatar();
   },
 
   saveProfile: function () {
     const self = this;
-    if (this.data.savingProfile) return;
+    if (!this.data.hasNameChanges || this.data.savingProfile || this.data.savingAvatar) return Promise.resolve();
     this.setData({ savingProfile: true });
-    api.call('auth.updateProfile', {
-      nickName: this.data.nickName.trim(),
-      avatarAssetId: this.data.avatarAssetId
+    return api.call('auth.updateProfile', {
+      nickName: this.data.nickName.trim()
     }).then(function (data) {
       app.setUser(data.user);
-      self.setData({ user: data.user });
-      wx.showToast({ title: '资料已保存', icon: 'success' });
+      self._initialNickName = data.user.nickName || '';
+      self.setData({ user: data.user, nickName: data.user.nickName || '', hasNameChanges: false }, function () {
+        self.refreshProfileState();
+      });
+      wx.showToast({ title: '名字已保存', icon: 'success' });
+      return data;
     }).catch(function (error) {
       wx.showToast({ title: error.message || '保存失败', icon: 'none' });
     }).then(function () {

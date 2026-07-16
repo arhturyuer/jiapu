@@ -27,6 +27,47 @@ test('配偶关系规范化且父母子女环可被识别', function () {
   assert.equal(domain.reachesTarget('c', 'a', relations), false);
 });
 
+test('关联已有成员时关系方向与中心成员视角一致', function () {
+  assert.deepEqual(domain.relationDefinition('child', 'mother', 'mother'), {
+    type: 'parent_child',
+    fromId: 'mother',
+    toId: 'child'
+  });
+  assert.deepEqual(domain.relationDefinition('father', 'child', 'son'), {
+    type: 'parent_child',
+    fromId: 'father',
+    toId: 'child'
+  });
+  assert.deepEqual(domain.relationDefinition('father', 'mother', 'spouse'), {
+    type: 'spouse',
+    fromId: 'father',
+    toId: 'mother'
+  });
+  assert.equal(domain.relationDefinition('a', 'b', 'cousin'), null);
+});
+
+test('移除关系只允许使用其他有效关系保持两端连通', function () {
+  const relations = [
+    { _id: 'target', type: 'parent_child', fromPersonId: 'parent', toPersonId: 'child', status: 'active' },
+    { _id: 'parent-spouse', type: 'spouse', fromPersonId: 'parent', toPersonId: 'spouse', status: 'active' },
+    { _id: 'spouse-child', type: 'parent_child', fromPersonId: 'spouse', toPersonId: 'child', status: 'active' },
+    { _id: 'unrelated', type: 'parent_child', fromPersonId: 'other-a', toPersonId: 'other-b', status: 'active' }
+  ];
+  assert.equal(domain.hasAlternateConnection('parent', 'child', 'target', relations), true);
+  assert.equal(domain.hasAlternateConnection('parent', 'spouse', 'parent-spouse', relations), true);
+  assert.equal(domain.hasAlternateConnection('other-a', 'other-b', 'unrelated', relations), false);
+});
+
+test('已删除关系和不支持的关系类型不参与替代路径', function () {
+  const relations = [
+    { _id: 'target', type: 'parent_child', fromPersonId: 'a', toPersonId: 'b', status: 'active' },
+    { _id: 'deleted', type: 'spouse', fromPersonId: 'a', toPersonId: 'c', status: 'deleted' },
+    { _id: 'unsupported', type: 'sibling', fromPersonId: 'a', toPersonId: 'c', status: 'active' },
+    { _id: 'c-b', type: 'parent_child', fromPersonId: 'c', toPersonId: 'b', status: 'active' }
+  ];
+  assert.equal(domain.hasAlternateConnection('a', 'b', 'target', relations), false);
+});
+
 test('邀请状态按撤销、过期和次数上限统一转换', function () {
   const now = Date.parse('2026-07-14T00:00:00Z');
   assert.equal(domain.invitationState({ status: 'revoked' }, now), 'revoked');

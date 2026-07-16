@@ -1,0 +1,28 @@
+.change-page { padding-bottom: calc(48rpx + env(safe-area-inset-bottom)); }
+.page-intro { padding: 8rpx 4rpx 24rpx; }
+.intro-title, .intro-copy { display: block; }
+.intro-title { font-size: 38rpx; font-weight: 650; }
+.intro-copy { margin-top: 8rpx; color: #65706A; font-size: 26rpx; }
+.status-tabs { height: 82rpx; padding: 6rpx; display: flex; background: #E8ECE8; border-radius: 24rpx; }
+.status-tab { flex: 1; display: flex; align-items: center; justify-content: center; color: #65706A; border-radius: 19rpx; font-size: 27rpx; font-weight: 600; }
+.status-tab.active { color: #245C4A; background: #FFFEFA; box-shadow: 0 5rpx 14rpx rgba(38, 55, 48, 0.08); }
+.change-list { margin-top: 24rpx; }
+.change-card { margin-bottom: 16rpx; padding: 26rpx; }
+.change-head { display: flex; align-items: flex-start; gap: 18rpx; }
+.change-title { min-width: 0; flex: 1; font-weight: 600; line-height: 1.5; }
+.change-status { min-height: 44rpx; padding: 5rpx 14rpx; flex: none; color: #65706A; background: #EEF0ED; border-radius: 999rpx; font-size: 22rpx; font-weight: 600; }
+.change-status.pending { color: #A15B22; background: #FFF0E2; }
+.change-status.approved { color: #245C4A; background: #E4EFEA; }
+.change-status.rejected { color: #B43D3D; background: #FBEDEC; }
+.change-meta { margin-top: 10rpx; display: block; color: #65706A; font-size: 24rpx; }
+.review-note { margin-top: 16rpx; padding: 16rpx 18rpx; display: block; color: #65706A; background: #F5F3ED; border-radius: 16rpx; font-size: 25rpx; }
+.review-actions { margin-top: 22rpx; display: flex; justify-content: flex-end; gap: 12rpx; }
+.review-button { width: 144rpx; height: 68rpx; border-radius: 18rpx; font-size: 26rpx; font-weight: 600; }
+.review-button.reject { color: #B43D3D; background: #FBEDEC; }
+.review-button.approve { color: #FFFFFF; background: #245C4A; }
+.review-button[disabled] { opacity: 0.58; }
+.more-button { width: 100%; margin-top: 10rpx; }
+.empty-state { margin-top: 24rpx; padding: 70rpx 32rpx; display: flex; flex-direction: column; align-items: center; text-align: center; }
+.empty-state-mark { width: 96rpx; height: 96rpx; display: flex; align-items: center; justify-content: center; color: #245C4A; background: #E4EFEA; border-radius: 32rpx; font-size: 40rpx; font-weight: 650; }
+.empty-state-title { margin-top: 24rpx; font-weight: 600; }
+.empty-state-copy { margin-top: 10rpx; color: #65706A; font-size: 26rpx; }

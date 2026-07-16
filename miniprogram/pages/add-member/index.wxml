@@ -4,13 +4,21 @@
     <text class="context-value">{{anchorName}}的{{relationLabel}}</text>
   </view>
 
+  <view class="entry-switch">
+    <view class="entry-option {{entryMode === 'new' ? 'selected' : ''}}" data-mode="new" bindtap="chooseEntryMode">新建成员</view>
+    <view class="entry-option {{entryMode === 'existing' ? 'selected' : ''}}" data-mode="existing" bindtap="chooseEntryMode">关联已有成员</view>
+  </view>
+
+  <view class="context-loading" wx:if="{{loadingContext}}">正在读取家谱成员...</view>
+
+  <block wx:if="{{entryMode === 'new'}}">
   <view class="avatar-section" bindtap="chooseAvatar">
     <image class="avatar-preview" wx:if="{{avatar}}" src="{{avatar}}" mode="aspectFill"></image>
     <view class="avatar-preview avatar-empty" wx:else>
       <text class="avatar-add">＋</text>
       <text class="avatar-hint">添加照片</text>
     </view>
-    <text class="upload-state" wx:if="{{uploading}}">正在上传...</text>
+    <text class="upload-state upload-state-{{avatarState}}" wx:if="{{avatarStateText}}">{{avatarStateText}}</text>
   </view>
 
   <view class="form-card surface-card">
@@ -31,7 +39,33 @@
     <text class="field-label second-label">人物简介</text>
     <textarea class="field-textarea" placeholder="可选，写下一些想被家人记住的事" value="{{bio}}" data-field="bio" bindinput="inputField" maxlength="500"></textarea>
   </view>
+  </block>
+
+  <view class="existing-card surface-card" wx:else>
+    <input class="field-input existing-search" placeholder="输入姓名查找谱中成员" value="{{existingKeyword}}" bindinput="filterExisting" />
+    <scroll-view class="existing-list" scroll-y wx:if="{{existingResults.length}}">
+      <view class="existing-person {{item._id === selectedExistingId ? 'selected' : ''}}" wx:for="{{existingResults}}" wx:key="_id" data-id="{{item._id}}" bindtap="selectExisting">
+        <view class="existing-avatar">{{item.initial}}</view>
+        <view class="existing-copy">
+          <text class="existing-name">{{item.name}}</text>
+          <text class="existing-meta">{{item.genderText}}{{item.birthDate ? ' · ' + item.birthDate : ''}}</text>
+        </view>
+        <text class="existing-check">{{item._id === selectedExistingId ? '已选择' : '选择'}}</text>
+      </view>
+    </scroll-view>
+    <view class="existing-empty" wx:else>{{loadingContext ? '正在读取成员...' : existingKeyword ? '没有找到匹配成员' : '没有可关联的已有成员'}}</view>
+  </view>
+
+  <view class="shared-children surface-card" wx:if="{{relationType === 'spouse' && sharedChildren.length}}">
+    <text class="shared-title">是否也是孩子的{{sharedParentRoleText}}？</text>
+    <text class="shared-description">仅勾选已确认的亲子关系，未勾选不会自动推断。</text>
+    <view class="shared-child {{item.selected ? 'selected' : ''}}" wx:for="{{sharedChildren}}" wx:key="_id" data-id="{{item._id}}" bindtap="toggleSharedChild">
+      <view class="shared-avatar">{{item.initial}}</view>
+      <text class="shared-name">{{item.name}}</text>
+      <view class="shared-checkbox">{{item.selected ? '✓' : ''}}</view>
+    </view>
+  </view>
 
   <text class="permission-note">普通家庭成员添加的新关系会提交给管理员确认。</text>
-  <button class="primary-button submit-button" loading="{{submitting}}" disabled="{{!name || uploading}}" bindtap="submit">添加这位家人</button>
+  <button class="primary-button submit-button" loading="{{submitting}}" disabled="{{submitting || uploading || (entryMode === 'new' ? !name : !selectedExistingId)}}" bindtap="submit">{{submitting ? submitStage : entryMode === 'new' ? '添加这位家人' : '确认关联关系'}}</button>
 </view>

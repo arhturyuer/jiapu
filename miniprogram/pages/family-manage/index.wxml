@@ -18,7 +18,7 @@
       </view>
     </view>
 
-    <view class="manage-section">
+    <view class="manage-section" id="collaborator-section">
       <view class="section-heading"><text class="section-title">共同维护</text><text class="muted-text">{{collaborators.length}} 人</text></view>
       <view class="member-list surface-card">
         <view class="member-row" wx:for="{{collaborators}}" wx:key="_id">

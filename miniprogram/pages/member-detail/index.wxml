@@ -24,11 +24,16 @@
   <view class="detail-section">
     <view class="section-heading"><text class="section-title">直接关系</text><text class="muted-text">{{relatives.length}} 人</text></view>
     <view class="relation-list surface-card" wx:if="{{relatives.length}}">
-      <view class="relation-row" wx:for="{{relatives}}" wx:key="relationId" data-id="{{item.person._id}}" bindtap="openRelative">
-        <image class="relation-avatar" wx:if="{{item.person.avatar}}" src="{{item.person.avatar}}" mode="aspectFill"></image>
-        <view class="relation-avatar relation-placeholder" wx:else>{{item.initial}}</view>
-        <view class="relation-copy"><text class="relation-name">{{item.person.name}}</text><text class="relation-label">{{item.label}}</text></view>
-        <text class="relation-arrow">›</text>
+      <view class="relation-swipe" wx:for="{{relatives}}" wx:key="relationId">
+        <view class="relation-remove-action {{removingRelationId !== '' ? 'disabled' : ''}}" wx:if="{{isAdmin}}" data-relation-id="{{item.relationId}}" catchtap="removeRelation">
+          <text class="relation-remove-text">{{removingRelationId === item.relationId ? '移除中' : '移除关系'}}</text>
+        </view>
+        <view class="relation-row {{openRelationId === item.relationId ? 'swiped' : ''}}" data-id="{{item.person._id}}" data-relation-id="{{item.relationId}}" bindtouchstart="onRelationTouchStart" bindtouchmove="onRelationTouchMove" bindtouchend="onRelationTouchEnd" bindtouchcancel="onRelationTouchCancel" bindtap="openRelative">
+          <image class="relation-avatar" wx:if="{{item.person.avatar}}" src="{{item.person.avatar}}" mode="aspectFill"></image>
+          <view class="relation-avatar relation-placeholder" wx:else>{{item.initial}}</view>
+          <view class="relation-copy"><text class="relation-name">{{item.person.name}}</text><text class="relation-label">{{item.label}}</text></view>
+          <text class="relation-arrow">›</text>
+        </view>
       </view>
     </view>
     <view class="empty-relation surface-card" wx:else>还没有录入直接亲属</view>

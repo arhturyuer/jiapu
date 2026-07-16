@@ -4,17 +4,17 @@
 </view>
 <view class="family-page page-shell" wx:else>
   <view class="family-hero surface-card">
-    <view class="family-hero-top"><view><text class="family-name">{{currentFamily.name}}</text><text class="family-role">{{isAdmin ? '你是家谱管理员' : currentRole === 'member' ? '你是家庭成员' : '你是访客'}}</text></view><button class="invite-button" wx:if="{{isAdmin}}" bindtap="openShareSheet">邀请家人</button></view>
+    <view class="family-hero-top"><view class="family-heading"><text class="family-name">{{currentFamily.name}}</text><text class="family-role">{{isAdmin ? '你是家谱管理员' : currentRole === 'member' ? '你是家庭成员' : '你是访客'}}</text></view><button class="invite-button" wx:if="{{isAdmin}}" bindtap="openShareSheet">邀请家人</button></view>
     <text class="family-description">{{currentFamily.description || '一家人，共修一份家谱'}}</text>
     <view class="progress-track"><view class="progress-value" style="width:{{stats.completion}}%;"></view></view>
     <text class="progress-text">资料完整度 {{stats.completion}}%</text>
   </view>
 
   <view class="stats-grid">
-    <view class="stat-card surface-card"><text class="stat-value">{{stats.personCount}}</text><text class="stat-label">谱中成员</text></view>
-    <view class="stat-card surface-card"><text class="stat-value">{{stats.relationCount}}</text><text class="stat-label">家庭关系</text></view>
-    <view class="stat-card surface-card"><text class="stat-value">{{stats.collaboratorCount}}</text><text class="stat-label">共同维护</text></view>
-    <view class="stat-card surface-card"><text class="stat-value">{{stats.pendingCount}}</text><text class="stat-label">待处理</text></view>
+    <view class="stat-card surface-card" hover-class="stat-card-active" bindtap="openPersonList"><text class="stat-value">{{stats.personCount}}</text><view class="stat-footer"><text class="stat-label">谱中成员</text><text class="stat-arrow">›</text></view></view>
+    <view class="stat-card surface-card" hover-class="stat-card-active" bindtap="openGraph"><text class="stat-value">{{stats.relationCount}}</text><view class="stat-footer"><text class="stat-label">家庭关系</text><text class="stat-arrow">›</text></view></view>
+    <view class="stat-card surface-card" hover-class="stat-card-active" bindtap="openCollaborators"><text class="stat-value">{{stats.collaboratorCount}}</text><view class="stat-footer"><text class="stat-label">共同维护</text><text class="stat-arrow">›</text></view></view>
+    <view class="stat-card surface-card" hover-class="stat-card-active" bindtap="openPendingChanges"><text class="stat-value">{{stats.pendingCount}}</text><view class="stat-footer"><text class="stat-label">待处理</text><text class="stat-arrow">›</text></view></view>
   </view>
 
   <view class="section-block" wx:if="{{pendingChanges.length}}">

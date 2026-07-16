@@ -2,18 +2,23 @@
 .empty-action { width: 360rpx; }
 .family-hero { padding: 32rpx; }
 .family-hero-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 20rpx; }
+.family-heading { min-width: 0; flex: 1; }
 .family-name, .family-role { display: block; }
-.family-name { font-size: 44rpx; font-weight: 600; }
+.family-name { overflow: hidden; font-size: 44rpx; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .family-role { margin-top: 8rpx; color: #65706A; font-size: 26rpx; }
-.invite-button { min-width: 168rpx; height: 76rpx; padding: 0 22rpx; color: #FFFFFF; background: #245C4A; font-size: 28rpx; }
+.invite-button { min-width: 168rpx; height: 76rpx; padding: 0 22rpx; display: inline-flex; flex: none; align-items: center; justify-content: center; color: #FFFFFF; background: #245C4A; border-radius: 22rpx; box-shadow: 0 8rpx 18rpx rgba(36, 92, 74, 0.18); font-size: 28rpx; font-weight: 600; line-height: 1; }
+.invite-button:active { background: #194636; }
 .family-description { margin-top: 24rpx; display: block; color: #65706A; line-height: 1.6; }
 .progress-track { height: 12rpx; margin-top: 28rpx; overflow: hidden; background: #E1E5E1; border-radius: 12rpx; }
 .progress-value { height: 100%; background: #245C4A; border-radius: 12rpx; }
 .progress-text { margin-top: 12rpx; display: block; color: #65706A; font-size: 24rpx; }
 .stats-grid { margin-top: 20rpx; display: grid; grid-template-columns: 1fr 1fr; gap: 16rpx; }
-.stat-card { min-height: 144rpx; padding: 24rpx; display: flex; flex-direction: column; justify-content: center; }
+.stat-card { min-height: 144rpx; padding: 24rpx; display: flex; flex-direction: column; justify-content: center; transition: background 120ms ease, transform 120ms ease; }
+.stat-card-active { background: #F1F6F3; transform: scale(0.985); }
 .stat-value { color: #245C4A; font-size: 44rpx; font-weight: 600; }
-.stat-label { margin-top: 4rpx; color: #65706A; font-size: 26rpx; }
+.stat-footer { margin-top: 4rpx; display: flex; align-items: center; justify-content: space-between; }
+.stat-label { color: #65706A; font-size: 26rpx; }
+.stat-arrow { color: #86A99A; font-size: 36rpx; font-weight: 500; line-height: 1; }
 .section-block { margin-top: 40rpx; }
 .change-card { margin-bottom: 16rpx; padding: 24rpx; }
 .change-copy { display: flex; flex-direction: column; }

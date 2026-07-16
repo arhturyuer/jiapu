@@ -47,36 +47,70 @@
     </view>
 
     <movable-area class="graph-viewport" wx:else>
-      <movable-view class="graph-movable" style="width:{{canvasWidth}}rpx;height:{{canvasHeight}}rpx;" direction="all" scale scale-min="0.5" scale-max="1.6" out-of-bounds>
-        <view class="graph-canvas" style="width:{{canvasWidth}}rpx;height:{{canvasHeight}}rpx;">
+      <movable-view
+        class="graph-movable {{graphZoomClass}}"
+        style="width:{{canvasWidth}}rpx;height:{{canvasHeight}}rpx;"
+        direction="all"
+        x="{{graphX}}"
+        y="{{graphY}}"
+        scale="{{!graphRendering}}"
+        scale-value="{{graphScale}}"
+        scale-min="{{graphScaleMin}}"
+        scale-max="1.6"
+        inertia="{{false}}"
+        animation="{{false}}"
+        bindscale="onGraphScale"
+        bindchange="onGraphChange"
+      >
+        <view class="graph-canvas" style="width:{{canvasWidth}}rpx;height:{{canvasHeight}}rpx;" bindtap="clearGraphSelection">
         <view
           wx:for="{{lines}}"
           wx:key="_id"
-          class="relation-line {{item.type === 'spouse' ? 'spouse-line' : 'parent-line'}}"
+          class="relation-line relation-{{item.lineRole}} {{item.isFlow ? 'relation-flow' : ''}}"
+          style="{{item.style}}"
+        >
+          <view class="flow-runner flow-step-{{item.flowStep}}" wx:if="{{item.isAnimatedFlow}}"></view>
+        </view>
+
+        <view
+          wx:for="{{junctions}}"
+          wx:key="_id"
+          class="family-junction {{item.isActive ? 'is-active' : ''}}"
           style="{{item.style}}"
         ></view>
 
         <view
           wx:for="{{nodes}}"
           wx:key="_id"
-          class="person-node {{item.isViewpoint ? 'is-viewpoint' : ''}}"
+          class="person-node {{item.isViewpoint ? 'is-viewpoint' : ''}} {{item.isSelected ? 'is-selected' : ''}}"
           style="{{item.style}}"
           data-id="{{item._id}}"
-          bindtap="showPerson"
+          catchtap="showPerson"
         >
           <image class="node-avatar" wx:if="{{item.avatar}}" src="{{item.avatar}}" mode="aspectFill"></image>
           <view class="node-avatar node-placeholder" wx:else>{{item.initial}}</view>
           <text class="node-name">{{item.name}}</text>
           <text class="node-meta" wx:if="{{viewMode === 'perspective' && item.relationLabel}}">{{item.relationLabel}}</text>
           <text class="node-meta" wx:elif="{{item.metaText}}">{{item.metaText}}</text>
+          <view class="node-action-trigger" wx:if="{{item.isSelected}}" data-id="{{item._id}}" catchtap="openMemberActions">•••</view>
+          <view class="branch-count" wx:if="{{item.hiddenDescendantCount > 0}}" data-id="{{item._id}}" catchtap="expandBranch">+{{item.hiddenDescendantCount}} 人</view>
         </view>
         </view>
       </movable-view>
     </movable-area>
 
+    <view class="graph-controls" wx:if="{{nodes.length > 0}}">
+      <view class="graph-control" bindtap="zoomGraphIn">＋</view>
+      <view class="graph-control" bindtap="zoomGraphOut">－</view>
+      <view class="graph-control graph-control-text" bindtap="fitWholeGraph">全谱</view>
+      <view class="graph-control graph-control-text" bindtap="locateGraphFocus">定位</view>
+      <view class="graph-control graph-control-text" wx:if="{{canExpandAll}}" bindtap="expandAllBranches">展开</view>
+    </view>
+
     <view class="graph-help" wx:if="{{nodes.length > 0}}">
       <text wx:if="{{graphRendering}}">正在分批绘制 {{renderedCount}} / {{totalVisibleCount}} 人</text>
-      <text wx:elif="{{hiddenBranchCount > 0}}">已折叠 {{hiddenBranchCount}} 人，点击分支成员可展开</text>
+      <text wx:elif="{{selectedPersonId && !showMemberSheet}}">关系已高亮，再次点击成员或点“•••”进行操作</text>
+      <text wx:elif="{{hiddenBranchCount > 0}}">已智能收起 {{hiddenBranchCount}} 人，点击 +人数 可展开分支</text>
       <text wx:else>{{viewMode === 'full' ? '拖动查看全谱，点击成员进行操作' : '当前从' + viewpointName + '查看关系'}}</text>
     </view>
   </block>

@@ -1,15 +1,19 @@
 <view class="loading-panel" wx:if="{{loading}}"><view class="loading-dot"></view><text>正在加载...</text></view>
 <view class="profile-page page-shell" wx:else>
   <view class="profile-card surface-card">
-    <button class="avatar-button" bindtap="chooseAvatar">
-      <image class="profile-avatar" wx:if="{{avatarUrl}}" src="{{avatarUrl}}" mode="aspectFill"></image>
-      <view class="profile-avatar profile-placeholder" wx:else>家</view>
-      <text class="avatar-edit">更换头像</text>
-    </button>
+    <view class="avatar-column">
+      <view class="avatar-button {{savingAvatar ? 'avatar-button-busy' : ''}}" bindtap="chooseAvatar" hover-class="avatar-button-active" aria-role="button">
+        <image class="profile-avatar" wx:if="{{avatarUrl}}" src="{{avatarUrl}}" mode="aspectFill"></image>
+        <view class="profile-avatar profile-placeholder" wx:else>家</view>
+        <text class="avatar-edit">{{savingAvatar ? '处理中…' : '更换头像'}}</text>
+      </view>
+      <text class="avatar-status avatar-status-{{avatarState}}" wx:if="{{avatarStateText}}">{{avatarStateText}}</text>
+      <text class="avatar-retry" wx:if="{{avatarState === 'failed'}}" catchtap="retryAvatarSave">重新保存</text>
+    </view>
     <view class="profile-form">
       <text class="profile-label">在家庭中显示的名字</text>
       <input class="nickname-input" type="text" placeholder="例如：建国叔" value="{{nickName}}" bindinput="inputNickname" maxlength="30" />
-      <button class="primary-button save-profile" loading="{{savingProfile}}" bindtap="saveProfile">保存个人资料</button>
+      <view class="primary-button save-profile {{(!hasNameChanges || savingProfile || savingAvatar) ? 'save-profile-disabled' : ''}}" bindtap="saveProfile" hover-class="save-profile-active" aria-role="button" aria-disabled="{{!hasNameChanges || savingProfile || savingAvatar}}">{{savingProfile ? '保存中…' : hasNameChanges ? '保存名字' : '名字未修改'}}</view>
     </view>
   </view>
 

@@ -105,9 +105,18 @@ function getMediaUrls(assetIds) {
   });
 }
 
+function getMediaStates(assetIds) {
+  const ids = Array.from(new Set((assetIds || []).filter(Boolean))).slice(0, 50);
+  if (!ids.length) return Promise.resolve({});
+  return call('media.getStates', { assetIds: ids }).then(function (data) {
+    return data.states || {};
+  });
+}
+
 module.exports = {
   call: call,
   uploadImage: uploadImage,
   getMediaUrls: getMediaUrls,
+  getMediaStates: getMediaStates,
   requestId: requestId
 };

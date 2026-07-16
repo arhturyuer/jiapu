@@ -1,10 +1,14 @@
 <view class="loading-panel" wx:if="{{loading}}"><view class="loading-dot"></view><text>正在读取资料...</text></view>
 <view class="page-shell" wx:elif="{{error}}"><view class="empty-panel"><view class="empty-mark">!</view><text class="empty-title">无法编辑资料</text><text class="empty-description">{{error}}</text><button class="secondary-button" bindtap="loadPerson">重新加载</button></view></view>
 <view class="form-page page-shell" wx:else>
-  <view class="avatar-section" bindtap="chooseAvatar">
+  <view class="avatar-section {{uploading || savingAvatar ? 'avatar-busy' : ''}}" bindtap="chooseAvatar">
     <image class="avatar-preview" wx:if="{{avatar}}" src="{{avatar}}" mode="aspectFill"></image>
     <view class="avatar-preview avatar-empty" wx:else><text class="avatar-add">＋</text><text class="avatar-hint">添加照片</text></view>
-    <text class="upload-state" wx:if="{{uploading}}">正在上传...</text>
+    <text class="avatar-action" wx:if="{{!uploading && !savingAvatar}}">{{avatar ? '更换头像' : '添加头像'}}</text>
+    <view class="avatar-state {{avatarState}}" wx:if="{{avatarStateText}}" catchtap="retryAvatarSave">
+      <text>{{avatarStateText}}</text>
+      <text class="avatar-retry" wx:if="{{avatarState === 'failed'}}">重试</text>
+    </view>
   </view>
 
   <view class="form-card surface-card">
@@ -30,5 +34,5 @@
     <textarea class="field-textarea" placeholder="记录值得被家人记住的事" value="{{bio}}" data-field="bio" bindinput="inputField" maxlength="500"></textarea>
   </view>
   <text class="permission-note" wx:if="{{currentRole !== 'admin'}}">姓名、性别和人物状态的修改需要管理员确认。</text>
-  <button class="primary-button submit-button" loading="{{submitting}}" disabled="{{!name || uploading}}" bindtap="submit">保存资料</button>
+  <button class="primary-button submit-button" loading="{{submitting}}" disabled="{{!name || !hasFormChanges || uploading || savingAvatar || submitting}}" bindtap="submit">{{submitting ? '保存中…' : hasFormChanges ? '保存其他资料' : '其他资料未修改'}}</button>
 </view>

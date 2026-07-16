@@ -91,38 +91,153 @@
   width: 100%;
   height: calc(100vh - 112rpx - 120rpx);
   overflow: hidden;
-  background: #F7F4EC;
+  background-color: #F7F4EC;
+  background-image: radial-gradient(rgba(36, 92, 74, 0.09) 1rpx, transparent 1rpx);
+  background-size: 32rpx 32rpx;
+}
+
+.graph-controls {
+  position: fixed;
+  right: 24rpx;
+  bottom: calc(206rpx + env(safe-area-inset-bottom));
+  z-index: 22;
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
+}
+
+.graph-control {
+  width: 72rpx;
+  height: 64rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #245C4A;
+  background: rgba(255, 254, 250, 0.96);
+  border: 2rpx solid #D8DED9;
+  border-radius: 18rpx;
+  box-shadow: 0 6rpx 18rpx rgba(36, 59, 49, 0.09);
+  font-size: 34rpx;
+  font-weight: 600;
+}
+
+.graph-control-text {
+  font-size: 22rpx;
+  font-weight: 500;
 }
 
 .graph-movable {
   display: block;
+  will-change: transform;
 }
 
 .graph-canvas {
   position: relative;
   min-width: 750rpx;
   min-height: 900rpx;
-  background-color: #F7F4EC;
-  background-image: radial-gradient(rgba(36, 92, 74, 0.09) 1rpx, transparent 1rpx);
-  background-size: 32rpx 32rpx;
+  background: transparent;
 }
 
 .relation-line {
   position: absolute;
   z-index: 1;
-  height: 3rpx;
+  height: 4rpx;
+  overflow: hidden;
+  pointer-events: none;
   transform-origin: left center;
-  background: #A8B5AE;
+  background: #A6B7AE;
+  border-radius: 999rpx;
 }
 
-.spouse-line {
+.relation-spouse {
   height: 5rpx;
   background: #829D91;
 }
 
+.relation-trunk,
+.relation-drop {
+  height: 4rpx;
+  background: #A6B7AE;
+}
+
+.relation-rail {
+  height: 3rpx;
+  background: #BEC9C3;
+}
+
+.relation-flow {
+  z-index: 2;
+  height: 6rpx;
+  background: #6F9E89;
+}
+
+.flow-runner {
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  background: linear-gradient(90deg, #245C4A 0%, #3E8069 72%, #D7E9E1 100%);
+  border-radius: 999rpx;
+  transform: scaleX(0);
+  transform-origin: left center;
+  will-change: transform, opacity;
+  animation-duration: 2.4s;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  animation-iteration-count: infinite;
+}
+
+.flow-runner.flow-step-0 { animation-name: family-flow-pulse-0; }
+.flow-runner.flow-step-1 { animation-name: family-flow-pulse-1; }
+.flow-runner.flow-step-2 { animation-name: family-flow-pulse-2; }
+.flow-runner.flow-step-3 { animation-name: family-flow-pulse-3; }
+
+@keyframes family-flow-pulse-0 {
+  0% { opacity: 0; transform: scaleX(0); }
+  2% { opacity: 1; transform: scaleX(0); }
+  20% { opacity: 1; transform: scaleX(1); }
+  24%, 100% { opacity: 0; transform: scaleX(1); }
+}
+
+@keyframes family-flow-pulse-1 {
+  0%, 25% { opacity: 0; transform: scaleX(0); }
+  27% { opacity: 1; transform: scaleX(0); }
+  45% { opacity: 1; transform: scaleX(1); }
+  49%, 100% { opacity: 0; transform: scaleX(1); }
+}
+
+@keyframes family-flow-pulse-2 {
+  0%, 50% { opacity: 0; transform: scaleX(0); }
+  52% { opacity: 1; transform: scaleX(0); }
+  70% { opacity: 1; transform: scaleX(1); }
+  74%, 100% { opacity: 0; transform: scaleX(1); }
+}
+
+@keyframes family-flow-pulse-3 {
+  0%, 75% { opacity: 0; transform: scaleX(0); }
+  77% { opacity: 1; transform: scaleX(0); }
+  95% { opacity: 1; transform: scaleX(1); }
+  99%, 100% { opacity: 0; transform: scaleX(1); }
+}
+
+.family-junction {
+  position: absolute;
+  z-index: 3;
+  width: 14rpx;
+  height: 14rpx;
+  pointer-events: none;
+  background: #829D91;
+  border: 3rpx solid #F7F4EC;
+  border-radius: 50%;
+}
+
+.family-junction.is-active {
+  background: #245C4A;
+  border-color: #D7E9E1;
+  transform: scale(1.12);
+}
+
 .person-node {
   position: absolute;
-  z-index: 2;
+  z-index: 4;
   width: 168rpx;
   min-height: 116rpx;
   padding: 14rpx 12rpx 12rpx;
@@ -132,12 +247,21 @@
   background: #FFFEFA;
   border: 2rpx solid #D8DED9;
   border-radius: 24rpx;
-  box-shadow: 0 8rpx 24rpx rgba(36, 59, 49, 0.08);
 }
 
 .person-node.is-viewpoint {
   border: 5rpx solid #245C4A;
-  box-shadow: 0 0 0 10rpx rgba(36, 92, 74, 0.12), 0 8rpx 24rpx rgba(36, 59, 49, 0.12);
+  box-shadow: 0 0 0 8rpx rgba(36, 92, 74, 0.12);
+}
+
+.person-node.is-selected {
+  border-color: #C18A32;
+  box-shadow: 0 0 0 7rpx rgba(193, 138, 50, 0.16);
+}
+
+.person-node.is-viewpoint.is-selected {
+  border-color: #245C4A;
+  box-shadow: 0 0 0 8rpx rgba(193, 138, 50, 0.2), 0 0 0 15rpx rgba(36, 92, 74, 0.12);
 }
 
 .node-avatar {
@@ -175,6 +299,69 @@
   font-size: 22rpx;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.branch-count {
+  position: absolute;
+  right: -18rpx;
+  bottom: -22rpx;
+  min-width: 72rpx;
+  height: 38rpx;
+  padding: 0 12rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #FFFEFA;
+  background: #245C4A;
+  border: 4rpx solid #F7F4EC;
+  border-radius: 22rpx;
+  font-size: 20rpx;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.node-action-trigger {
+  position: absolute;
+  top: -22rpx;
+  right: -20rpx;
+  z-index: 6;
+  width: 52rpx;
+  height: 44rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #FFFEFA;
+  background: #C18A32;
+  border: 4rpx solid #F7F4EC;
+  border-radius: 24rpx;
+  font-size: 24rpx;
+  font-weight: 700;
+  letter-spacing: -2rpx;
+}
+
+.graph-movable.zoom-compact .node-meta {
+  display: none;
+}
+
+.graph-movable.zoom-overview .node-avatar,
+.graph-movable.zoom-overview .node-meta {
+  display: none;
+}
+
+.graph-movable.zoom-overview .person-node {
+  justify-content: center;
+  padding: 12rpx;
+  background: #FFFEFA;
+  border-width: 4rpx;
+  box-shadow: none;
+}
+
+.graph-movable.zoom-overview .node-name {
+  font-size: 32rpx;
+}
+
+.graph-movable.zoom-overview .relation-line:not(.relation-flow) {
+  opacity: 0.72;
 }
 
 .graph-help {

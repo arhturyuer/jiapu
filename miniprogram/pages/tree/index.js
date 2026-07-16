@@ -1,6 +1,9 @@
 const app = getApp();
 const api = require('../../utils/api');
 const graphLayout = require('../../utils/graph-layout');
+const graphViewport = require('../../utils/graph-viewport');
+
+const MAX_INTERACTIVE_NODES = 80;
 
 Page({
   data: {
@@ -15,16 +18,24 @@ Page({
     rawRelations: [],
     nodes: [],
     lines: [],
+    junctions: [],
     graphRendering: false,
     renderedCount: 0,
     totalVisibleCount: 0,
     hiddenBranchCount: 0,
+    canExpandAll: false,
     collapsedPersonIds: [],
     canvasWidth: 750,
     canvasHeight: 900,
+    graphScale: 1,
+    graphX: 0,
+    graphY: 0,
+    graphZoomClass: 'zoom-detail',
+    graphScaleMin: 0.32,
     viewMode: 'full',
     viewpointId: '',
     viewpointName: '',
+    selectedPersonId: '',
     selectedPerson: null,
     showMemberSheet: false,
     showFamilySheet: false,
@@ -52,6 +63,10 @@ Page({
   onShow: function () {
     const pendingView = app.consumePendingView();
     this.loadPage(pendingView);
+  },
+
+  onUnload: function () {
+    if (this._graphSettleTimer) clearTimeout(this._graphSettleTimer);
   },
 
   onPullDownRefresh: function () {
@@ -94,6 +109,14 @@ Page({
           mode = 'full';
           personId = '';
         }
+        let collapsedPersonIds = self.data.collapsedPersonIds;
+        if (self._autoCollapseFamilyId !== data.family._id) {
+          collapsedPersonIds = graphLayout.suggestCollapsedIds(persons, data.relations || [], {
+            limit: 36,
+            focusId: personId
+          });
+          self._autoCollapseFamilyId = data.family._id;
+        }
         self.setData({
           currentFamily: data.family,
           currentRole: data.currentRole,
@@ -102,16 +125,24 @@ Page({
           rawRelations: data.relations || [],
           loading: false,
           viewMode: mode,
-          viewpointId: personId
+          viewpointId: personId,
+          collapsedPersonIds: collapsedPersonIds,
+          selectedPersonId: ''
         });
         app.setCurrentFamily(data.family);
         self.renderGraph(mode, personId);
+        const familyId = data.family._id;
         return api.getMediaUrls(persons.map(function (person) { return person.avatarAssetId; })).then(function (urls) {
+          if (!self.data.currentFamily || self.data.currentFamily._id !== familyId) return data;
           const resolvedPersons = persons.map(function (person) {
             return Object.assign({}, person, { avatar: urls[person.avatarAssetId] || '' });
           });
-          self.setData({ rawPersons: resolvedPersons });
-          self.renderGraph(mode, personId);
+          const resolvedById = {};
+          resolvedPersons.forEach(function (person) { resolvedById[person._id] = person; });
+          const resolvedNodes = self.data.nodes.map(function (node) {
+            return Object.assign({}, node, { avatar: resolvedById[node._id] ? resolvedById[node._id].avatar : '' });
+          });
+          self.setData({ rawPersons: resolvedPersons, nodes: resolvedNodes });
           return data;
         });
       });
@@ -121,57 +152,176 @@ Page({
     });
   },
 
-  renderGraph: function (mode, viewpointId) {
+  renderGraph: function (mode, viewpointId, renderOptions) {
+    const optionsValue = renderOptions || {};
+    const collapsedIds = optionsValue.collapsedPersonIds || this.data.collapsedPersonIds;
+    const selectedPersonId = Object.prototype.hasOwnProperty.call(optionsValue, 'selectedPersonId')
+      ? optionsValue.selectedPersonId
+      : this.data.selectedPersonId;
     const result = graphLayout.layoutGraph(
       this.data.rawPersons,
       this.data.rawRelations,
       {
         mode: mode,
         viewpointId: viewpointId,
-        collapsedIds: this.data.collapsedPersonIds
+        collapsedIds: collapsedIds,
+        selectedPersonId: selectedPersonId
       }
     );
     const viewpoint = this.data.rawPersons.find(function (person) {
       return person._id === viewpointId;
     });
-    this._renderVersion = (this._renderVersion || 0) + 1;
-    const renderVersion = this._renderVersion;
     const self = this;
-    let nodeIndex = 0;
-    let lineIndex = 0;
-    this.setData({
-      nodes: [],
-      lines: [],
+    this._lastLayout = result;
+    const patch = Object.assign({
+      nodes: result.nodes,
+      lines: result.lines,
+      junctions: result.junctions || [],
       canvasWidth: result.width,
       canvasHeight: result.height,
       viewpointName: viewpoint ? viewpoint.name : '',
-      graphRendering: result.nodes.length > 0,
-      renderedCount: 0,
+      graphRendering: false,
+      renderedCount: result.nodes.length,
       totalVisibleCount: result.nodes.length,
-      hiddenBranchCount: result.hiddenCount || 0
+      hiddenBranchCount: result.hiddenCount || 0,
+      canExpandAll: (result.hiddenCount || 0) > 0 && this.data.rawPersons.length <= MAX_INTERACTIVE_NODES
+    }, optionsValue.statePatch || {});
+    this.setData(patch, function () {
+      if (optionsValue.preserveViewport) return;
+      if (mode === 'perspective' && viewpointId) {
+        self.fitGraph(viewpointId, false, { minimumFocusScale: 0.6 });
+      } else {
+        self.fitGraph('', true);
+      }
     });
+  },
 
-    function appendBatch() {
-      if (self._renderVersion !== renderVersion) return;
-      const patch = {};
-      const nextNodeIndex = Math.min(nodeIndex + 70, result.nodes.length);
-      const nextLineIndex = Math.min(lineIndex + 100, result.lines.length);
-      for (let index = nodeIndex; index < nextNodeIndex; index += 1) {
-        patch['nodes[' + index + ']'] = result.nodes[index];
-      }
-      for (let index = lineIndex; index < nextLineIndex; index += 1) {
-        patch['lines[' + index + ']'] = result.lines[index];
-      }
-      nodeIndex = nextNodeIndex;
-      lineIndex = nextLineIndex;
-      patch.renderedCount = nodeIndex;
-      patch.graphRendering = nodeIndex < result.nodes.length || lineIndex < result.lines.length;
-      self.setData(patch, function () {
-        if (patch.graphRendering) setTimeout(appendBatch, 16);
+  getGraphTransform: function () {
+    return {
+      scale: typeof this._currentGraphScale === 'number' ? this._currentGraphScale : this.data.graphScale,
+      x: typeof this._currentGraphX === 'number' ? this._currentGraphX : this.data.graphX,
+      y: typeof this._currentGraphY === 'number' ? this._currentGraphY : this.data.graphY
+    };
+  },
+
+  commitGraphTransform: function (transform) {
+    this._currentGraphScale = transform.scale;
+    this._currentGraphX = transform.x;
+    this._currentGraphY = transform.y;
+    this.setData({
+      graphScale: transform.scale,
+      graphX: transform.x,
+      graphY: transform.y,
+      graphZoomClass: graphViewport.zoomClassForScale(transform.scale, this.data.graphZoomClass)
+    });
+  },
+
+  getGraphViewport: function () {
+    let info = {};
+    try {
+      info = wx.getWindowInfo ? wx.getWindowInfo() : wx.getSystemInfoSync();
+    } catch (error) {
+      info = { windowWidth: 375, windowHeight: 667 };
+    }
+    const width = info.windowWidth || 375;
+    const rpxToPx = width / 750;
+    return {
+      width: width,
+      height: Math.max(240, (info.windowHeight || 667) - 232 * rpxToPx),
+      rpxToPx: rpxToPx
+    };
+  },
+
+  fitGraph: function (focusPersonId, fitAll, fitOptions) {
+    const layout = this._lastLayout;
+    if (!layout || !layout.nodes.length) return;
+    const viewport = this.getGraphViewport();
+    const optionsValue = fitOptions || {};
+    const transform = graphViewport.fitTransform(layout, viewport, {
+      fitAll: fitAll,
+      focusPersonId: focusPersonId,
+      currentScale: this.getGraphTransform().scale,
+      minimumScale: this.data.graphScaleMin,
+      minimumFocusScale: optionsValue.minimumFocusScale || 0
+    });
+    this.commitGraphTransform(transform);
+  },
+
+  fitWholeGraph: function () {
+    this.fitGraph('', true);
+  },
+
+  locateGraphFocus: function () {
+    const focusId = this.data.selectedPersonId || this.data.viewpointId;
+    if (focusId) this.fitGraph(focusId, false, { minimumFocusScale: 0.68 });
+    else this.fitGraph('', true);
+  },
+
+  changeGraphScale: function (delta) {
+    const current = this.getGraphTransform();
+    const next = Math.round((current.scale + delta) * 100) / 100;
+    const transform = graphViewport.zoomAroundCenter(current, next, this.getGraphViewport(), {
+      minimumScale: this.data.graphScaleMin
+    });
+    this.commitGraphTransform(transform);
+  },
+
+  zoomGraphIn: function () {
+    this.changeGraphScale(0.15);
+  },
+
+  zoomGraphOut: function () {
+    this.changeGraphScale(-0.15);
+  },
+
+  onGraphScale: function (event) {
+    const scale = event.detail.scale;
+    if (!scale) return;
+    this._currentGraphScale = scale;
+    this.scheduleGraphSettle();
+  },
+
+  onGraphChange: function (event) {
+    if (typeof event.detail.x === 'number') this._currentGraphX = event.detail.x;
+    if (typeof event.detail.y === 'number') this._currentGraphY = event.detail.y;
+    this.scheduleGraphSettle();
+  },
+
+  scheduleGraphSettle: function () {
+    const self = this;
+    if (this._graphSettleTimer) clearTimeout(this._graphSettleTimer);
+    this._graphSettleTimer = setTimeout(function () {
+      self._graphSettleTimer = null;
+      const scale = self.getGraphTransform().scale;
+      const nextClass = graphViewport.zoomClassForScale(scale, self.data.graphZoomClass);
+      if (nextClass !== self.data.graphZoomClass) self.setData({ graphZoomClass: nextClass });
+    }, 160);
+  },
+
+  expandAllBranches: function () {
+    if (this.data.rawPersons.length > MAX_INTERACTIVE_NODES) {
+      wx.showToast({ title: '家谱较大，请按分支展开', icon: 'none' });
+      return;
+    }
+    this.renderGraph(this.data.viewMode, this.data.viewpointId, {
+      collapsedPersonIds: [],
+      statePatch: { collapsedPersonIds: [] }
+    });
+  },
+
+  expandBranch: function (event) {
+    const personId = event.currentTarget.dataset.id;
+    let collapsed = this.data.collapsedPersonIds.filter(function (id) { return id !== personId; });
+    if (this.data.rawPersons.length > MAX_INTERACTIVE_NODES) {
+      collapsed = graphLayout.suggestCollapsedIds(this.data.rawPersons, this.data.rawRelations, {
+        limit: MAX_INTERACTIVE_NODES,
+        focusId: personId
       });
     }
-
-    if (result.nodes.length) appendBatch();
+    this.renderGraph(this.data.viewMode, this.data.viewpointId, {
+      collapsedPersonIds: collapsed,
+      statePatch: { collapsedPersonIds: collapsed }
+    });
   },
 
   openCreateFamily: function () {
@@ -209,8 +359,10 @@ Page({
       viewMode: 'full',
       viewpointId: '',
       viewpointName: '',
-      collapsedPersonIds: []
+      collapsedPersonIds: [],
+      selectedPersonId: ''
     });
+    this._autoCollapseFamilyId = '';
     this.loadPage({ mode: 'full', personId: '' });
   },
 
@@ -218,7 +370,29 @@ Page({
     const personId = event.currentTarget.dataset.id;
     const person = this.data.rawPersons.find(function (item) { return item._id === personId; });
     if (!person) return;
+    if (this.data.selectedPersonId === personId) {
+      this.openMemberActions(event);
+      return;
+    }
+    this.renderGraph(this.data.viewMode, this.data.viewpointId, {
+      preserveViewport: true,
+      selectedPersonId: personId,
+      statePatch: {
+        selectedPersonId: personId,
+        selectedPerson: Object.assign({}, person, {
+          isCollapsed: this.data.collapsedPersonIds.indexOf(personId) >= 0
+        }),
+        showMemberSheet: false
+      }
+    });
+  },
+
+  openMemberActions: function (event) {
+    const personId = event.currentTarget.dataset.id;
+    const person = this.data.rawPersons.find(function (item) { return item._id === personId; });
+    if (!person) return;
     this.setData({
+      selectedPersonId: personId,
       selectedPerson: Object.assign({}, person, {
         isCollapsed: this.data.collapsedPersonIds.indexOf(personId) >= 0
       }),
@@ -226,8 +400,17 @@ Page({
     });
   },
 
+  clearGraphSelection: function () {
+    if (!this.data.selectedPersonId || this.data.showMemberSheet) return;
+    this.renderGraph(this.data.viewMode, this.data.viewpointId, {
+      preserveViewport: true,
+      selectedPersonId: '',
+      statePatch: { selectedPersonId: '', selectedPerson: null }
+    });
+  },
+
   closeMemberSheet: function () {
-    this.setData({ showMemberSheet: false, selectedPerson: null });
+    this.setData({ showMemberSheet: false });
   },
 
   useSelectedPerspective: function () {
@@ -265,8 +448,23 @@ Page({
   setPerspective: function (personId) {
     const family = this.data.currentFamily;
     if (!family) return;
-    this.setData({ viewMode: 'perspective', viewpointId: personId });
-    this.renderGraph('perspective', personId);
+    const expandedIds = graphLayout.expandCollapsedIds(
+      this.data.rawPersons,
+      this.data.rawRelations,
+      this.data.collapsedPersonIds,
+      personId
+    );
+    this.renderGraph('perspective', personId, {
+      collapsedPersonIds: expandedIds,
+      selectedPersonId: '',
+      statePatch: {
+        viewMode: 'perspective',
+        viewpointId: personId,
+        collapsedPersonIds: expandedIds,
+        selectedPersonId: '',
+        selectedPerson: null
+      }
+    });
     api.call('family.setPreference', {
       familyId: family._id,
       viewMode: 'perspective',
@@ -276,8 +474,16 @@ Page({
 
   showFullGraph: function () {
     const family = this.data.currentFamily;
-    this.setData({ viewMode: 'full', viewpointId: '', viewpointName: '' });
-    this.renderGraph('full', '');
+    this.renderGraph('full', '', {
+      selectedPersonId: '',
+      statePatch: {
+        viewMode: 'full',
+        viewpointId: '',
+        viewpointName: '',
+        selectedPersonId: '',
+        selectedPerson: null
+      }
+    });
     if (family) {
       api.call('family.setPreference', {
         familyId: family._id,
@@ -316,8 +522,16 @@ Page({
     const index = collapsed.indexOf(person._id);
     if (index >= 0) collapsed.splice(index, 1);
     else collapsed.push(person._id);
-    this.setData({ collapsedPersonIds: collapsed, showMemberSheet: false, selectedPerson: null });
-    this.renderGraph(this.data.viewMode, this.data.viewpointId);
+    this.renderGraph(this.data.viewMode, this.data.viewpointId, {
+      collapsedPersonIds: collapsed,
+      selectedPersonId: '',
+      statePatch: {
+        collapsedPersonIds: collapsed,
+        selectedPersonId: '',
+        showMemberSheet: false,
+        selectedPerson: null
+      }
+    });
   },
 
   closeRelationSheet: function () {

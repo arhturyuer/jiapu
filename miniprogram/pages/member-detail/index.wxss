@@ -12,9 +12,14 @@
 .info-label { width: 180rpx; color: #65706A; }
 .info-value { flex: 1; text-align: right; }
 .bio-value { line-height: 1.6; }
-.relation-list { padding: 0 24rpx; }
-.relation-row { min-height: 112rpx; display: flex; align-items: center; border-bottom: 2rpx solid #EEF0ED; }
-.relation-row:last-child { border-bottom: none; }
+.relation-list { padding: 0; }
+.relation-swipe { position: relative; min-height: 112rpx; overflow: hidden; border-bottom: 2rpx solid #EEF0ED; background: #B43D3D; }
+.relation-swipe:last-child { border-bottom: none; }
+.relation-remove-action { position: absolute; z-index: 0; top: 0; right: 0; width: 208rpx; height: 100%; display: flex; align-items: center; justify-content: center; overflow: hidden; color: #FFFFFF; background: #B43D3D; }
+.relation-remove-action.disabled { color: rgba(255, 255, 255, 0.76); background: #A86A65; }
+.relation-remove-text { width: 100%; display: block; color: inherit; font-size: 28rpx; font-weight: 600; line-height: 1.2; text-align: center; white-space: nowrap; }
+.relation-row { position: relative; z-index: 1; min-height: 112rpx; padding: 0 24rpx; display: flex; align-items: center; background: #FFFEFA; transition: transform 180ms ease; }
+.relation-row.swiped { transform: translateX(-208rpx); }
 .relation-avatar { width: 72rpx; height: 72rpx; margin-right: 20rpx; border-radius: 22rpx; }
 .relation-placeholder { display: flex; align-items: center; justify-content: center; color: #245C4A; background: #E4EFEA; font-weight: 600; }
 .relation-copy { flex: 1; display: flex; flex-direction: column; }

@@ -20,6 +20,7 @@ const RATE_LIMITS = {
 };
 const MUTATION_TYPES = new Set([
   'auth.updateProfile',
+  'auth.updateAvatar',
   'account.requestDeletion',
   'account.cancelDeletion',
   'family.create',
@@ -31,6 +32,8 @@ const MUTATION_TYPES = new Set([
   'membership.transferAdmin',
   'membership.leave',
   'person.createRelated',
+  'relation.linkExisting',
+  'relation.remove',
   'person.update',
   'person.delete',
   'change.review',
@@ -72,6 +75,15 @@ function cleanGender(value) {
 
 function cleanLifeStatus(value) {
   return ['living', 'deceased', 'unknown'].includes(value) ? value : 'unknown';
+}
+
+function cleanPersonIds(value, limit) {
+  const result = [];
+  (Array.isArray(value) ? value : []).forEach(function (item) {
+    const id = cleanText(item, 80);
+    if (id && result.indexOf(id) < 0 && result.length < (limit || 50)) result.push(id);
+  });
+  return result;
 }
 
 function cleanRole(value) {
@@ -149,6 +161,15 @@ function publicPerson(person) {
     createdAt: person.createdAt || null,
     updatedAt: person.updatedAt || null
   };
+}
+
+function profileMissingFields(person) {
+  const fields = [];
+  if (!person.gender || person.gender === 'unknown') fields.push('gender');
+  if (!person.birthDate) fields.push('birthDate');
+  if (!person.avatarAssetId) fields.push('avatar');
+  if (!person.bio && !person.birthPlace) fields.push('story');
+  return fields;
 }
 
 function publicChangeRequest(item) {
@@ -528,9 +549,43 @@ async function createRelationTx(transaction, familyId, type, firstId, secondId, 
   return relation;
 }
 
-async function createRelatedTx(transaction, familyId, anchorPersonId, relationType, personInput, openid) {
+async function getSharedChildrenTx(transaction, familyId, anchorPersonId, childIds) {
+  const children = [];
+  for (const childId of cleanPersonIds(childIds, 30)) {
+    const relation = await maybeGet(transaction, 'relations', relationId(familyId, 'parent_child', anchorPersonId, childId));
+    assert(relation && relation.status === 'active', 'INVALID_SHARED_CHILD', '所选成员不是中心成员的子女');
+    const child = await mustGet(transaction, 'persons', childId, 'PERSON_NOT_FOUND', '所选子女不存在');
+    assert(child.familyId === familyId && child.status === 'active', 'CROSS_FAMILY_RELATION', '所选子女不属于当前家谱');
+    children.push(child);
+  }
+  return children;
+}
+
+function existingRelationDefinition(anchorPersonId, relatedPersonId, relationType) {
+  const definition = domain.relationDefinition(anchorPersonId, relatedPersonId, relationType);
+  if (!definition) throw new BusinessError('INVALID_RELATION', '请选择与中心成员的关系');
+  return definition;
+}
+
+function expectedRelationGender(relationType) {
+  return relationType === 'father' || relationType === 'son'
+    ? 'male'
+    : relationType === 'mother' || relationType === 'daughter'
+      ? 'female'
+      : '';
+}
+
+function assertRelationGender(person, relationType) {
+  const expected = expectedRelationGender(relationType);
+  assert(!expected || person.gender === 'unknown' || person.gender === expected, 'RELATION_GENDER_CONFLICT', '所选成员的性别与关系称谓不一致');
+}
+
+async function createRelatedTx(transaction, familyId, anchorPersonId, relationType, personInput, openid, options) {
   const anchor = await mustGet(transaction, 'persons', anchorPersonId, 'PERSON_NOT_FOUND', '中心成员不存在');
   assert(anchor.familyId === familyId && anchor.status === 'active', 'CROSS_FAMILY_RELATION', '中心成员不属于当前家谱');
+  const sharedChildren = relationType === 'spouse'
+    ? await getSharedChildrenTx(transaction, familyId, anchorPersonId, options && options.sharedChildIds)
+    : [];
   const prepared = Object.assign({}, personInput || {});
   if (relationType === 'father' || relationType === 'son') prepared.gender = 'male';
   if (relationType === 'mother' || relationType === 'daughter') prepared.gender = 'female';
@@ -547,7 +602,51 @@ async function createRelatedTx(transaction, familyId, anchorPersonId, relationTy
   } else {
     throw new BusinessError('INVALID_RELATION', '请选择与中心成员的关系');
   }
+  for (const child of sharedChildren) {
+    const childPeople = Object.assign({}, personsById);
+    childPeople[child._id] = child;
+    await createRelationTx(transaction, familyId, 'parent_child', person._id, child._id, openid, { personsById: childPeople });
+  }
   return person;
+}
+
+async function linkExistingTx(transaction, familyId, anchorPersonId, relatedPersonId, relationType, sharedChildIds, openid, relations) {
+  const anchor = await mustGet(transaction, 'persons', anchorPersonId, 'PERSON_NOT_FOUND', '中心成员不存在');
+  const related = await mustGet(transaction, 'persons', relatedPersonId, 'PERSON_NOT_FOUND', '所选成员不存在');
+  assert(anchor.familyId === familyId && related.familyId === familyId, 'CROSS_FAMILY_RELATION', '不能关联其他家谱的成员');
+  assert(anchor.status === 'active' && related.status === 'active', 'PERSON_NOT_FOUND', '关系中的成员已删除');
+  assertRelationGender(related, relationType);
+  const expectedGender = expectedRelationGender(relationType);
+  const definition = existingRelationDefinition(anchorPersonId, relatedPersonId, relationType);
+  const peopleById = {};
+  peopleById[anchor._id] = anchor;
+  peopleById[related._id] = related;
+  await createRelationTx(transaction, familyId, definition.type, definition.fromId, definition.toId, openid, {
+    personsById: peopleById,
+    relations: relations
+  });
+  let createdCount = 1;
+  if (relationType === 'spouse') {
+    const sharedChildren = await getSharedChildrenTx(transaction, familyId, anchorPersonId, sharedChildIds);
+    for (const child of sharedChildren) {
+      const existing = await maybeGet(transaction, 'relations', relationId(familyId, 'parent_child', relatedPersonId, child._id));
+      if (existing && existing.status === 'active') continue;
+      const childPeople = Object.assign({}, peopleById);
+      childPeople[child._id] = child;
+      await createRelationTx(transaction, familyId, 'parent_child', relatedPersonId, child._id, openid, {
+        personsById: childPeople,
+        relations: relations
+      });
+      createdCount += 1;
+    }
+  }
+  if (expectedGender && related.gender === 'unknown') {
+    await transaction.collection('persons').doc(related._id).update({
+      data: { gender: expectedGender, updatedAt: db.serverDate() }
+    });
+    related.gender = expectedGender;
+  }
+  return { person: related, relationCount: createdCount };
 }
 
 async function authLogin() {
@@ -566,10 +665,13 @@ async function authLogin() {
 
 async function authUpdateProfile(event) {
   const openid = getOpenid();
-  await requireActiveUser(openid);
+  const existingUser = await requireActiveUser(openid);
   const nickName = cleanText(event.nickName, 30);
-  const avatarAssetId = cleanText(event.avatarAssetId || event.avatarUrl, 80);
-  await requireOwnedMedia(avatarAssetId, openid, '', 'user_avatar');
+  const hasAvatarUpdate = event.avatarAssetId !== undefined || event.avatarUrl !== undefined;
+  const avatarAssetId = hasAvatarUpdate
+    ? cleanText(event.avatarAssetId || event.avatarUrl, 80)
+    : existingUser.avatarAssetId || '';
+  if (hasAvatarUpdate) await requireOwnedMedia(avatarAssetId, openid, '', 'user_avatar');
   await moderateText(openid, [nickName]);
   return mutate('auth.updateProfile', event, openid, async function (transaction) {
     const user = await ensureUser(openid, transaction);
@@ -590,6 +692,32 @@ async function authUpdateProfile(event) {
       }
     });
     return { user: publicAccount(Object.assign({}, user, update)) };
+  });
+}
+
+async function authUpdateAvatar(event) {
+  const openid = getOpenid();
+  await requireActiveUser(openid);
+  const avatarAssetId = cleanText(event.avatarAssetId, 80);
+  assert(avatarAssetId, 'AVATAR_REQUIRED', '请选择需要保存的头像');
+  const asset = await requireOwnedMedia(avatarAssetId, openid, '', 'user_avatar');
+  return mutate('auth.updateAvatar', event, openid, async function (transaction) {
+    const user = await ensureUser(openid, transaction);
+    const update = { avatarAssetId: avatarAssetId, updatedAt: db.serverDate() };
+    await transaction.collection('users').doc(user._id).update({ data: update });
+    await transaction.collection('profile_sync_tasks').doc('profile_' + user._id).set({
+      data: {
+        userId: user._id,
+        displayName: user.nickName || '家人',
+        avatarAssetId: avatarAssetId,
+        status: 'pending',
+        updatedAt: db.serverDate()
+      }
+    });
+    return {
+      user: publicAccount(Object.assign({}, user, update)),
+      moderationStatus: asset.moderationStatus || 'pending'
+    };
   });
 }
 
@@ -918,7 +1046,8 @@ async function graphGet(event) {
       gender: person.gender,
       lifeStatus: person.lifeStatus,
       birthDate: person.birthDate || '',
-      avatarAssetId: person.avatarAssetId || ''
+      avatarAssetId: person.avatarAssetId || '',
+      profileMissingFields: profileMissingFields(person)
     };
   });
   return {
@@ -1139,7 +1268,8 @@ async function personCreateRelated(event) {
       familyId: event.familyId,
       anchorPersonId: cleanText(event.anchorPersonId, 80),
       relationType: cleanText(event.relationType, 20),
-      person: person
+      person: person,
+      sharedChildIds: cleanPersonIds(event.sharedChildIds, 30)
     };
     if (access.membership.role === 'member') {
       const result = await transaction.collection('change_requests').add({
@@ -1157,11 +1287,19 @@ async function personCreateRelated(event) {
       });
       return { pending: true, requestId: result._id };
     }
-    const created = await createRelatedTx(transaction, event.familyId, payload.anchorPersonId, payload.relationType, person, openid);
+    const created = await createRelatedTx(
+      transaction,
+      event.familyId,
+      payload.anchorPersonId,
+      payload.relationType,
+      person,
+      openid,
+      { sharedChildIds: payload.sharedChildIds }
+    );
     await transaction.collection('families').doc(event.familyId).update({
       data: {
         personCount: _.inc(1),
-        relationCount: _.inc(1),
+        relationCount: _.inc(1 + (payload.relationType === 'spouse' ? payload.sharedChildIds.length : 0)),
         relationRevision: _.inc(1),
         updatedAt: db.serverDate()
       }
@@ -1177,6 +1315,133 @@ async function personCreateRelated(event) {
       requestId: event.requestId
     });
     return { pending: false, person: created };
+  });
+}
+
+function relationTypeLabel(relationType) {
+  return {
+    father: '父亲',
+    mother: '母亲',
+    spouse: '伴侣',
+    son: '儿子',
+    daughter: '女儿'
+  }[relationType] || '亲属';
+}
+
+async function relationLinkExisting(event) {
+  const openid = getOpenid();
+  await requireActiveUser(openid);
+  const familyId = cleanText(event.familyId, 80);
+  const anchorPersonId = cleanText(event.anchorPersonId, 80);
+  const relatedPersonId = cleanText(event.relatedPersonId, 80);
+  const relationType = cleanText(event.relationType, 20);
+  const sharedChildIds = cleanPersonIds(event.sharedChildIds, 30);
+  existingRelationDefinition(anchorPersonId, relatedPersonId, relationType);
+  const snapshotAccess = await requireMembership(familyId, ['admin', 'member'], db, openid);
+  const relations = await listAll('relations', { familyId: familyId, status: 'active' }, GRAPH_RELATION_LIMIT);
+  const relationRevision = Number(snapshotAccess.family.relationRevision || 0);
+  return mutate('relation.linkExisting', event, openid, async function (transaction) {
+    const access = await requireMembership(familyId, ['admin', 'member'], transaction, openid);
+    if (access.membership.role === 'member') {
+      const anchor = await mustGet(transaction, 'persons', anchorPersonId, 'PERSON_NOT_FOUND', '中心成员不存在');
+      const related = await mustGet(transaction, 'persons', relatedPersonId, 'PERSON_NOT_FOUND', '所选成员不存在');
+      assert(anchor.familyId === familyId && related.familyId === familyId, 'CROSS_FAMILY_RELATION', '不能关联其他家谱的成员');
+      assertRelationGender(related, relationType);
+      const result = await transaction.collection('change_requests').add({
+        data: {
+          familyId: familyId,
+          type: 'link_existing_relation',
+          title: '将“' + related.name + '”关联为“' + anchor.name + '”的' + relationTypeLabel(relationType),
+          payload: {
+            anchorPersonId: anchorPersonId,
+            relatedPersonId: relatedPersonId,
+            relationType: relationType,
+            sharedChildIds: sharedChildIds
+          },
+          status: 'pending',
+          createdBy: userId(openid),
+          requesterName: access.membership.displayName || '家人',
+          createdAt: db.serverDate(),
+          updatedAt: db.serverDate()
+        }
+      });
+      return { pending: true, requestId: result._id, person: publicPerson(related) };
+    }
+    assert(Number(access.family.relationRevision || 0) === relationRevision, 'GRAPH_CHANGED', '家谱关系刚刚发生变化，请重试');
+    const linked = await linkExistingTx(
+      transaction,
+      familyId,
+      anchorPersonId,
+      relatedPersonId,
+      relationType,
+      sharedChildIds,
+      openid,
+      relations
+    );
+    await transaction.collection('families').doc(familyId).update({
+      data: {
+        relationCount: _.inc(linked.relationCount),
+        relationRevision: _.inc(1),
+        updatedAt: db.serverDate()
+      }
+    });
+    await audit(transaction, {
+      familyId: familyId,
+      openid: openid,
+      actorName: access.membership.displayName,
+      action: 'relation.link_existing',
+      objectType: 'person',
+      objectId: linked.person._id,
+      summary: '关联已有家庭成员',
+      requestId: event.requestId
+    });
+    return { pending: false, person: publicPerson(linked.person), relationCount: linked.relationCount };
+  });
+}
+
+async function relationRemove(event) {
+  const openid = getOpenid();
+  await requireActiveUser(openid);
+  const relationIdValue = cleanText(event.relationId, 80);
+  assert(relationIdValue, 'RELATION_NOT_FOUND', '关系不存在或已被移除');
+  const snapshotRelation = await mustGet(db, 'relations', relationIdValue, 'RELATION_NOT_FOUND', '关系不存在或已被移除');
+  const snapshotAccess = await requireMembership(snapshotRelation.familyId, ['admin'], db, openid);
+  const relations = await listAll('relations', { familyId: snapshotRelation.familyId, status: 'active' }, GRAPH_RELATION_LIMIT);
+  const relationRevision = Number(snapshotAccess.family.relationRevision || 0);
+  const canRemove = domain.hasAlternateConnection(
+    snapshotRelation.fromPersonId,
+    snapshotRelation.toPersonId,
+    snapshotRelation._id,
+    relations
+  );
+  return mutate('relation.remove', event, openid, async function (transaction) {
+    const relation = await mustGet(transaction, 'relations', relationIdValue, 'RELATION_NOT_FOUND', '关系不存在或已被移除');
+    const access = await requireMembership(relation.familyId, ['admin'], transaction, openid);
+    assert(relation.status === 'active', 'RELATION_NOT_FOUND', '关系不存在或已被移除');
+    assert(relation.familyId === snapshotRelation.familyId, 'CROSS_FAMILY_RELATION', '关系不属于当前家谱');
+    assert(Number(access.family.relationRevision || 0) === relationRevision, 'GRAPH_CHANGED', '家谱关系刚刚发生变化，请重试');
+    assert(canRemove, 'RELATION_DISCONNECTS_GRAPH', '移除后会使家谱关系断开，请先建立正确关系，再移除当前关系');
+    await transaction.collection('relations').doc(relation._id).update({
+      data: { status: 'deleted', deletedAt: db.serverDate(), updatedAt: db.serverDate() }
+    });
+    await transaction.collection('families').doc(relation.familyId).update({
+      data: {
+        relationCount: _.inc(-1),
+        relationRevision: _.inc(1),
+        updatedAt: db.serverDate()
+      }
+    });
+    await audit(transaction, {
+      familyId: relation.familyId,
+      openid: openid,
+      actorName: access.membership.displayName,
+      action: 'relation.remove',
+      objectType: 'relation',
+      objectId: relation._id,
+      summary: '移除家庭成员关系',
+      requestId: event.requestId
+    });
+    return { removed: true, relationId: relation._id };
   });
 }
 
@@ -1287,8 +1552,18 @@ async function changeList(event) {
 async function changeReview(event) {
   const openid = getOpenid();
   await requireActiveUser(openid);
+  const changeRequestId = event.requestIdValue || event.changeRequestId;
+  const snapshotRequest = await mustGet(db, 'change_requests', changeRequestId, 'REQUEST_NOT_FOUND', '修改申请不存在');
+  const snapshotAccess = await requireMembership(snapshotRequest.familyId, ['admin'], db, openid);
+  let graphSnapshot = null;
+  if (event.decision === 'approve' && snapshotRequest.type === 'link_existing_relation') {
+    graphSnapshot = {
+      relationRevision: Number(snapshotAccess.family.relationRevision || 0),
+      relations: await listAll('relations', { familyId: snapshotRequest.familyId, status: 'active' }, GRAPH_RELATION_LIMIT)
+    };
+  }
   return mutate('change.review', event, openid, async function (transaction) {
-    const request = await mustGet(transaction, 'change_requests', event.requestIdValue || event.changeRequestId, 'REQUEST_NOT_FOUND', '修改申请不存在');
+    const request = await mustGet(transaction, 'change_requests', changeRequestId, 'REQUEST_NOT_FOUND', '修改申请不存在');
     const access = await requireMembership(request.familyId, ['admin'], transaction, openid);
     assert(request.status === 'pending', 'REQUEST_REVIEWED', '这条申请已经处理');
     const approved = event.decision === 'approve';
@@ -1301,12 +1576,38 @@ async function changeReview(event) {
         request.payload.anchorPersonId,
         request.payload.relationType,
         request.payload.person,
-        openid
+        openid,
+        { sharedChildIds: cleanPersonIds(request.payload.sharedChildIds, 30) }
       );
+      const sharedChildCount = request.payload.relationType === 'spouse'
+        ? cleanPersonIds(request.payload.sharedChildIds, 30).length
+        : 0;
       await transaction.collection('families').doc(request.familyId).update({
         data: {
           personCount: _.inc(1),
-          relationCount: _.inc(1),
+          relationCount: _.inc(1 + sharedChildCount),
+          relationRevision: _.inc(1),
+          updatedAt: db.serverDate()
+        }
+      });
+    }
+    if (approved && request.type === 'link_existing_relation') {
+      assert(graphSnapshot, 'GRAPH_CHANGED', '家谱关系刚刚发生变化，请重试');
+      assert(Number(access.family.relationRevision || 0) === graphSnapshot.relationRevision, 'GRAPH_CHANGED', '家谱关系刚刚发生变化，请重试');
+      const linked = await linkExistingTx(
+        transaction,
+        request.familyId,
+        request.payload.anchorPersonId,
+        request.payload.relatedPersonId,
+        request.payload.relationType,
+        cleanPersonIds(request.payload.sharedChildIds, 30),
+        openid,
+        graphSnapshot.relations
+      );
+      createdPerson = linked.person;
+      await transaction.collection('families').doc(request.familyId).update({
+        data: {
+          relationCount: _.inc(linked.relationCount),
           relationRevision: _.inc(1),
           updatedAt: db.serverDate()
         }
@@ -1756,9 +2057,31 @@ async function mediaGetUrls(event) {
   return { urls: urls };
 }
 
+async function mediaGetStates(event) {
+  const openid = getOpenid();
+  await requireActiveUser(openid);
+  const ids = Array.from(new Set((event.assetIds || []).map(function (id) {
+    return cleanText(id, 80);
+  }).filter(Boolean))).slice(0, 50);
+  if (!ids.length) return { states: {} };
+  const result = await db.collection('media_assets').where({ _id: _.in(ids) }).get();
+  const states = {};
+  for (const asset of result.data || []) {
+    let accessible = false;
+    if (!asset.familyId) accessible = asset.ownerId === userId(openid);
+    else accessible = Boolean(await getMembership(db, asset.familyId, openid));
+    if (!accessible) continue;
+    states[asset._id] = asset.status === 'deleted'
+      ? 'deleted'
+      : asset.moderationStatus || 'pending';
+  }
+  return { states: states };
+}
+
 const handlers = {
   'auth.login': authLogin,
   'auth.updateProfile': authUpdateProfile,
+  'auth.updateAvatar': authUpdateAvatar,
   'account.export': accountExport,
   'account.requestDeletion': accountRequestDeletion,
   'account.cancelDeletion': accountCancelDeletion,
@@ -1776,6 +2099,8 @@ const handlers = {
   'membership.leave': membershipLeave,
   'person.get': personGet,
   'person.createRelated': personCreateRelated,
+  'relation.linkExisting': relationLinkExisting,
+  'relation.remove': relationRemove,
   'person.update': personUpdate,
   'person.delete': personDelete,
   'change.list': changeList,
@@ -1789,7 +2114,8 @@ const handlers = {
   'report.listMine': reportListMine,
   'media.prepare': mediaPrepare,
   'media.complete': mediaComplete,
-  'media.getUrls': mediaGetUrls
+  'media.getUrls': mediaGetUrls,
+  'media.getStates': mediaGetStates
 };
 
 exports.main = async function (event) {

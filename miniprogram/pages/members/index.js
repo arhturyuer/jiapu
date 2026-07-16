@@ -74,8 +74,24 @@ Page({
     wx.navigateTo({ url: '/pages/create-family/index' });
   },
 
+  openPersonList: function () {
+    if (!this.data.currentFamily) return;
+    wx.navigateTo({ url: '/pages/person-list/index?familyId=' + this.data.currentFamily._id });
+  },
+
   openGraph: function () {
+    app.openFullGraph(this.data.currentFamily);
     wx.switchTab({ url: '/pages/tree/index' });
+  },
+
+  openCollaborators: function () {
+    if (!this.data.currentFamily) return;
+    wx.navigateTo({ url: '/pages/family-manage/index?familyId=' + this.data.currentFamily._id + '&section=collaborators' });
+  },
+
+  openPendingChanges: function () {
+    if (!this.data.currentFamily) return;
+    wx.navigateTo({ url: '/pages/change-list/index?familyId=' + this.data.currentFamily._id });
   },
 
   openFamilyManage: function () {
