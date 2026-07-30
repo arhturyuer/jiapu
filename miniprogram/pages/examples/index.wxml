@@ -1,0 +1,9 @@
+<view class="loading-panel" wx:if="{{loading}}"><view class="loading-dot"></view><text>正在准备示例家谱…</text></view>
+<view class="page-shell" wx:elif="{{error}}"><view class="empty-panel"><view class="empty-mark">!</view><text class="empty-title">示例暂时不可用</text><text class="empty-description">{{error}}</text><button class="secondary-button empty-action" bindtap="loadExamples">重新加载</button><button class="primary-button empty-action" bindtap="createFamily">创建我的家谱</button></view></view>
+<view class="examples-page page-shell" wx:else>
+  <view class="hero"><text class="eyebrow">官方虚构示例</text><text class="page-title">先看看，一张家谱怎样连接一家人</text><text class="page-description">随意浏览、缩放和切换视角；示例不会写入任何个人信息。</text></view>
+  <scroll-view class="tag-scroll" scroll-x wx:if="{{tags.length}}"><view class="tag-row"><view class="tag {{activeTag === '' ? 'active' : ''}}" data-tag="" bindtap="chooseTag">全部</view><view class="tag {{activeTag === item ? 'active' : ''}}" wx:for="{{tags}}" wx:key="*this" data-tag="{{item}}" bindtap="chooseTag">{{item}}</view></view></scroll-view>
+  <view class="example-list" wx:if="{{examples.length}}"><view class="example-card surface-card" wx:for="{{examples}}" wx:key="_id" data-slug="{{item.slug}}" bindtap="openExample"><view class="cover"><text>{{item.initial}}</text></view><view class="card-copy"><text class="card-title">{{item.title}}</text><text class="card-desc">{{item.description || '官方虚构示例，体验家谱查看方式'}}</text><view class="meta"><text>{{item.personCount}} 位人物</text><text>{{item.relationCount}} 条关系</text></view><view class="card-tags"><text wx:for="{{item.tags}}" wx:key="*this">{{item}}</text></view></view><text class="arrow">›</text></view></view>
+  <view class="empty-examples surface-card" wx:else><text>示例准备中</text><text>你可以先从自己的家人开始创建。</text></view>
+  <button class="primary-button create-button" bindtap="createFamily">创建我的家谱</button>
+</view>

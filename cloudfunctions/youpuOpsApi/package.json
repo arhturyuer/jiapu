@@ -1,6 +1,6 @@
 {
   "name": "youpu-ops-api",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "有谱运营后台 API",
   "main": "index.js",

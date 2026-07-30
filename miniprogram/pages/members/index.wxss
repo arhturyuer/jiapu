@@ -13,6 +13,9 @@
 .progress-value { height: 100%; background: #245C4A; border-radius: 12rpx; }
 .progress-text { margin-top: 12rpx; display: block; color: #65706A; font-size: 24rpx; }
 .stats-grid { margin-top: 20rpx; display: grid; grid-template-columns: 1fr 1fr; gap: 16rpx; }
+.onboarding-card { margin-top: 20rpx; padding: 28rpx; }
+.onboarding-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:20rpx; }.onboarding-title { display:block; font-size:32rpx; font-weight:650; }.onboarding-copy { display:block; margin-top:6rpx; color:#65706A; font-size:24rpx; }.onboarding-progress { color:#245C4A; font-size:28rpx; font-weight:650; }
+.onboarding-row { min-height:96rpx; padding:18rpx 0; display:flex; align-items:center; gap:16rpx; border-bottom:2rpx solid #EEF0ED; }.onboarding-row > text { width:42rpx; height:42rpx; display:flex; align-items:center; justify-content:center; color:#65706A; background:#EEF0ED; border-radius:50%; font-size:23rpx; font-weight:650; }.onboarding-row.done > text { color:#FFFFFF; background:#245C4A; }.onboarding-row view { flex:1; display:flex; flex-direction:column; gap:4rpx; }.onboarding-row view text:first-child { font-size:27rpx; font-weight:600; }.onboarding-row view text:last-child { color:#65706A; font-size:22rpx; }.mini-action { min-height:60rpx; padding:0 16rpx; border-radius:16rpx; font-size:23rpx; white-space:nowrap; }.onboarding-wait { padding-top:20rpx; display:flex; align-items:center; justify-content:space-between; color:#65706A; font-size:24rpx; }.onboarding-wait button { padding:0; color:#245C4A; background:transparent; border:0; font-size:24rpx; font-weight:650; }
 .stat-card { min-height: 144rpx; padding: 24rpx; display: flex; flex-direction: column; justify-content: center; transition: background 120ms ease, transform 120ms ease; }
 .stat-card-active { background: #F1F6F3; transform: scale(0.985); }
 .stat-value { color: #245C4A; font-size: 44rpx; font-weight: 600; }

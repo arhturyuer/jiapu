@@ -11,11 +11,12 @@
   },
   "dependencies": {
     "@cloudbase/js-sdk": "3.6.2",
-    "vue": "3.5.39"
+    "vue": "3.5.39",
+    "xlsx": "0.18.5"
   },
   "devDependencies": {
-    "@vitejs/plugin-vue": "6.0.7",
     "@types/node": "20.19.43",
+    "@vitejs/plugin-vue": "6.0.7",
     "typescript": "5.9.3",
     "vite": "8.1.4",
     "vue-tsc": "3.3.7"

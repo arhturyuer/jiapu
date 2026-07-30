@@ -23,7 +23,8 @@
     <text class="empty-title">从一个人开始</text>
     <text class="empty-description">几分钟建立第一张家谱，再邀请家人一起补完整。</text>
     <button class="primary-button empty-action" bindtap="openCreateFamily">创建家谱</button>
-    <button class="secondary-button empty-action" bindtap="showAcceptInviteHelp">接受家人邀请</button>
+    <button class="secondary-button empty-action" bindtap="openExamples">浏览示例家谱</button>
+    <text class="invite-help" bindtap="showAcceptInviteHelp">收到家人邀请？请从家庭群中打开邀请卡片</text>
   </view>
 
   <block wx:else>
@@ -118,7 +119,7 @@
   <view class="sheet-mask" wx:if="{{showFamilySheet}}" bindtap="closeFamilySheet">
     <view class="bottom-sheet" catchtap="stopEvent">
       <view class="sheet-handle"></view>
-      <view class="sheet-title">选择家谱</view>
+      <view class="family-sheet-heading"><view class="sheet-title">选择家谱</view><text class="examples-entry" bindtap="openExamples">示例家谱</text></view>
       <view class="family-option {{item._id === currentFamily._id ? 'selected' : ''}}" wx:for="{{familyList}}" wx:key="_id" data-id="{{item._id}}" bindtap="switchFamily">
         <view>
           <text class="family-option-name">{{item.name}}</text>

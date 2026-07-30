@@ -131,6 +131,18 @@ Page({
         });
         app.setCurrentFamily(data.family);
         self.renderGraph(mode, personId);
+        const tourKey = 'youpu_new_family_tour_' + data.family._id;
+        if (wx.getStorageSync(tourKey)) {
+          wx.removeStorageSync(tourKey);
+          setTimeout(function () {
+            wx.showModal({
+              title: '这是你的第一张家谱',
+              content: '拖动和缩放查看关系；点击一位家人可以查看资料、添加亲属。完成后到“家庭”页邀请家人一起补全。',
+              confirmText: '开始看看',
+              showCancel: false
+            });
+          }, 280);
+        }
         const familyId = data.family._id;
         return api.getMediaUrls(persons.map(function (person) { return person.avatarAssetId; })).then(function (urls) {
           if (!self.data.currentFamily || self.data.currentFamily._id !== familyId) return data;
@@ -326,6 +338,11 @@ Page({
 
   openCreateFamily: function () {
     wx.navigateTo({ url: '/pages/create-family/index' });
+  },
+
+  openExamples: function () {
+    this.setData({ showFamilySheet: false });
+    wx.navigateTo({ url: '/pages/examples/index' });
   },
 
   showAcceptInviteHelp: function () {
@@ -597,7 +614,8 @@ Page({
         shareCreating: false,
         shareCard: {
           title: title,
-          path: '/pages/invite/index?token=' + data.token
+          path: '/pages/invite/index?token=' + data.token,
+          invitationId: data.invitationId
         }
       });
     }).catch(function (error) {
@@ -608,7 +626,17 @@ Page({
 
   onShareAppMessage: function () {
     const card = this.data.shareCard;
-    if (card) return { title: card.title, path: card.path };
+    const self = this;
+    if (card) return {
+      title: card.title,
+      path: card.path,
+      success: function () {
+        api.call('family.markOnboardingShared', {
+          familyId: self.data.currentFamily._id,
+          invitationId: card.invitationId
+        }).catch(function () {});
+      }
+    };
     const family = this.data.currentFamily;
     return {
       title: family ? family.name + '｜有谱' : '有谱｜一家人，共修一份家谱',

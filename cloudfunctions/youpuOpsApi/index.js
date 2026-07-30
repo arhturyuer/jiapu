@@ -20,6 +20,146 @@ function cleanText(value, length) {
   return String(value || '').replace(/[\u0000-\u001F]/g, '').trim().slice(0, length || 200);
 }
 
+function cleanExampleSlug(value) {
+  return cleanText(value, 80).toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+}
+
+function cleanExampleDate(value) {
+  const text = cleanText(value, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(text) && !Number.isNaN(Date.parse(text + 'T00:00:00Z')) ? text : '';
+}
+
+function generatedExampleId(kind, used) {
+  let id = '';
+  do {
+    id = 'example_' + kind + '_' + crypto.randomBytes(12).toString('hex');
+  } while (used.has(id));
+  used.add(id);
+  return id;
+}
+
+function normalizeExampleContent(input, existingContent) {
+  const source = input || {};
+  const family = source.family || {};
+  const previous = existingContent || {};
+  const previousPersons = Array.isArray(previous.persons) ? previous.persons : [];
+  const previousRelations = Array.isArray(previous.relations) ? previous.relations : [];
+  const existingPeopleById = {};
+  const existingPeopleByName = {};
+  const existingNameCounts = {};
+  previousPersons.forEach(function (person) {
+    const id = cleanText(person && person._id, 80);
+    const name = cleanText(person && person.name, 30);
+    if (id) existingPeopleById[id] = person;
+    if (name) existingNameCounts[name] = (existingNameCounts[name] || 0) + 1;
+  });
+  previousPersons.forEach(function (person) {
+    const name = cleanText(person && person.name, 30);
+    if (name && existingNameCounts[name] === 1) existingPeopleByName[name] = person;
+  });
+  const usedPersonIds = new Set(Object.keys(existingPeopleById));
+  const submittedNameById = {};
+  const peopleByName = {};
+  const seenNames = new Set();
+  const claimedExistingPersonIds = new Set();
+  const persons = (Array.isArray(source.persons) ? source.persons : []).slice(0, 50).map(function (item) {
+    const person = item || {};
+    const name = cleanText(person.name, 30);
+    const submittedId = cleanText(person._id, 80);
+    assert(name, 'EXAMPLE_PERSON_NAME_REQUIRED', '每位示例人物都需要姓名');
+    assert(!seenNames.has(name), 'EXAMPLE_PERSON_NAME_DUPLICATE', '示例人物姓名不能重复，请修改后再保存');
+    seenNames.add(name);
+    if (submittedId) submittedNameById[submittedId] = name;
+    const existing = existingPeopleById[submittedId] || existingPeopleByName[name];
+    assert(!existing || !claimedExistingPersonIds.has(existing._id), 'EXAMPLE_PERSON_DUPLICATE', '示例人物标识不能重复');
+    if (existing) claimedExistingPersonIds.add(existing._id);
+    const id = existing && existing._id ? existing._id : generatedExampleId('person', usedPersonIds);
+    const normalized = {
+      _id: id,
+      name: name,
+      gender: ['male', 'female', 'unknown'].includes(person.gender) ? person.gender : 'unknown',
+      lifeStatus: ['living', 'deceased', 'unknown'].includes(person.lifeStatus) ? person.lifeStatus : 'unknown',
+      birthDate: cleanExampleDate(person.birthDate),
+      deathDate: cleanExampleDate(person.deathDate),
+      birthPlace: cleanText(person.birthPlace, 80),
+      bio: cleanText(person.bio, 500),
+      avatarAssetId: '',
+      photoAssetIds: []
+    };
+    peopleByName[name] = normalized;
+    return normalized;
+  });
+  assert(persons.length >= 3, 'EXAMPLE_MIN_PERSONS', '示例家谱至少需要 3 位人物');
+  const previousNameById = {};
+  previousPersons.forEach(function (person) { previousNameById[person._id] = cleanText(person.name, 30); });
+  const existingRelationsById = {};
+  const existingRelationsByKey = {};
+  previousRelations.forEach(function (relation) {
+    const fromName = previousNameById[relation.fromPersonId];
+    const toName = previousNameById[relation.toPersonId];
+    if (!fromName || !toName) return;
+    const pair = relation.type === 'spouse' && fromName > toName ? [toName, fromName] : [fromName, toName];
+    const key = relation.type + ':' + pair.join(':');
+    existingRelationsById[relation._id] = relation;
+    existingRelationsByKey[key] = relation;
+  });
+  const usedRelationIds = new Set(Object.keys(existingRelationsById));
+  const seenRelations = new Set();
+  const claimedExistingRelationIds = new Set();
+  const relations = (Array.isArray(source.relations) ? source.relations : []).slice(0, 100).map(function (item) {
+    const relation = item || {};
+    const type = relation.type === 'spouse' ? 'spouse' : relation.type === 'parent_child' ? 'parent_child' : '';
+    const fromName = cleanText(relation.fromPersonName || submittedNameById[cleanText(relation.fromPersonId, 80)], 30);
+    const toName = cleanText(relation.toPersonName || submittedNameById[cleanText(relation.toPersonId, 80)], 30);
+    assert(type && fromName && toName && fromName !== toName, 'EXAMPLE_INVALID_RELATION', '示例关系信息不完整');
+    assert(peopleByName[fromName] && peopleByName[toName], 'EXAMPLE_RELATION_PERSON_NOT_FOUND', '示例关系中的人物姓名必须与人物表完全一致');
+    const namePair = type === 'spouse' && fromName > toName ? [toName, fromName] : [fromName, toName];
+    const key = type + ':' + namePair.join(':');
+    assert(!seenRelations.has(key), 'EXAMPLE_RELATION_DUPLICATE', '示例关系不能重复');
+    seenRelations.add(key);
+    const fromPersonId = peopleByName[namePair[0]]._id;
+    const toPersonId = peopleByName[namePair[1]]._id;
+    const submittedId = cleanText(relation._id, 80);
+    const submittedExisting = existingRelationsById[submittedId];
+    const sameEndpoints = submittedExisting && submittedExisting.type === type && (
+      type === 'spouse'
+        ? [submittedExisting.fromPersonId, submittedExisting.toPersonId].sort().join(':') === [fromPersonId, toPersonId].sort().join(':')
+        : submittedExisting.fromPersonId === fromPersonId && submittedExisting.toPersonId === toPersonId
+    );
+    const existing = sameEndpoints ? submittedExisting : existingRelationsByKey[key];
+    assert(!existing || !claimedExistingRelationIds.has(existing._id), 'EXAMPLE_RELATION_DUPLICATE', '示例关系不能重复');
+    if (existing) claimedExistingRelationIds.add(existing._id);
+    const id = existing && existing._id ? existing._id : generatedExampleId('relation', usedRelationIds);
+    return { _id: id, type: type, fromPersonId: fromPersonId, toPersonId: toPersonId };
+  });
+  assert(relations.length >= 2, 'EXAMPLE_MIN_RELATIONS', '示例家谱至少需要 2 条关系');
+  const childrenByParent = {};
+  relations.filter(function (relation) { return relation.type === 'parent_child'; }).forEach(function (relation) {
+    if (!childrenByParent[relation.fromPersonId]) childrenByParent[relation.fromPersonId] = [];
+    childrenByParent[relation.fromPersonId].push(relation.toPersonId);
+  });
+  function reaches(start, target, visited) {
+    if (start === target) return true;
+    if (visited[start]) return false;
+    visited[start] = true;
+    return (childrenByParent[start] || []).some(function (child) { return reaches(child, target, visited); });
+  }
+  relations.filter(function (relation) { return relation.type === 'parent_child'; }).forEach(function (relation) {
+    const children = childrenByParent[relation.fromPersonId] || [];
+    childrenByParent[relation.fromPersonId] = children.filter(function (child) { return child !== relation.toPersonId; });
+    assert(!reaches(relation.toPersonId, relation.fromPersonId, {}), 'EXAMPLE_RELATION_CYCLE', '示例父母子女关系不能形成循环');
+    childrenByParent[relation.fromPersonId].push(relation.toPersonId);
+  });
+  return {
+    family: {
+      name: cleanText(family.name, 40),
+      description: cleanText(family.description, 200)
+    },
+    persons: persons,
+    relations: relations
+  };
+}
+
 function hash(value, length) {
   return crypto.createHash('sha256').update(String(value)).digest('hex').slice(0, length || 24);
 }
@@ -180,6 +320,158 @@ async function page(collectionName, where, event) {
     nextCursor: hasMore && items.length ? items[items.length - 1]._id : '',
     hasMore: hasMore
   };
+}
+
+function isMissingCollectionError(error) {
+  const code = cleanText(error && (error.errCode || error.code), 120).toLowerCase();
+  const message = cleanText(error && (error.errMsg || error.message), 500).toLowerCase();
+  return code.includes('collectionnotexist') || code.includes('collection_not_exist') ||
+    message.includes('collection not exist') || message.includes('collection does not exist') ||
+    message.includes('集合不存在');
+}
+
+function isMissingDocumentError(error) {
+  const code = cleanText(error && (error.errCode || error.code), 120).toLowerCase();
+  const message = cleanText(error && (error.errMsg || error.message), 500).toLowerCase();
+  return code.includes('documentnotexist') || code.includes('document_not_exist') ||
+    message.includes('document not exist') || message.includes('document does not exist') ||
+    message.includes('文档不存在');
+}
+
+function errorDigest(error) {
+  return {
+    code: cleanText(error && (error.errCode || error.code), 120),
+    message: cleanText(error && (error.errMsg || error.message), 300),
+    name: cleanText(error && error.name, 80)
+  };
+}
+
+function exampleStorageError(resource, error) {
+  const digest = errorDigest(error);
+  console.error(JSON.stringify({ type: 'example_storage_error', resource: resource, error: digest }));
+  if (isMissingCollectionError(error)) {
+    return new OpsError(resource === 'versions' ? 'EXAMPLE_VERSION_STORE_UNAVAILABLE' : 'EXAMPLE_TEMPLATE_STORE_UNAVAILABLE',
+      resource === 'versions' ? '示例发布版本暂不可读取，请稍后重试' : '示例草稿库暂不可读取，请稍后重试');
+  }
+  return new OpsError(resource === 'versions' ? 'EXAMPLE_VERSION_READ_FAILED' : 'EXAMPLE_TEMPLATE_READ_FAILED',
+    resource === 'versions' ? '读取示例发布版本失败，请重试' : '读取示例草稿失败，请重试');
+}
+
+async function findExampleDocument(collectionName, id, scope, options) {
+  try {
+    const result = await (scope || db).collection(collectionName).doc(id).get();
+    return result.data || null;
+  } catch (error) {
+    if (isMissingDocumentError(error) || (options && options.allowMissingCollection && isMissingCollectionError(error))) return null;
+    throw exampleStorageError(collectionName === 'example_template_versions' ? 'versions' : 'templates', error);
+  }
+}
+
+async function getExampleTemplate(templateId, scope) {
+  const id = cleanText(templateId, 80);
+  assert(id, 'EXAMPLE_NOT_FOUND', '示例家谱不存在');
+  const template = await findExampleDocument('example_templates', id, scope);
+  assert(template, 'EXAMPLE_NOT_FOUND', '示例家谱不存在');
+  assert(typeof template === 'object' && !Array.isArray(template) && cleanText(template._id, 80), 'EXAMPLE_TEMPLATE_CORRUPT', '示例草稿数据不完整，请联系管理员处理');
+  assert(['draft', 'published', 'archived'].includes(template.status || 'draft'), 'EXAMPLE_TEMPLATE_CORRUPT', '示例草稿状态无效，请联系管理员处理');
+  return template;
+}
+
+async function readExampleVersions(template) {
+  const publishedVersion = Number(template.publishedVersion) || 0;
+  if (publishedVersion <= 0 || template.status === 'draft') return [];
+  try {
+    const versions = await listAll('example_template_versions', { templateId: template._id }, 100);
+    assert(versions.every(function (version) {
+      return version && version.templateId === template._id && Number(version.version) > 0;
+    }), 'EXAMPLE_VERSION_CORRUPT', '示例发布版本数据不完整，请联系管理员处理');
+    return versions;
+  } catch (error) {
+    if (error && error.code) throw error;
+    throw exampleStorageError('versions', error);
+  }
+}
+
+async function writeExampleViewAudit(operator, templateId, requestId) {
+  try {
+    await writeOpsAudit(db, operator, 'ops.example.view', 'example_template', templateId, '运营后台查看', '查看示例家谱', requestId);
+  } catch (error) {
+    console.warn(JSON.stringify({ type: 'example_view_audit_failed', templateId: templateId, requestId: cleanText(requestId, 80), error: errorDigest(error) }));
+  }
+}
+
+async function writeRequiredExampleAudit(scope, operator, action, templateId, reason, summary, requestId) {
+  try {
+    await writeOpsAudit(scope, operator, action, 'example_template', templateId, reason, summary, requestId);
+  } catch (error) {
+    console.error(JSON.stringify({ type: 'example_mutation_audit_failed', templateId: templateId, requestId: cleanText(requestId, 80), action: action, error: errorDigest(error) }));
+    throw new OpsError('EXAMPLE_AUDIT_WRITE_FAILED', '示例操作审计写入失败，操作未完成，请重试');
+  }
+}
+
+async function checkExampleCollection(collectionName, optional) {
+  try {
+    await db.collection(collectionName).limit(1).get();
+    return { state: 'ready' };
+  } catch (error) {
+    if (optional && isMissingCollectionError(error)) return { state: 'not_initialized' };
+    throw exampleStorageError(collectionName === 'example_template_versions' ? 'versions' : 'templates', error);
+  }
+}
+
+const EXAMPLE_COLLECTIONS = ['example_templates', 'example_template_versions'];
+let exampleCollectionsReadyPromise = null;
+
+function isCollectionAlreadyExistsError(error) {
+  const code = cleanText(error && (error.errCode || error.code), 120).toLowerCase();
+  const message = cleanText(error && (error.errMsg || error.message), 500).toLowerCase();
+  return code.includes('alreadyexist') || code.includes('collectionexist') || code.includes('resourceexist') ||
+    message.includes('already exist') || message.includes('collection exists') ||
+    message.includes('table exist') || message.includes('resourceexist') || message.includes('集合已存在');
+}
+
+// A newly enabled environment has no collection until its first use. Collection
+// creation cannot run inside a transaction, so make storage ready before any
+// example write enters opsMutate. This keeps the first publish from failing
+// after the draft itself was created successfully.
+async function ensureExampleCollections() {
+  if (exampleCollectionsReadyPromise) return exampleCollectionsReadyPromise;
+  exampleCollectionsReadyPromise = (async function () {
+    const created = [];
+    for (const collectionName of EXAMPLE_COLLECTIONS) {
+      try {
+        // Existing collections are the normal path. Checking first avoids
+        // treating CloudBase's ResourceExist response as a storage failure on
+        // every save or publish request.
+        await db.collection(collectionName).limit(1).get();
+        continue;
+      } catch (error) {
+        if (!isMissingCollectionError(error)) {
+          throw exampleStorageError(collectionName === 'example_template_versions' ? 'versions' : 'templates', error);
+        }
+      }
+      try {
+        await db.createCollection(collectionName);
+        created.push(collectionName);
+      } catch (error) {
+        // A concurrent first request may have created the collection after our
+        // read but before createCollection. That is a successful outcome.
+        if (!isCollectionAlreadyExistsError(error)) {
+          throw exampleStorageError(collectionName === 'example_template_versions' ? 'versions' : 'templates', error);
+        }
+      }
+    }
+    if (created.length) {
+      console.log(JSON.stringify({ type: 'example_collections_initialized', collections: created }));
+    }
+    return { created: created };
+  })();
+  try {
+    return await exampleCollectionsReadyPromise;
+  } catch (error) {
+    exampleCollectionsReadyPromise = null;
+    throw error;
+  }
 }
 
 async function listAll(collectionName, where, hardLimit) {
@@ -825,6 +1117,256 @@ async function operatorsDisable(event, context) {
   });
 }
 
+function publicExampleTemplate(template) {
+  const content = template.publishedContent || template.draftContent || {};
+  return {
+    _id: template._id,
+    slug: template.slug,
+    title: template.title || (content.family && content.family.name) || '未命名示例',
+    description: template.description || (content.family && content.family.description) || '',
+    tags: template.tags || [],
+    status: template.status || 'draft',
+    sortOrder: Number(template.sortOrder) || 0,
+    personCount: (content.persons || []).length,
+    relationCount: (content.relations || []).length,
+    publishedVersion: Number(template.publishedVersion) || 0,
+    publishedAt: template.publishedAt || null,
+    updatedAt: template.updatedAt || null,
+    createdAt: template.createdAt || null
+  };
+}
+
+function normalizeExampleMetadata(event, fallback) {
+  const source = event || {};
+  const existing = fallback || {};
+  const title = cleanText(source.title === undefined ? existing.title : source.title, 40);
+  const slug = cleanExampleSlug(source.slug === undefined ? existing.slug : source.slug);
+  assert(title, 'EXAMPLE_TITLE_REQUIRED', '请填写示例家谱名称');
+  assert(slug && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug), 'EXAMPLE_SLUG_INVALID', '示例链接标识只能使用小写字母、数字和连字符');
+  return {
+    title: title,
+    slug: slug,
+    description: cleanText(source.description === undefined ? existing.description : source.description, 200),
+    tags: (Array.isArray(source.tags) ? source.tags : (existing.tags || [])).map(function (tag) {
+      return cleanText(tag, 20);
+    }).filter(function (tag, index, values) { return tag && values.indexOf(tag) === index; }).slice(0, 8),
+    sortOrder: Math.max(0, Math.min(9999, Number(source.sortOrder === undefined ? existing.sortOrder : source.sortOrder) || 0)),
+    shareTitle: cleanText(source.shareTitle === undefined ? existing.shareTitle : source.shareTitle, 60),
+    shareDescription: cleanText(source.shareDescription === undefined ? existing.shareDescription : source.shareDescription, 100)
+  };
+}
+
+async function examplesList(event, context) {
+  await requireOperator(context, ['super_admin', 'operator']);
+  const status = cleanText(event.status, 20);
+  const where = status ? { status: status } : {};
+  const pageSize = Math.max(1, Math.min(Number(event.pageSize) || 20, 50));
+  let items;
+  try {
+    // Keep the first-load path deliberately simple. A newly enabled environment
+    // has no example records yet, so it does not need cursor paging or sorting
+    // at the database layer before the in-memory operating order is applied.
+    const result = await db.collection('example_templates').where(where).limit(pageSize).get();
+    items = result.data || [];
+  } catch (error) {
+    // The only valid empty state is a brand-new environment without the
+    // collection. Other database failures must remain visible and traceable.
+    if (!isMissingCollectionError(error)) throw exampleStorageError('templates', error);
+    console.log(JSON.stringify({ type: 'examples_list_empty_store', error: errorDigest(error) }));
+    items = [];
+  }
+  items = items.map(publicExampleTemplate).sort(function (left, right) {
+    return left.sortOrder - right.sortOrder || left.slug.localeCompare(right.slug);
+  });
+  return { items: items, nextCursor: '', hasMore: false };
+}
+
+async function examplesHealth(event, context) {
+  await requireOperator(context, ['super_admin', 'operator']);
+  const templates = await checkExampleCollection('example_templates', true);
+  const versions = await checkExampleCollection('example_template_versions', true);
+  let audits;
+  try {
+    await db.collection('audit_logs').limit(1).get();
+    audits = { state: 'ready' };
+  } catch (error) {
+    console.warn(JSON.stringify({ type: 'example_audit_store_unavailable', error: errorDigest(error) }));
+    audits = { state: 'unavailable' };
+  }
+  return { templates: templates, versions: versions, audits: audits };
+}
+
+async function examplesDetail(event, context) {
+  const operator = await requireOperator(context, ['super_admin', 'operator']);
+  const template = await getExampleTemplate(event.templateId);
+  const versions = await readExampleVersions(template);
+  await writeExampleViewAudit(operator, template._id, event.requestId);
+  return {
+    template: Object.assign(publicExampleTemplate(template), {
+      draftContent: template.draftContent || { family: { name: template.title || '', description: template.description || '' }, persons: [], relations: [] },
+      shareTitle: template.shareTitle || '',
+      shareDescription: template.shareDescription || ''
+    }),
+    versions: versions.sort(function (left, right) { return Number(right.version) - Number(left.version); }).map(function (version) {
+      return { _id: version._id, version: version.version, publishedAt: version.publishedAt || null, publishedByName: version.publishedByName || '' };
+    })
+  };
+}
+
+async function examplesCreate(event, context) {
+  const operator = await requireOperator(context, ['super_admin', 'operator']);
+  await ensureExampleCollections();
+  const meta = normalizeExampleMetadata(event);
+  const id = 'example_' + hash(meta.slug, 32);
+  const content = normalizeExampleContent(event.draftContent || {
+    family: { name: meta.title, description: meta.description },
+    persons: [{ _id: 'person-1', name: '示例人物一' }, { _id: 'person-2', name: '示例人物二' }, { _id: 'person-3', name: '示例人物三' }],
+    relations: [{ _id: 'relation-1', type: 'parent_child', fromPersonId: 'person-1', toPersonId: 'person-2' }, { _id: 'relation-2', type: 'parent_child', fromPersonId: 'person-1', toPersonId: 'person-3' }]
+  });
+  return opsMutate(operator, 'examples.create', event, async function (transaction) {
+    const existing = await findExampleDocument('example_templates', id, transaction, { allowMissingCollection: true });
+    assert(!existing, 'EXAMPLE_SLUG_EXISTS', '该示例链接标识已存在');
+    try {
+      await transaction.collection('example_templates').doc(id).set({
+        data: {
+          slug: meta.slug,
+          title: meta.title,
+          description: meta.description,
+          tags: meta.tags,
+          sortOrder: meta.sortOrder,
+          shareTitle: meta.shareTitle,
+          shareDescription: meta.shareDescription,
+          status: 'draft',
+          draftContent: content,
+          publishedVersion: 0,
+          createdBy: operator._id,
+          createdAt: db.serverDate(),
+          updatedAt: db.serverDate()
+        }
+      });
+    } catch (error) {
+      throw exampleStorageError('templates', error);
+    }
+    await writeRequiredExampleAudit(transaction, operator, 'ops.example.create', id, '运营后台创建', '创建示例家谱', event.requestId);
+    return { templateId: id };
+  });
+}
+
+async function examplesUpdateDraft(event, context) {
+  const operator = await requireOperator(context, ['super_admin', 'operator']);
+  await ensureExampleCollections();
+  return opsMutate(operator, 'examples.updateDraft', event, async function (transaction) {
+    const template = await getExampleTemplate(event.templateId, transaction);
+    assert(template.status !== 'archived', 'EXAMPLE_ARCHIVED', '已归档的示例不能继续编辑');
+    const meta = normalizeExampleMetadata(event, template);
+    assert(meta.slug === template.slug, 'EXAMPLE_SLUG_IMMUTABLE', '创建后不能修改示例链接标识');
+    const content = normalizeExampleContent(event.draftContent || template.draftContent, template.draftContent);
+    await transaction.collection('example_templates').doc(template._id).update({
+      data: Object.assign({}, meta, { draftContent: content, updatedAt: db.serverDate() })
+    });
+    await writeRequiredExampleAudit(transaction, operator, 'ops.example.update_draft', template._id, '运营后台编辑', '更新示例草稿', event.requestId);
+    return { templateId: template._id, draftContent: content };
+  });
+}
+
+async function examplesPublish(event, context) {
+  const operator = await requireOperator(context, ['super_admin']);
+  await ensureExampleCollections();
+  return opsMutate(operator, 'examples.publish', event, async function (transaction) {
+    const template = await getExampleTemplate(event.templateId, transaction);
+    assert(template.status !== 'archived', 'EXAMPLE_ARCHIVED', '已归档的示例不能发布');
+    const content = normalizeExampleContent(template.draftContent, template.draftContent);
+    const version = Number(template.publishedVersion || 0) + 1;
+    const versionId = 'example_version_' + hash(template._id + ':' + version, 32);
+    await transaction.collection('example_template_versions').doc(versionId).set({
+      data: {
+        templateId: template._id,
+        version: version,
+        snapshot: { title: template.title, description: template.description, tags: template.tags || [], sortOrder: template.sortOrder || 0, shareTitle: template.shareTitle || '', shareDescription: template.shareDescription || '', content: content },
+        publishedBy: operator._id,
+        publishedByName: operator.displayName || '',
+        publishedAt: db.serverDate()
+      }
+    });
+    await transaction.collection('example_templates').doc(template._id).update({
+      data: { status: 'published', publishedVersion: version, publishedContent: content, publishedAt: db.serverDate(), updatedAt: db.serverDate() }
+    });
+    await writeRequiredExampleAudit(transaction, operator, 'ops.example.publish', template._id, '运营后台发布', '发布示例家谱 v' + version, event.requestId);
+    return { templateId: template._id, version: version };
+  });
+}
+
+async function examplesUnpublish(event, context) {
+  const operator = await requireOperator(context, ['super_admin']);
+  await ensureExampleCollections();
+  return opsMutate(operator, 'examples.unpublish', event, async function (transaction) {
+    const template = await getExampleTemplate(event.templateId, transaction);
+    assert(template.status === 'published', 'EXAMPLE_NOT_PUBLISHED', '该示例当前未发布');
+    await transaction.collection('example_templates').doc(template._id).update({
+      data: { status: 'draft', publishedContent: _.remove(), unpublishedAt: db.serverDate(), updatedAt: db.serverDate() }
+    });
+    await writeRequiredExampleAudit(transaction, operator, 'ops.example.unpublish', template._id, '运营后台下架', '下架示例家谱', event.requestId);
+    return { templateId: template._id, status: 'draft' };
+  });
+}
+
+async function examplesRollback(event, context) {
+  const operator = await requireOperator(context, ['super_admin']);
+  await ensureExampleCollections();
+  return opsMutate(operator, 'examples.rollback', event, async function (transaction) {
+    const template = await getExampleTemplate(event.templateId, transaction);
+    const version = await findExampleDocument('example_template_versions', cleanText(event.versionId, 80), transaction);
+    assert(version && version.templateId === template._id, 'EXAMPLE_VERSION_NOT_FOUND', '示例历史版本不存在');
+    const snapshot = version.snapshot || {};
+    assert(snapshot.content, 'EXAMPLE_VERSION_INVALID', '示例历史版本不完整');
+    const nextVersion = Number(template.publishedVersion || 0) + 1;
+    const nextVersionId = 'example_version_' + hash(template._id + ':' + nextVersion, 32);
+    await transaction.collection('example_template_versions').doc(nextVersionId).set({
+      data: {
+        templateId: template._id,
+        version: nextVersion,
+        sourceVersion: version.version,
+        snapshot: snapshot,
+        publishedBy: operator._id,
+        publishedByName: operator.displayName || '',
+        publishedAt: db.serverDate()
+      }
+    });
+    await transaction.collection('example_templates').doc(template._id).update({
+      data: {
+        title: snapshot.title || template.title,
+        description: snapshot.description || '',
+        tags: snapshot.tags || [],
+        sortOrder: Number(snapshot.sortOrder) || 0,
+        shareTitle: snapshot.shareTitle || '',
+        shareDescription: snapshot.shareDescription || '',
+        draftContent: snapshot.content,
+        publishedContent: snapshot.content,
+        status: 'published',
+        publishedVersion: nextVersion,
+        publishedAt: db.serverDate(),
+        updatedAt: db.serverDate()
+      }
+    });
+    await writeRequiredExampleAudit(transaction, operator, 'ops.example.rollback', template._id, '运营后台回滚', '从 v' + version.version + ' 创建发布版本 v' + nextVersion, event.requestId);
+    return { templateId: template._id, version: nextVersion };
+  });
+}
+
+async function examplesArchive(event, context) {
+  const operator = await requireOperator(context, ['super_admin']);
+  await ensureExampleCollections();
+  return opsMutate(operator, 'examples.archive', event, async function (transaction) {
+    const template = await getExampleTemplate(event.templateId, transaction);
+    assert(template.status !== 'published', 'EXAMPLE_UNPUBLISH_FIRST', '请先下架示例再归档');
+    await transaction.collection('example_templates').doc(template._id).update({
+      data: { status: 'archived', archivedAt: db.serverDate(), updatedAt: db.serverDate() }
+    });
+    await writeRequiredExampleAudit(transaction, operator, 'ops.example.archive', template._id, '运营后台归档', '归档示例家谱', event.requestId);
+    return { templateId: template._id, status: 'archived' };
+  });
+}
+
 const handlers = {
   'session.me': sessionMe,
   'dashboard.summary': dashboardSummary,
@@ -848,7 +1390,16 @@ const handlers = {
   'audits.list': auditsList,
   'operators.list': operatorsList,
   'operators.create': operatorsCreate,
-  'operators.disable': operatorsDisable
+  'operators.disable': operatorsDisable,
+  'examples.health': examplesHealth,
+  'examples.list': examplesList,
+  'examples.detail': examplesDetail,
+  'examples.create': examplesCreate,
+  'examples.updateDraft': examplesUpdateDraft,
+  'examples.publish': examplesPublish,
+  'examples.unpublish': examplesUnpublish,
+  'examples.rollback': examplesRollback,
+  'examples.archive': examplesArchive
 };
 
 exports.main = async function (event, context) {
@@ -883,7 +1434,17 @@ exports.main = async function (event, context) {
     console.log(JSON.stringify({ requestId: requestId, actorId: anonymousActorId, action: action, success: true, durationMs: Date.now() - startedAt, resultCode: 'OK' }));
     return { success: true, data: data, requestId: requestId };
   } catch (error) {
-    console.error(JSON.stringify({ requestId: requestId, actorId: anonymousActorId, action: action, success: false, code: error.code || 'SERVER_ERROR', durationMs: Date.now() - startedAt, resultCode: error.code || 'SERVER_ERROR' }));
+    console.error(JSON.stringify({
+      type: 'ops_request_failed',
+      requestId: requestId,
+      actorId: anonymousActorId,
+      action: action,
+      success: false,
+      code: error.code || 'SERVER_ERROR',
+      durationMs: Date.now() - startedAt,
+      resultCode: error.code || 'SERVER_ERROR',
+      error: errorDigest(error)
+    }));
     return {
       success: false,
       code: error.code || 'SERVER_ERROR',

@@ -12,6 +12,7 @@ Page({
     collaborators: [],
     pendingChanges: [],
     recentActivities: [],
+    onboarding: { isCreator: false, sharedAt: null },
     showShareSheet: false,
     shareRole: 'member',
     shareReady: false,
@@ -50,6 +51,7 @@ Page({
         currentRole: data.family.currentRole,
         isAdmin: data.family.currentRole === 'admin',
         stats: data.stats,
+        onboarding: data.onboarding || { isCreator: false, sharedAt: null },
         collaborators: collaborators,
         pendingChanges: data.pendingChanges || [],
         recentActivities: (data.recentActivities || []).map(function (item) {
@@ -152,7 +154,8 @@ Page({
         shareCreating: false,
         shareCard: {
           title: data.familyName + '｜一起把家谱补完整',
-          path: '/pages/invite/index?token=' + data.token
+          path: '/pages/invite/index?token=' + data.token,
+          invitationId: data.invitationId
         }
       });
     }).catch(function (error) {
@@ -162,8 +165,26 @@ Page({
   },
 
   onShareAppMessage: function () {
-    if (this.data.shareCard) return this.data.shareCard;
+    const self = this;
+    if (this.data.shareCard) return {
+      title: this.data.shareCard.title,
+      path: this.data.shareCard.path,
+      success: function () {
+        api.call('family.markOnboardingShared', {
+          familyId: self.data.currentFamily._id,
+          invitationId: self.data.shareCard.invitationId
+        }).then(function () { self.loadDashboard(); }).catch(function () {});
+      }
+    };
     return { title: '有谱｜一家人，共修一份家谱', path: '/pages/tree/index' };
+  },
+
+  continueOnboardingAdd: function () {
+    this.openGraph();
+  },
+
+  refreshOnboarding: function () {
+    this.loadDashboard();
   },
 
   stopEvent: function () {}

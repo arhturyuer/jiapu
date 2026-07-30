@@ -8,6 +8,15 @@
   width: 360rpx;
 }
 
+.invite-help {
+  width: 520rpx;
+  margin-top: 24rpx;
+  color: #65706A;
+  font-size: 25rpx;
+  line-height: 1.5;
+  text-decoration: underline;
+}
+
 .tree-toolbar {
   height: 112rpx;
   padding: 16rpx 24rpx;
@@ -428,6 +437,23 @@
 .sheet-button {
   width: 100%;
   margin-top: 28rpx;
+}
+
+.family-sheet-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.family-sheet-heading .sheet-title {
+  margin-bottom: 22rpx;
+}
+
+.examples-entry {
+  margin-bottom: 22rpx;
+  color: #245C4A;
+  font-size: 28rpx;
+  font-weight: 600;
 }
 
 .person-sheet-head {

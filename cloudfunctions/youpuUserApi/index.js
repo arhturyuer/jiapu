@@ -28,6 +28,7 @@ const MUTATION_TYPES = new Set([
   'family.archive',
   'family.restore',
   'family.setPreference',
+  'family.markOnboardingShared',
   'membership.updateRole',
   'membership.transferAdmin',
   'membership.leave',
@@ -1095,6 +1096,10 @@ async function familyDashboard(event) {
       completion: completion,
       pendingCount: pending.length
     },
+    onboarding: {
+      isCreator: family.creatorId === userId(openid),
+      sharedAt: family.onboardingSharedAt || null
+    },
     collaborators: memberships.map(function (item) {
       return {
         _id: item._id,
@@ -1109,6 +1114,30 @@ async function familyDashboard(event) {
       return { _id: item._id, action: item.action, summary: item.summary, createdAt: item.createdAt };
     })
   };
+}
+
+async function familyMarkOnboardingShared(event) {
+  const openid = getOpenid();
+  const user = await requireActiveUser(openid);
+  return mutate('family.markOnboardingShared', event, openid, async function (transaction) {
+    const family = await getFamily(transaction, event.familyId);
+    assert(family.creatorId === user._id, 'NO_PERMISSION', '只有家谱创建者可以完成首次分享引导');
+    const invitation = await mustGet(transaction, 'invitations', event.invitationId, 'INVITE_NOT_FOUND', '邀请不存在');
+    assert(invitation.familyId === family._id && invitation.createdBy === user._id, 'INVALID_INVITATION', '邀请不属于当前创建者');
+    await transaction.collection('families').doc(family._id).update({
+      data: { onboardingSharedAt: family.onboardingSharedAt || db.serverDate(), updatedAt: db.serverDate() }
+    });
+    await audit(transaction, {
+      familyId: family._id,
+      openid: openid,
+      action: 'family.onboarding_shared',
+      objectType: 'family',
+      objectId: family._id,
+      summary: '完成首次家庭邀请分享',
+      requestId: event.requestId
+    });
+    return { shared: true };
+  });
 }
 
 async function membershipList(event) {
@@ -2078,6 +2107,91 @@ async function mediaGetStates(event) {
   return { states: states };
 }
 
+function publicExamplePerson(person) {
+  const source = person || {};
+  return {
+    _id: cleanText(source._id, 80),
+    name: cleanText(source.name, 30),
+    gender: cleanGender(source.gender),
+    lifeStatus: cleanLifeStatus(source.lifeStatus),
+    birthDate: cleanDate(source.birthDate),
+    deathDate: cleanDate(source.deathDate),
+    birthPlace: cleanText(source.birthPlace, 80),
+    bio: cleanText(source.bio, 500),
+    avatarAssetId: '',
+    photoAssetIds: []
+  };
+}
+
+function publicExampleContent(template) {
+  const content = template.publishedContent || {};
+  const family = content.family || {};
+  const people = (content.persons || []).map(publicExamplePerson).filter(function (person) {
+    return person._id && person.name;
+  });
+  const personIds = new Set(people.map(function (person) { return person._id; }));
+  const relations = (content.relations || []).map(function (relation) {
+    return {
+      _id: cleanText(relation._id, 80),
+      type: relation.type === 'spouse' ? 'spouse' : 'parent_child',
+      fromPersonId: cleanText(relation.fromPersonId, 80),
+      toPersonId: cleanText(relation.toPersonId, 80)
+    };
+  }).filter(function (relation) {
+    return relation._id && relation.fromPersonId !== relation.toPersonId &&
+      personIds.has(relation.fromPersonId) && personIds.has(relation.toPersonId);
+  });
+  return {
+    _id: template._id,
+    slug: cleanText(template.slug, 80),
+    title: cleanText(template.title || family.name, 40),
+    description: cleanText(template.description || family.description, 200),
+    tags: (template.tags || []).map(function (tag) { return cleanText(tag, 20); }).filter(Boolean).slice(0, 8),
+    sortOrder: Number(template.sortOrder) || 0,
+    shareTitle: cleanText(template.shareTitle, 60),
+    shareDescription: cleanText(template.shareDescription, 100),
+    publishedVersion: Number(template.publishedVersion) || 0,
+    personCount: people.length,
+    relationCount: relations.length,
+    persons: people,
+    relations: relations
+  };
+}
+
+async function examplesList(event) {
+  const openid = getOpenid();
+  await requireActiveUser(openid);
+  const tag = cleanText(event.tag, 20);
+  let templates = await listAll('example_templates', { status: 'published' }, 100);
+  templates = templates.filter(function (template) {
+    return template.publishedContent && (!tag || (template.tags || []).includes(tag));
+  }).sort(function (left, right) {
+    return (Number(left.sortOrder) || 0) - (Number(right.sortOrder) || 0) || String(left._id).localeCompare(String(right._id));
+  });
+  const tags = Array.from(new Set(templates.reduce(function (all, template) {
+    return all.concat(template.tags || []);
+  }, []).map(function (item) { return cleanText(item, 20); }).filter(Boolean))).sort();
+  return {
+    items: templates.map(function (template) {
+      const example = publicExampleContent(template);
+      delete example.persons;
+      delete example.relations;
+      return example;
+    }),
+    tags: tags
+  };
+}
+
+async function examplesGet(event) {
+  const openid = getOpenid();
+  await requireActiveUser(openid);
+  const slug = cleanText(event.slug, 80);
+  assert(slug, 'EXAMPLE_SLUG_REQUIRED', '缺少示例家谱信息');
+  const result = await db.collection('example_templates').where({ slug: slug, status: 'published' }).limit(1).get();
+  assert(result.data && result.data.length && result.data[0].publishedContent, 'EXAMPLE_NOT_FOUND', '该示例家谱已下架或暂不可用');
+  return { example: publicExampleContent(result.data[0]) };
+}
+
 const handlers = {
   'auth.login': authLogin,
   'auth.updateProfile': authUpdateProfile,
@@ -2092,6 +2206,7 @@ const handlers = {
   'family.restore': familyRestore,
   'family.dashboard': familyDashboard,
   'family.setPreference': familySetPreference,
+  'family.markOnboardingShared': familyMarkOnboardingShared,
   'graph.get': graphGet,
   'membership.list': membershipList,
   'membership.updateRole': membershipUpdateRole,
@@ -2115,7 +2230,9 @@ const handlers = {
   'media.prepare': mediaPrepare,
   'media.complete': mediaComplete,
   'media.getUrls': mediaGetUrls,
-  'media.getStates': mediaGetStates
+  'media.getStates': mediaGetStates,
+  'examples.list': examplesList,
+  'examples.get': examplesGet
 };
 
 exports.main = async function (event) {

@@ -119,12 +119,24 @@ export async function callOps<T>(action: string, data: Record<string, unknown> =
       UNAUTHENTICATED: '登录状态已失效，请重新登录。',
       NOT_OPERATOR: '当前账号不在运营白名单中。',
       NO_PERMISSION: '当前运营账号没有执行此操作的权限。',
-      UNKNOWN_ACTION: '后台接口版本不一致，请刷新页面后重试。'
+      UNKNOWN_ACTION: '后台接口版本不一致，请刷新页面后重试。',
+      EXAMPLE_TEMPLATE_STORE_UNAVAILABLE: '示例草稿库暂不可读取，请稍后重试。',
+      EXAMPLE_TEMPLATE_READ_FAILED: '加载示例草稿失败，请重试。',
+      EXAMPLE_VERSION_STORE_UNAVAILABLE: '示例发布版本暂不可读取，请稍后重试。',
+      EXAMPLE_VERSION_READ_FAILED: '加载示例发布版本失败，请重试。',
+      EXAMPLE_TEMPLATE_CORRUPT: '示例草稿数据不完整，请联系管理员处理。',
+      EXAMPLE_VERSION_CORRUPT: '示例发布版本数据不完整，请联系管理员处理。',
+      EXAMPLE_PERSON_NAME_REQUIRED: '每位示例人物都需要填写姓名。',
+      EXAMPLE_PERSON_NAME_DUPLICATE: '示例人物姓名不能重复，请修改后再保存。',
+      EXAMPLE_RELATION_PERSON_NOT_FOUND: '关系中的人物姓名必须与人物表完全一致。',
+      EXAMPLE_AUDIT_WRITE_FAILED: '操作审计写入失败，操作未完成，请重试。'
     };
     const message = result.message || (result.code && messages[result.code]) || '运营请求失败';
-    const error = new Error(result.code && !message.includes(result.code)
+    const baseMessage = result.code && !message.includes(result.code)
       ? `${message}（错误码：${result.code}）`
-      : message);
+      : message;
+    const messageWithRequestId = result.requestId ? `${baseMessage}（请求 ID：${result.requestId}）` : baseMessage;
+    const error = new Error(messageWithRequestId);
     Object.assign(error, { code: result.code, requestId: result.requestId });
     throw error;
   }

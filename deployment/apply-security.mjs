@@ -35,7 +35,9 @@ const collections = [
   'idempotency_records',
   'backup_manifests',
   'profile_sync_tasks',
-  'rate_limits'
+  'rate_limits',
+  'example_templates',
+  'example_template_versions'
 ];
 
 function readRule(file) {

@@ -11,7 +11,12 @@ Page({
     spouseName: '',
     familyName: '',
     description: '',
+    source: '',
     submitting: false
+  },
+
+  onLoad: function (options) {
+    this.setData({ source: options.source || '' });
   },
 
   inputField: function (event) {
@@ -65,6 +70,9 @@ Page({
       }
     }).then(function (data) {
       app.setCurrentFamily(data.family);
+      if (self.data.source !== 'example') {
+        wx.setStorageSync('youpu_new_family_tour_' + data.family._id, true);
+      }
       wx.setStorageSync('youpu_pending_view', { mode: 'full', personId: '' });
       wx.showToast({ title: '家谱创建好了', icon: 'success' });
       setTimeout(function () {

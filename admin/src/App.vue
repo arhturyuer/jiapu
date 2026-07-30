@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
 import { callOps, getErrorMessage, hasLoginState, signIn, signOut } from './cloudbase';
+import ExampleManager from './components/ExampleManager.vue';
 
-type ModuleKey = 'dashboard' | 'users' | 'families' | 'reports' | 'moderation' | 'deletions' | 'audits' | 'operators';
+type ModuleKey = 'dashboard' | 'users' | 'families' | 'examples' | 'reports' | 'moderation' | 'deletions' | 'audits' | 'operators';
 type ModerationScope = 'pending' | 'reviewed';
 type Row = Record<string, any>;
 
@@ -33,6 +34,7 @@ const navItems: Array<{ key: ModuleKey; label: string; caption: string }> = [
   { key: 'dashboard', label: '概览', caption: '运行状态' },
   { key: 'users', label: '用户', caption: '账号处置' },
   { key: 'families', label: '家谱', caption: '风险治理' },
+  { key: 'examples', label: '示例家谱', caption: '内容发布' },
   { key: 'reports', label: '举报', caption: '工单闭环' },
   { key: 'moderation', label: '内容复核', caption: '图片审核' },
   { key: 'deletions', label: '注销工单', caption: '数据权利' },
@@ -40,7 +42,7 @@ const navItems: Array<{ key: ModuleKey; label: string; caption: string }> = [
   { key: 'operators', label: '运营账号', caption: '白名单' }
 ];
 
-const actionByModule: Record<Exclude<ModuleKey, 'dashboard'>, string> = {
+const actionByModule: Record<Exclude<ModuleKey, 'dashboard' | 'examples'>, string> = {
   users: 'users.list',
   families: 'families.list',
   reports: 'reports.list',
@@ -223,6 +225,12 @@ async function loadModule(module: ModuleKey, append = false): Promise<void> {
     if (module === 'dashboard') {
       const data = await callOps<{ totals: typeof totals }>('dashboard.summary');
       Object.assign(totals, data.totals);
+      rows.value = [];
+      nextCursor.value = '';
+      hasMore.value = false;
+      return;
+    }
+    if (module === 'examples') {
       rows.value = [];
       nextCursor.value = '';
       hasMore.value = false;
@@ -429,6 +437,8 @@ onMounted(bootstrap);
         <article :class="{ attention: totals.deletionBacklog > 0 }"><span>注销任务</span><strong>{{ totals.deletionBacklog }}</strong><small>待执行或失败</small></article>
         <article class="principle-card"><span>今日原则</span><strong>访问可追溯</strong><small>查看家庭资料时自动记录运营账号与访问对象。</small></article>
       </section>
+
+      <ExampleManager v-else-if="activeModule === 'examples'" :is-super-admin="operator?.role === 'super_admin'" />
 
       <section v-else class="table-card">
         <div v-if="activeModule === 'moderation'" class="moderation-tabs" role="tablist" aria-label="内容复核视图">
