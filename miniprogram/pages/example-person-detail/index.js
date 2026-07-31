@@ -1,9 +1,9 @@
 const api = require('../../utils/api');
+const kinship = require('../../utils/kinship');
 
 function labelForRelation(person, relation, related) {
-  if (relation.type === 'spouse') return '伴侣';
-  if (relation.toPersonId === person._id) return related.gender === 'male' ? '父亲' : related.gender === 'female' ? '母亲' : '父母';
-  return related.gender === 'male' ? '儿子' : related.gender === 'female' ? '女儿' : '子女';
+  const role = relation.type === 'spouse' ? 'spouse' : relation.toPersonId === person._id ? 'parent' : 'child';
+  return kinship.directRelationshipLabel(person, related, role);
 }
 
 function createFamilyUrl(slug) {

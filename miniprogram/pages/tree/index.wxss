@@ -248,7 +248,8 @@
   position: absolute;
   z-index: 4;
   width: 168rpx;
-  min-height: 116rpx;
+  height: 164rpx;
+  min-height: 164rpx;
   padding: 14rpx 12rpx 12rpx;
   display: flex;
   flex-direction: column;

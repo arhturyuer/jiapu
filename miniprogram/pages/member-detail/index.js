@@ -1,18 +1,6 @@
 const app = getApp();
 const api = require('../../utils/api');
-
-function relationLabel(item) {
-  const person = item.person || {};
-  if (item.role === 'spouse') return '伴侣';
-  if (item.role === 'parent') {
-    if (person.gender === 'male') return '父亲';
-    if (person.gender === 'female') return '母亲';
-    return '父母';
-  }
-  if (person.gender === 'male') return '儿子';
-  if (person.gender === 'female') return '女儿';
-  return '子女';
-}
+const kinship = require('../../utils/kinship');
 
 Page({
   data: {
@@ -52,7 +40,7 @@ Page({
       });
       const relatives = (data.relatives || []).map(function (item) {
         return Object.assign({}, item, {
-          label: relationLabel(item),
+          label: kinship.directRelationshipLabel(person, item.person || {}, item.role),
           initial: (item.person.name || '家').slice(0, 1)
         });
       });

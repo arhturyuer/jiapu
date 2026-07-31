@@ -63,6 +63,12 @@ test('运营后台支持表格导入导出与基于共享布局的关系图校�
   assert.match(graph, /layoutGraph\(props\.persons/);
   assert.match(graph, /selectRelation/);
   assert.match(graph, /selectPerson/);
+  assert.match(graph, /class="relation-hit"/);
+  assert.match(graph, /nodeHeight\.value/);
+  assert.match(graph, /:height="nodeHeight"/);
+  assert.doesNotMatch(graph, /height="116"/);
+  assert.doesNotMatch(graph, /relation-hit" :class="\{ selected:/);
+  assert.doesNotMatch(graph, /\.relation-hit\.selected/);
 });
 
 test('示例表格按唯一姓名管理，内部人物与关系标识由服务端维护', function () {
@@ -143,11 +149,14 @@ test('示例图谱复用真实家谱的选中连线、定位与只读资料交�
 test('示例家谱将标题与图谱操作拆分为两行，避免小屏顶部挤压', function () {
   const page = read('miniprogram/pages/example/index.wxml');
   const style = read('miniprogram/pages/example/index.wxss');
+  const treeStyle = read('miniprogram/pages/tree/index.wxss');
   const source = read('miniprogram/pages/example/index.js');
   assert.match(page, /example-identity/);
   assert.match(page, /example-actions/);
   assert.match(style, /\.example-header \{ height:196rpx/);
   assert.match(style, /height:calc\(100vh - 196rpx - 120rpx\)/);
+  assert.match(style, /height:164rpx; min-height:164rpx/);
+  assert.match(treeStyle, /height: 164rpx;\n  min-height: 164rpx/);
   assert.match(source, /- 316 \* width \/ 750/);
 });
 

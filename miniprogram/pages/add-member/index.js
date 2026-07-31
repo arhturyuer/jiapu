@@ -1,6 +1,7 @@
 const api = require('../../utils/api');
 const privacy = require('../../utils/privacy');
 const formState = require('../../utils/form-state');
+const kinship = require('../../utils/kinship');
 
 const RELATION_LABELS = {
   father: '父亲',
@@ -53,7 +54,7 @@ Page({
       anchorId: options.anchorId || '',
       anchorName: decodeURIComponent(options.anchorName || ''),
       relationType: relationType,
-      relationLabel: RELATION_LABELS[relationType] || '亲属',
+      relationLabel: kinship.relationTypeLabel(null, relationType),
       gender: gender,
       sharedParentRoleText: this.parentRoleText(gender)
     });
@@ -103,8 +104,10 @@ Page({
     return api.call('graph.get', { familyId: this.data.familyId }).then(function (data) {
       const persons = data.persons || [];
       const relations = data.relations || [];
+      const anchor = persons.find(function (person) { return person._id === self.data.anchorId; });
       self._graphPersons = persons;
       self._graphRelations = relations;
+      if (anchor) self.setData({ relationLabel: kinship.relationTypeLabel(anchor, self.data.relationType) });
       const directIds = {};
       relations.forEach(function (relation) {
         if (relation.fromPersonId === self.data.anchorId) directIds[relation.toPersonId] = true;

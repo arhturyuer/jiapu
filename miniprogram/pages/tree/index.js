@@ -2,6 +2,7 @@ const app = getApp();
 const api = require('../../utils/api');
 const graphLayout = require('../../utils/graph-layout');
 const graphViewport = require('../../utils/graph-viewport');
+const kinship = require('../../utils/kinship');
 
 const MAX_INTERACTIVE_NODES = 80;
 
@@ -529,7 +530,18 @@ Page({
       wx.showToast({ title: '当前身份只能查看家谱', icon: 'none' });
       return;
     }
-    this.setData({ showMemberSheet: false, showRelationSheet: true });
+    const person = this.data.selectedPerson;
+    this.setData({
+      showMemberSheet: false,
+      showRelationSheet: true,
+      relationOptions: [
+        { key: 'father', label: '父亲' },
+        { key: 'mother', label: '母亲' },
+        { key: 'spouse', label: kinship.relationTypeLabel(person, 'spouse') },
+        { key: 'son', label: '儿子' },
+        { key: 'daughter', label: '女儿' }
+      ]
+    });
   },
 
   toggleSelectedBranch: function () {

@@ -27,6 +27,8 @@ assert.strictEqual(kinships.grandmother, '奶奶');
 
 const full = graph.layoutGraph(persons, relations, { mode: 'full', viewpointId: '' });
 assert.strictEqual(full.nodes.length, persons.length);
+assert.strictEqual(full.nodeWidth, 168);
+assert.strictEqual(full.nodeHeight, 164);
 assert.ok(full.lines.length >= relations.length);
 assert.strictEqual(full.junctions.length, 2);
 assert.ok(full.nodes.every(function (node) { return node.relationLabel === ''; }));
@@ -143,5 +145,121 @@ assert.ok(rootCenter > Math.min.apply(null, childCenters) && rootCenter < Math.m
 const folded = graph.layoutGraph(branchPersons, branchRelations, { mode: 'full', collapsedIds: ['left'] });
 assert.strictEqual(folded.nodes.find(function (node) { return node._id === 'left'; }).hiddenDescendantCount, 1);
 assert.strictEqual(folded.hiddenCount, 1);
+
+const multipleSpousePersons = [
+  { _id: 'multi-parent', name: '家长', gender: 'male', birthDate: '1970-01-01' },
+  { _id: 'multi-wife-a', name: '配偶甲', gender: 'female', birthDate: '1971-01-01' },
+  { _id: 'multi-wife-b', name: '配偶乙', gender: 'female', birthDate: '1972-01-01' },
+  { _id: 'multi-a1', name: '甲长子', gender: 'male', birthDate: '2000-01-01' },
+  { _id: 'multi-b1', name: '乙长子', gender: 'male', birthDate: '2001-01-01' },
+  { _id: 'multi-a2', name: '甲次子', gender: 'male', birthDate: '2002-01-01' },
+  { _id: 'multi-b2', name: '乙次子', gender: 'male', birthDate: '2003-01-01' },
+  { _id: 'multi-single', name: '仅知父亲', gender: 'female', birthDate: '2004-01-01' }
+];
+const multipleSpouseRelations = [
+  { _id: 'multi-spouse-a', type: 'spouse', fromPersonId: 'multi-parent', toPersonId: 'multi-wife-a' },
+  { _id: 'multi-spouse-b', type: 'spouse', fromPersonId: 'multi-parent', toPersonId: 'multi-wife-b' },
+  { _id: 'multi-a1-father', type: 'parent_child', fromPersonId: 'multi-parent', toPersonId: 'multi-a1' },
+  { _id: 'multi-a1-mother', type: 'parent_child', fromPersonId: 'multi-wife-a', toPersonId: 'multi-a1' },
+  { _id: 'multi-b1-father', type: 'parent_child', fromPersonId: 'multi-parent', toPersonId: 'multi-b1' },
+  { _id: 'multi-b1-mother', type: 'parent_child', fromPersonId: 'multi-wife-b', toPersonId: 'multi-b1' },
+  { _id: 'multi-a2-father', type: 'parent_child', fromPersonId: 'multi-parent', toPersonId: 'multi-a2' },
+  { _id: 'multi-a2-mother', type: 'parent_child', fromPersonId: 'multi-wife-a', toPersonId: 'multi-a2' },
+  { _id: 'multi-b2-father', type: 'parent_child', fromPersonId: 'multi-parent', toPersonId: 'multi-b2' },
+  { _id: 'multi-b2-mother', type: 'parent_child', fromPersonId: 'multi-wife-b', toPersonId: 'multi-b2' },
+  { _id: 'multi-single-father', type: 'parent_child', fromPersonId: 'multi-parent', toPersonId: 'multi-single' }
+];
+const multipleSpouseLayout = graph.layoutGraph(multipleSpousePersons, multipleSpouseRelations, { mode: 'full' });
+const multipleSpouseRails = multipleSpouseLayout.lines.filter(function (line) {
+  return !line.isFlow && line.lineRole === 'rail';
+});
+const pairedRails = multipleSpouseRails.filter(function (line) { return line.familyKey.indexOf('pair:') === 0; });
+assert.strictEqual(pairedRails.length, 2, '两个配偶组合应各自生成一条子女轨道');
+assert.notStrictEqual(pairedRails[0].railLane, pairedRails[1].railLane, '多配偶的每段婚姻应强制使用独立轨道');
+assert.notStrictEqual(
+  /top:([^r]+)rpx/.exec(pairedRails[0].style)[1],
+  /top:([^r]+)rpx/.exec(pairedRails[1].style)[1],
+  '即使横向不重叠，多配偶分支也必须绘制在不同高度'
+);
+const childX = function (id) {
+  return multipleSpouseLayout.nodes.find(function (node) { return node._id === id; }).x;
+};
+assert.ok(
+  childX('multi-a1') < childX('multi-a2') && childX('multi-a2') < childX('multi-single') &&
+  childX('multi-single') < childX('multi-b1') && childX('multi-b1') < childX('multi-b2'),
+  '不同婚姻的子女应按家庭分组连续排布，而不是按全局出生日期交错'
+);
+
+function readSegment(line) {
+  const left = Number(/left:([^r]+)rpx/.exec(line.style)[1]);
+  const top = Number(/top:([^r]+)rpx/.exec(line.style)[1]);
+  const width = Number(/width:([^r]+)rpx/.exec(line.style)[1]);
+  const angle = Number(/rotate\(([^d]+)deg\)/.exec(line.style)[1]);
+  if (Math.abs(angle) < 1) return { horizontal: true, minX: left, maxX: left + width, minY: top, maxY: top };
+  return { horizontal: false, minX: left, maxX: left, minY: top, maxY: top + width };
+}
+
+function crossesNodeInterior(segment, node, nodeWidth, nodeHeight) {
+  // Lines may terminate on a card border (their visual stroke is centered on
+  // that border), which is valid. Only regard the inset area as the card body.
+  const border = 2;
+  const left = node.x + border;
+  const right = node.x + nodeWidth - border;
+  const top = node.y + border;
+  const bottom = node.y + nodeHeight - border;
+  if (segment.horizontal) {
+    return segment.minY > top && segment.minY < bottom && segment.maxX > left && segment.minX < right;
+  }
+  return segment.minX > left && segment.minX < right && segment.maxY > top && segment.minY < bottom;
+}
+
+multipleSpouseLayout.lines.filter(function (line) {
+  return !line.isFlow;
+}).forEach(function (line) {
+  const lineSegment = readSegment(line);
+  multipleSpouseLayout.nodes.forEach(function (node) {
+    assert.strictEqual(
+      crossesNodeInterior(lineSegment, node, multipleSpouseLayout.nodeWidth, multipleSpouseLayout.nodeHeight),
+      false,
+      '关系线不得进入人物卡片内部：' + line._id + ' -> ' + node._id
+    );
+  });
+});
+
+multipleSpouseLayout.lines.filter(function (line) {
+  return !line.isFlow && line.lineRole === 'drop';
+}).forEach(function (drop) {
+  const dropSegment = readSegment(drop);
+  multipleSpouseRails.filter(function (rail) { return rail.familyKey !== drop.familyKey; }).forEach(function (rail) {
+    const railSegment = readSegment(rail);
+    const crosses = dropSegment.minX >= railSegment.minX && dropSegment.minX <= railSegment.maxX &&
+      railSegment.minY >= dropSegment.minY && railSegment.minY <= dropSegment.maxY;
+    assert.strictEqual(crosses, false, '子女落线不得穿过其他家庭分支的横轨');
+  });
+});
+
+function familyDrop(childId) {
+  return multipleSpouseLayout.lines.find(function (line) {
+    return !line.isFlow && line.lineRole === 'drop' && line._id.slice(-childId.length - 1) === '-' + childId;
+  });
+}
+
+assert.ok(familyDrop('multi-a1').familyKey.indexOf('pair:multi-parent|multi-wife-a@') === 0, '子女应连接到第一段婚姻的轨道');
+assert.ok(familyDrop('multi-a2').familyKey.indexOf('pair:multi-parent|multi-wife-a@') === 0, '同一配偶组合的子女应共用轨道');
+assert.ok(familyDrop('multi-b1').familyKey.indexOf('pair:multi-parent|multi-wife-b@') === 0, '子女应连接到第二段婚姻的轨道');
+assert.ok(familyDrop('multi-b2').familyKey.indexOf('pair:multi-parent|multi-wife-b@') === 0, '同一配偶组合的子女应共用轨道');
+assert.ok(familyDrop('multi-single').familyKey.indexOf('single:multi-parent@') === 0, '仅知一位家长的子女应保留单亲轨道');
+const singleTrunk = multipleSpouseLayout.lines.find(function (line) {
+  return !line.isFlow && line.lineRole === 'trunk' && line.familyKey.indexOf('single:multi-parent@') === 0;
+});
+assert.ok(singleTrunk && pairedRails.every(function (line) { return line.railLane !== singleTrunk.railLane; }), '多配偶中心成员的单亲子女也应使用独立轨道');
+
+const selectedMultipleSpouse = graph.layoutGraph(multipleSpousePersons, multipleSpouseRelations, {
+  mode: 'full',
+  selectedPersonId: 'multi-a1'
+});
+assert.ok(selectedMultipleSpouse.lines.some(function (line) {
+  return line.isFlow && line.flowRole === 'child-drop' && line.familyKey.indexOf('pair:multi-parent|multi-wife-a@') === 0;
+}), '高亮动画应沿子女所属的配偶组合轨道运行');
 
 console.log('graph layout tests passed');

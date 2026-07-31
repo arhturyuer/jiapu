@@ -1,15 +1,19 @@
 const NODE_WIDTH = 168;
-const NODE_HEIGHT = 116;
+// This is the outer card height, including its avatar, name and status line.
+// Keep connection geometry aligned with the actual fixed-height mini-program card.
+const NODE_HEIGHT = 164;
 const COUPLE_GAP = 76;
 const UNIT_GAP = 72;
 const ROOT_GAP = 144;
-const GAP_Y = 232;
+const GAP_Y = 280;
 const MARGIN_X = 80;
 const MARGIN_Y = 80;
 const MAX_KINSHIP_DEPTH = 8;
 const JUNCTION_RADIUS = 7;
 const LINE_OVERLAP = 2;
 const MAX_ANIMATED_CHILDREN = 12;
+const FAMILY_RAIL_CLEARANCE = 24;
+const kinship = require('./kinship');
 
 function personGender(person) {
   return person && person.gender ? person.gender : 'unknown';
@@ -414,7 +418,7 @@ function calculateKinships(persons, relations, viewpointId) {
       const label = specializedKinship(candidate.path, graph.peopleById);
       if (labels.indexOf(label) < 0) labels.push(label);
     });
-    result[personId] = labels.length === 1 ? labels[0] : '多重亲属关系';
+    result[personId] = labels.length === 1 ? labels[0] : '亲属';
   });
 
   const connected = {};
@@ -668,12 +672,22 @@ function buildUnits(persons, relations, components, generations) {
 
   const parentRoots = {};
   const childrenByRoot = {};
+  const parentIdsByChildRoot = {};
+  const spousePairs = {};
   units.forEach(function (unit) { childrenByRoot[unit._id] = []; });
   relations.forEach(function (relation) {
+    if (relation.type === 'spouse') {
+      spousePairs[pairKey(relation.fromPersonId, relation.toPersonId)] = true;
+      return;
+    }
     if (relation.type !== 'parent_child') return;
     const childRoot = components.componentByPerson[relation.toPersonId];
     const parentRoot = components.componentByPerson[relation.fromPersonId];
     if (!childRoot || !parentRoot || childRoot === parentRoot) return;
+    if (!parentIdsByChildRoot[childRoot]) parentIdsByChildRoot[childRoot] = [];
+    if (parentIdsByChildRoot[childRoot].indexOf(relation.fromPersonId) < 0) {
+      parentIdsByChildRoot[childRoot].push(relation.fromPersonId);
+    }
     if (!parentRoots[childRoot]) parentRoots[childRoot] = [];
     if (parentRoots[childRoot].indexOf(parentRoot) < 0) {
       parentRoots[childRoot].push(parentRoot);
@@ -710,9 +724,41 @@ function buildUnits(persons, relations, components, generations) {
   Object.keys(primaryParentByRoot).forEach(function (childRoot) {
     primaryChildrenByRoot[primaryParentByRoot[childRoot]].push(childRoot);
   });
+  const familySourceByChildRoot = {};
+  Object.keys(primaryParentByRoot).forEach(function (childRoot) {
+    const parentRoot = primaryParentByRoot[childRoot];
+    const members = unitsById[parentRoot].members;
+    const memberOrder = {};
+    members.forEach(function (member, index) { memberOrder[member._id] = index; });
+    const parentIds = (parentIdsByChildRoot[childRoot] || []).filter(function (parentId) {
+      return memberOrder[parentId] !== undefined;
+    }).sort(function (firstId, secondId) {
+      return memberOrder[firstId] - memberOrder[secondId] || firstId.localeCompare(secondId);
+    });
+    let pair = null;
+    for (let firstIndex = 0; firstIndex < parentIds.length && !pair; firstIndex += 1) {
+      for (let secondIndex = firstIndex + 1; secondIndex < parentIds.length; secondIndex += 1) {
+        const key = pairKey(parentIds[firstIndex], parentIds[secondIndex]);
+        if (spousePairs[key]) {
+          pair = { key: key, order: (memberOrder[parentIds[firstIndex]] + memberOrder[parentIds[secondIndex]]) / 2 };
+          break;
+        }
+      }
+    }
+    if (pair) {
+      familySourceByChildRoot[childRoot] = { key: 'pair:' + pair.key, order: pair.order };
+    } else if (parentIds.length) {
+      familySourceByChildRoot[childRoot] = { key: 'single:' + parentIds[0], order: memberOrder[parentIds[0]] };
+    } else {
+      familySourceByChildRoot[childRoot] = { key: 'unknown:' + childRoot, order: members.length };
+    }
+  });
   Object.keys(primaryChildrenByRoot).forEach(function (root) {
     primaryChildrenByRoot[root].sort(function (firstRoot, secondRoot) {
-      return comparePeople(unitsById[firstRoot].sortPerson, unitsById[secondRoot].sortPerson);
+      const firstSource = familySourceByChildRoot[firstRoot];
+      const secondSource = familySourceByChildRoot[secondRoot];
+      return firstSource.order - secondSource.order || firstSource.key.localeCompare(secondSource.key) ||
+        comparePeople(unitsById[firstRoot].sortPerson, unitsById[secondRoot].sortPerson);
     });
   });
 
@@ -723,7 +769,8 @@ function buildUnits(persons, relations, components, generations) {
     parentRoots: parentRoots,
     childrenByRoot: childrenByRoot,
     primaryParentByRoot: primaryParentByRoot,
-    primaryChildrenByRoot: primaryChildrenByRoot
+    primaryChildrenByRoot: primaryChildrenByRoot,
+    familySourceByChildRoot: familySourceByChildRoot
   };
 }
 
@@ -793,12 +840,83 @@ function createSegment(id, type, lineRole, x1, y1, x2, y2, options) {
     isAnimatedFlow: Boolean(optionsValue.isAnimatedFlow),
     flowStep: typeof optionsValue.flowStep === 'number' ? optionsValue.flowStep : -1,
     flowRole: optionsValue.flowRole || '',
+    familyKey: optionsValue.familyKey || '',
+    railLane: typeof optionsValue.railLane === 'number' ? optionsValue.railLane : -1,
     style: 'left:' + (x1 - offsetX) + 'rpx;top:' + (y1 - offsetY) + 'rpx;width:' + (length + overlap) + 'rpx;transform:rotate(' + angle + 'deg);'
   };
 }
 
 function pairKey(firstId, secondId) {
   return firstId < secondId ? firstId + '|' + secondId : secondId + '|' + firstId;
+}
+
+function assignFamilyRailLanes(sourceGroups, nodesById, relations) {
+  const spouseCounts = {};
+  relations.forEach(function (relation) {
+    if (relation.type !== 'spouse') return;
+    spouseCounts[relation.fromPersonId] = (spouseCounts[relation.fromPersonId] || 0) + 1;
+    spouseCounts[relation.toPersonId] = (spouseCounts[relation.toPersonId] || 0) + 1;
+  });
+  const groups = Object.keys(sourceGroups).map(function (groupKey) {
+    const group = sourceGroups[groupKey];
+    const childTop = group.children[0].y;
+    const parentBottom = Math.max.apply(null, group.parentIds.map(function (parentId) {
+      return nodesById[parentId].y + NODE_HEIGHT;
+    }));
+    const childCenters = group.children.map(function (child) { return child.x + NODE_WIDTH / 2; });
+    group.childTop = childTop;
+    group.parentBottom = parentBottom;
+    group.minX = Math.min.apply(null, childCenters.concat(group.source.x));
+    group.maxX = Math.max.apply(null, childCenters.concat(group.source.x));
+    group.rowKey = String(childTop);
+    group.requiresDedicatedLane = group.parentIds.some(function (parentId) {
+      return (spouseCounts[parentId] || 0) > 1;
+    });
+    return group;
+  });
+  const groupsByRow = {};
+  groups.forEach(function (group) {
+    if (!groupsByRow[group.rowKey]) groupsByRow[group.rowKey] = [];
+    groupsByRow[group.rowKey].push(group);
+  });
+
+  Object.keys(groupsByRow).forEach(function (rowKey) {
+    const rowGroups = groupsByRow[rowKey].sort(function (first, second) {
+      return first.minX - second.minX || first.maxX - second.maxX || first._id.localeCompare(second._id);
+    });
+    const lanes = [];
+    rowGroups.forEach(function (group) {
+      let laneIndex = -1;
+      if (!group.requiresDedicatedLane) {
+        laneIndex = lanes.findIndex(function (lane) {
+          return !lane.isDedicated && group.minX > lane.maxX + LINE_OVERLAP;
+        });
+      }
+      if (laneIndex < 0) {
+        laneIndex = lanes.length;
+        lanes.push({ maxX: group.maxX, isDedicated: group.requiresDedicatedLane });
+      } else {
+        lanes[laneIndex].maxX = group.maxX;
+      }
+      group.railLane = laneIndex;
+    });
+
+    const rowParentBottom = Math.max.apply(null, rowGroups.map(function (group) { return group.parentBottom; }));
+    const childTop = rowGroups[0].childTop;
+    const lowerRailY = rowParentBottom + FAMILY_RAIL_CLEARANCE;
+    const upperRailY = childTop - FAMILY_RAIL_CLEARANCE;
+    rowGroups.forEach(function (group) {
+      if (lanes.length === 1) {
+        group.railY = Math.min(
+          group.childTop - 40,
+          group.parentBottom + Math.max(40, (group.childTop - group.parentBottom) * 0.44)
+        );
+        return;
+      }
+      group.railY = lowerRailY + (upperRailY - lowerRailY) * group.railLane / (lanes.length - 1);
+    });
+  });
+  return groups;
 }
 
 function createFamilyConnections(nodesById, relations, selectedPersonId) {
@@ -880,24 +998,27 @@ function createFamilyConnections(nodesById, relations, selectedPersonId) {
     });
   });
 
-  Object.keys(sourceGroups).forEach(function (groupKey) {
-    const group = sourceGroups[groupKey];
+  const familyGroups = assignFamilyRailLanes(sourceGroups, nodesById, relations);
+  familyGroups.forEach(function (group) {
+    const groupKey = group._id;
     const source = group.source;
-    const childTop = group.children[0].y;
-    const parentBottom = Math.max.apply(null, group.parentIds.map(function (parentId) {
-      return nodesById[parentId].y + NODE_HEIGHT;
-    }));
-    const railY = Math.min(childTop - 40, parentBottom + Math.max(40, (childTop - parentBottom) * 0.44));
-    const childCenters = group.children.map(function (child) { return child.x + NODE_WIDTH / 2; });
-    const minX = Math.min.apply(null, childCenters.concat(source.x));
-    const maxX = Math.max.apply(null, childCenters.concat(source.x));
-    let segment = createSegment('trunk-' + groupKey, 'parent', 'trunk', source.x, source.y, source.x, railY);
+    const railY = group.railY;
+    let segment = createSegment('trunk-' + groupKey, 'parent', 'trunk', source.x, source.y, source.x, railY, {
+      familyKey: groupKey,
+      railLane: group.railLane
+    });
     if (segment) lines.push(segment);
-    segment = createSegment('rail-' + groupKey, 'parent', 'rail', minX, railY, maxX, railY);
+    segment = createSegment('rail-' + groupKey, 'parent', 'rail', group.minX, railY, group.maxX, railY, {
+      familyKey: groupKey,
+      railLane: group.railLane
+    });
     if (segment) lines.push(segment);
     group.children.forEach(function (child) {
       const childX = child.x + NODE_WIDTH / 2;
-      const drop = createSegment('drop-' + groupKey + '-' + child._id, 'parent', 'drop', childX, railY, childX, child.y);
+      const drop = createSegment('drop-' + groupKey + '-' + child._id, 'parent', 'drop', childX, railY, childX, child.y, {
+        familyKey: groupKey,
+        railLane: group.railLane
+      });
       if (drop) lines.push(drop);
     });
 
@@ -930,7 +1051,9 @@ function createFamilyConnections(nodesById, relations, selectedPersonId) {
             isFlow: true,
             isAnimatedFlow: hasAnimatedPath,
             flowStep: 0,
-            flowRole: 'parent-origin'
+            flowRole: 'parent-origin',
+            familyKey: groupKey,
+            railLane: group.railLane
           }
         );
         if (originFlow) lines.push(originFlow);
@@ -946,7 +1069,9 @@ function createFamilyConnections(nodesById, relations, selectedPersonId) {
         isFlow: true,
         isAnimatedFlow: hasAnimatedPath,
         flowStep: hasParentIngress ? 1 : 0,
-        flowRole: 'family-trunk'
+        flowRole: 'family-trunk',
+        familyKey: groupKey,
+        railLane: group.railLane
       }
     );
     if (trunkFlow) lines.push(trunkFlow);
@@ -968,7 +1093,9 @@ function createFamilyConnections(nodesById, relations, selectedPersonId) {
             isFlow: true,
             isAnimatedFlow: Boolean(animatedChildIds[child._id]),
             flowStep: nextFlowStep,
-            flowRole: segmentIndex === 0 ? 'child-rail' : 'child-drop'
+            flowRole: segmentIndex === 0 ? 'child-rail' : 'child-drop',
+            familyKey: groupKey,
+            railLane: group.railLane
           }
         );
         if (flow) {
@@ -1004,7 +1131,7 @@ function layoutGraph(personsInput, relationsInput, options) {
   const nodesById = {};
   const nodes = [];
   const kinships = optionsValue.mode === 'perspective'
-    ? calculateKinships(persons, relations, optionsValue.viewpointId)
+    ? kinship.calculateKinships(persons, relations, optionsValue.viewpointId)
     : {};
 
   generationKeys.forEach(function (generation) {
@@ -1033,6 +1160,8 @@ function layoutGraph(personsInput, relationsInput, options) {
     nodes: nodes,
     lines: connections.lines,
     junctions: connections.junctions,
+    nodeWidth: NODE_WIDTH,
+    nodeHeight: NODE_HEIGHT,
     width: Math.ceil(canvasWidth),
     height: Math.ceil(canvasHeight),
     kinships: kinships,
@@ -1120,7 +1249,7 @@ function expandCollapsedIds(persons, relations, collapsedIds, targetPersonId) {
 
 module.exports = {
   layoutGraph: layoutGraph,
-  calculateKinships: calculateKinships,
+  calculateKinships: kinship.calculateKinships,
   filterCollapsed: filterCollapsed,
   groupPersonsByGeneration: groupPersonsByGeneration,
   sortPersonsByName: sortPersonsByName,
