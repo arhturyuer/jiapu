@@ -46,8 +46,9 @@ if [[ "${MODE}" == "release" ]]; then
   fi
 
   OPERATOR_NAME="$("${NODE}" -e "console.log(require('${PROJECT_PATH}/miniprogram/config/legal').operatorName||'')")"
-  if [[ -z "${OPERATOR_NAME}" || "${OPERATOR_NAME}" == "有谱小程序运营者" ]]; then
-    echo "隐私政策主体仍是占位值，请替换为微信公众平台登记主体全称。"
+  LEGAL_VERIFIED="$("${NODE}" -e "console.log(require('${PROJECT_PATH}/miniprogram/config/legal').registrationVerified===true?'true':'false')")"
+  if [[ -z "${OPERATOR_NAME}" || "${OPERATOR_NAME}" == "有谱小程序运营者" || "${LEGAL_VERIFIED}" != "true" ]]; then
+    echo "隐私政策主体尚未由发布负责人确认；请填写微信公众平台登记主体全称并将 registrationVerified 设为 true。"
     exit 3
   fi
 

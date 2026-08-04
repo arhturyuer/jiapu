@@ -113,10 +113,19 @@ function getMediaStates(assetIds) {
   });
 }
 
+function getMediaPresentation(assetIds) {
+  const ids = Array.from(new Set((assetIds || []).filter(Boolean))).slice(0, 50);
+  if (!ids.length) return Promise.resolve({});
+  return call('media.getPresentation', { assetIds: ids }).then(function (data) {
+    return data.items || {};
+  });
+}
+
 module.exports = {
   call: call,
   uploadImage: uploadImage,
   getMediaUrls: getMediaUrls,
   getMediaStates: getMediaStates,
+  getMediaPresentation: getMediaPresentation,
   requestId: requestId
 };

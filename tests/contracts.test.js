@@ -69,6 +69,54 @@ test('头像使用独立保存接口、只读审核状态且新增成员延迟�
   assert.match(addMember, /submitStage:\s*'正在上传头像…'/);
 });
 
+test('我的页具备账户三态、单次家谱加载和受控媒体展示', function () {
+  const profile = fs.readFileSync(path.join(root, 'miniprogram/pages/profile/index.js'), 'utf8');
+  const template = fs.readFileSync(path.join(root, 'miniprogram/pages/profile/index.wxml'), 'utf8');
+  const clientApi = fs.readFileSync(path.join(root, 'miniprogram/utils/api.js'), 'utf8');
+  const userApi = fs.readFileSync(path.join(root, 'cloudfunctions/youpuUserApi/index.js'), 'utf8');
+  assert.match(profile, /accountState === 'pending_delete'/);
+  assert.match(profile, /app\.loadFamilyPages\(true\)/);
+  assert.doesNotMatch(profile, /app\.loadFamilies\(\)/);
+  assert.match(profile, /api\.getMediaPresentation/);
+  assert.match(template, /账户正在注销冷静期/);
+  assert.match(template, /创建第一份家谱/);
+  assert.match(template, /查看家谱/);
+  assert.match(template, /同步到你加入的所有家谱/);
+  assert.match(clientApi, /function getMediaPresentation/);
+  assert.match(userApi, /'media\.getPresentation':\s*mediaGetPresentation/);
+  assert.match(userApi, /asset\.ownerId === userId\(openid\)/);
+});
+
+test('个人导出使用私有异步任务，不会复制数据到剪贴板', function () {
+  const privacy = fs.readFileSync(path.join(root, 'miniprogram/pages/privacy/index.js'), 'utf8');
+  const template = fs.readFileSync(path.join(root, 'miniprogram/pages/privacy/index.wxml'), 'utf8');
+  const userApi = fs.readFileSync(path.join(root, 'cloudfunctions/youpuUserApi/index.js'), 'utf8');
+  const jobs = fs.readFileSync(path.join(root, 'cloudfunctions/youpuJobs/index.js'), 'utf8');
+  const indexes = JSON.parse(fs.readFileSync(path.join(root, 'deployment/database-indexes.json'), 'utf8'));
+  assert.doesNotMatch(privacy, /wx\.setClipboardData/);
+  assert.match(privacy, /api\.call\('account\.export'/);
+  assert.match(privacy, /api\.call\('account\.exportStatus'/);
+  assert.match(privacy, /api\.call\('account\.exportUrl'/);
+  assert.match(privacy, /wx\.downloadFile/);
+  assert.match(template, /仅可领取一次/);
+  assert.match(userApi, /'account\.exportStatus':\s*accountExportStatus/);
+  assert.match(userApi, /'account\.exportUrl':\s*accountExportUrl/);
+  assert.match(userApi, /current\.userId === user\._id/);
+  assert.match(userApi, /downloadIssuedAt/);
+  assert.match(jobs, /processExportTasks/);
+  assert.match(jobs, /cloud\.uploadFile/);
+  assert.match(jobs, /expireExportTasks/);
+  assert.ok(indexes.indexes.export_tasks);
+});
+
+test('账户资料更新和导出请求具备用户级限流', function () {
+  const userApi = fs.readFileSync(path.join(root, 'cloudfunctions/youpuUserApi/index.js'), 'utf8');
+  assert.match(userApi, /'auth\.updateProfile':\s*\{ max: 20, windowMs: 60 \* 60 \* 1000 \}/);
+  assert.match(userApi, /'auth\.updateAvatar':\s*\{ max: 20, windowMs: 60 \* 60 \* 1000 \}/);
+  assert.match(userApi, /'account\.export':\s*\{ max: 3, windowMs: 24 \* 60 \* 60 \* 1000 \}/);
+  assert.match(userApi, /if \(RATE_LIMITS\[type\]\) await enforceRateLimit/);
+});
+
 test('管理员可以软删除不会使家谱断裂的单条关系', function () {
   const pageSource = fs.readFileSync(path.join(root, 'miniprogram/pages/member-detail/index.js'), 'utf8');
   const template = fs.readFileSync(path.join(root, 'miniprogram/pages/member-detail/index.wxml'), 'utf8');

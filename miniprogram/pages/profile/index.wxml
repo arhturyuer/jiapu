@@ -1,53 +1,35 @@
-<view class="loading-panel" wx:if="{{loading}}"><view class="loading-dot"></view><text>正在加载...</text></view>
+<view class="loading-panel" wx:if="{{loading}}"><view class="loading-dot"></view><text>正在加载我的资料…</text></view>
+<view class="page-shell" wx:elif="{{error}}"><view class="empty-panel"><view class="empty-mark">!</view><text class="empty-title">暂时无法打开我的页面</text><text class="empty-description">{{error}}</text><button class="primary-button empty-action" bindtap="loadPage">重新加载</button></view></view>
 <view class="profile-page page-shell" wx:else>
-  <view class="profile-card surface-card">
-    <view class="avatar-column">
-      <view class="avatar-button {{savingAvatar ? 'avatar-button-busy' : ''}}" bindtap="chooseAvatar" hover-class="avatar-button-active" aria-role="button">
-        <image class="profile-avatar" wx:if="{{avatarUrl}}" src="{{avatarUrl}}" mode="aspectFill"></image>
-        <view class="profile-avatar profile-placeholder" wx:else>家</view>
-        <text class="avatar-edit">{{savingAvatar ? '处理中…' : '更换头像'}}</text>
+  <view class="pending-card surface-card" wx:if="{{accountState === 'pending_delete'}}">
+    <text class="pending-title">账户正在注销冷静期</text><text class="pending-desc">冷静期结束后会匿名化你的账户资料。期间不能修改资料、创建或管理家谱。</text>
+    <button class="primary-button" bindtap="showPrivacy">查看注销状态或撤销</button>
+    <button class="contact-button" open-type="contact">联系微信客服</button>
+  </view>
+
+  <block wx:elif="{{!familyList.length}}">
+    <view class="empty-panel profile-empty"><view class="empty-mark">家</view><text class="empty-title">从第一位家人开始</text><text class="empty-description">先建一份家谱，再邀请家人一起补全家庭故事。</text><button class="primary-button empty-action" bindtap="createFamily">创建第一份家谱</button><button class="secondary-button empty-action" bindtap="openExamples">先看看示例</button><button class="text-button" bindtap="explainInvitation">我有家人邀请</button><view class="archived-empty-list surface-card" wx:if="{{archivedFamilies.length}}"><view class="setting-row" wx:for="{{archivedFamilies}}" wx:key="_id" data-id="{{item._id}}" bindtap="openArchivedFamily"><view><text class="setting-title">{{item.name}}</text><text class="setting-desc">{{item.archiveStatusText}}</text></view><text class="setting-arrow">›</text></view></view></view>
+  </block>
+
+  <block wx:else>
+    <view class="profile-card surface-card">
+      <view class="avatar-column">
+        <button class="avatar-button {{savingAvatar ? 'avatar-button-busy' : ''}}" bindtap="chooseAvatar" hover-class="avatar-button-active" loading="{{savingAvatar}}">
+          <image class="profile-avatar" wx:if="{{avatarUrl}}" src="{{avatarUrl}}" mode="aspectFill"></image><view class="profile-avatar profile-placeholder" wx:else>家</view><text class="avatar-edit">{{savingAvatar ? '处理中…' : '更换头像'}}</text>
+        </button>
+        <text class="avatar-status avatar-status-{{avatarState}}" wx:if="{{avatarStateText}}">{{avatarStateText}}</text><text class="avatar-retry" wx:if="{{avatarState === 'failed'}}" catchtap="retryAvatarSave">重新保存</text>
       </view>
-      <text class="avatar-status avatar-status-{{avatarState}}" wx:if="{{avatarStateText}}">{{avatarStateText}}</text>
-      <text class="avatar-retry" wx:if="{{avatarState === 'failed'}}" catchtap="retryAvatarSave">重新保存</text>
+      <view class="profile-form"><text class="profile-label">在所有家谱中显示的名字</text><input class="nickname-input" type="text" placeholder="例如：建国叔" value="{{nickName}}" bindinput="inputNickname" maxlength="30" /><text class="profile-sync-tip">更新后会同步到你加入的所有家谱</text><button class="primary-button save-profile" disabled="{{!hasNameChanges || savingProfile || savingAvatar}}" loading="{{savingProfile}}" bindtap="saveProfile">{{hasNameChanges ? '保存名字' : '名字未修改'}}</button></view>
     </view>
-    <view class="profile-form">
-      <text class="profile-label">在家庭中显示的名字</text>
-      <input class="nickname-input" type="text" placeholder="例如：建国叔" value="{{nickName}}" bindinput="inputNickname" maxlength="30" />
-      <view class="primary-button save-profile {{(!hasNameChanges || savingProfile || savingAvatar) ? 'save-profile-disabled' : ''}}" bindtap="saveProfile" hover-class="save-profile-active" aria-role="button" aria-disabled="{{!hasNameChanges || savingProfile || savingAvatar}}">{{savingProfile ? '保存中…' : hasNameChanges ? '保存名字' : '名字未修改'}}</view>
-    </view>
-  </view>
 
-  <view class="section-block" wx:if="{{archivedFamilies.length}}">
-    <view class="section-heading"><text class="section-title">家谱回收站</text><text class="muted-text">保留 30 天</text></view>
-    <view class="setting-list surface-card">
-      <view class="setting-row" wx:for="{{archivedFamilies}}" wx:key="_id" data-id="{{item._id}}" bindtap="openArchivedFamily"><view><text class="setting-title">{{item.name}}</text><text class="setting-desc">点击查看并恢复</text></view><text class="setting-arrow">›</text></view>
-    </view>
-  </view>
+    <view class="section-block"><view class="section-heading"><text class="section-title">当前家谱</text><text class="section-action" bindtap="openFamilySheet">切换</text></view><view class="current-family-card surface-card"><view><text class="current-family-name">{{currentFamily.name}}</text><text class="current-family-meta">{{currentRoleText}} · {{currentFamily.personCount}} 位成员</text><text class="current-family-updated" wx:if="{{currentFamilyUpdatedText}}">{{currentFamilyUpdatedText}}</text></view><button class="primary-button open-graph-button" bindtap="openCurrentGraph">查看家谱</button></view></view>
 
-  <view class="section-block">
-    <view class="section-heading"><text class="section-title">我的家谱</text><text class="section-action" bindtap="createFamily">新建</text></view>
-    <view class="setting-list surface-card">
-      <view class="setting-row" bindtap="openFamilySheet"><view><text class="setting-title">当前家谱</text><text class="setting-desc">{{currentFamily ? currentFamily.name : '还没有家谱'}}</text></view><text class="setting-arrow">›</text></view>
-      <view class="setting-row" bindtap="openFamilyManage" wx:if="{{currentFamily}}"><view><text class="setting-title">家庭管理</text><text class="setting-desc">成员角色、邀请和家谱归档</text></view><text class="setting-arrow">›</text></view>
-      <view class="setting-row"><view><text class="setting-title">已加入</text><text class="setting-desc">{{familyList.length}} 份家谱</text></view></view>
-    </view>
-  </view>
+    <view class="section-block" wx:if="{{archivedFamilies.length}}"><view class="section-heading"><text class="section-title">家谱回收站</text><text class="muted-text">到期前可恢复</text></view><view class="setting-list surface-card"><view class="setting-row" wx:for="{{archivedFamilies}}" wx:key="_id" data-id="{{item._id}}" bindtap="openArchivedFamily" hover-class="setting-row-active"><view><text class="setting-title">{{item.name}}</text><text class="setting-desc">{{item.archiveStatusText}}</text></view><text class="setting-arrow">›</text></view></view></view>
 
-  <view class="section-block">
-    <view class="section-heading"><text class="section-title">设置</text></view>
-    <view class="setting-list surface-card">
-      <view class="setting-row" bindtap="showPrivacy"><view><text class="setting-title">隐私与权限</text><text class="setting-desc">了解家谱如何被访问</text></view><text class="setting-arrow">›</text></view>
-      <view class="setting-row" bindtap="clearCache"><view><text class="setting-title">清除本地缓存</text><text class="setting-desc">不会删除云端家谱</text></view><text class="setting-arrow">›</text></view>
-      <view class="setting-row" bindtap="showAbout"><view><text class="setting-title">关于有谱</text><text class="setting-desc">产品理念与版本信息</text></view><text class="setting-arrow">›</text></view>
-    </view>
-  </view>
+    <view class="section-block"><view class="section-heading"><text class="section-title">我的家谱</text><text class="section-action" bindtap="createFamily">新建</text></view><view class="setting-list surface-card"><view class="setting-row" bindtap="openFamilySheet" hover-class="setting-row-active"><view><text class="setting-title">切换家谱</text><text class="setting-desc">已加入 {{familyList.length}} 份家谱</text></view><text class="setting-arrow">›</text></view><view class="setting-row" bindtap="openFamilyManage" hover-class="setting-row-active"><view><text class="setting-title">家庭管理</text><text class="setting-desc">成员角色、邀请和家谱归档</text></view><text class="setting-arrow">›</text></view></view></view>
 
+    <view class="section-block"><view class="section-heading"><text class="section-title">账户与数据</text></view><view class="setting-list surface-card"><view class="setting-row" bindtap="showPrivacy" hover-class="setting-row-active"><view><text class="setting-title">隐私、导出与注销</text><text class="setting-desc">管理权限、个人数据和账户状态</text></view><text class="setting-arrow">›</text></view><view class="setting-row" bindtap="clearCache" hover-class="setting-row-active"><view><text class="setting-title">清除本机缓存</text><text class="setting-desc">不会退出微信登录或删除云端资料</text></view><text class="setting-arrow">›</text></view><view class="setting-row" bindtap="showAbout" hover-class="setting-row-active"><view><text class="setting-title">关于有谱</text><text class="setting-desc">产品理念与版本信息</text></view><text class="setting-arrow">›</text></view></view></view>
+  </block>
   <text class="version-text">有谱 v1.0.0</text>
-
-  <view class="sheet-mask" wx:if="{{showFamilySheet}}" bindtap="closeFamilySheet">
-    <view class="bottom-sheet" catchtap="stopEvent"><view class="sheet-handle"></view><view class="sheet-title">我的家谱</view>
-      <view class="family-option {{currentFamily && item._id === currentFamily._id ? 'selected' : ''}}" wx:for="{{familyList}}" wx:key="_id" data-id="{{item._id}}" bindtap="switchFamily"><view><text class="family-option-name">{{item.name}}</text><text class="family-option-role">{{item.currentRole === 'admin' ? '管理员' : item.currentRole === 'member' ? '家庭成员' : '访客'}}</text></view><text class="selected-text" wx:if="{{currentFamily && item._id === currentFamily._id}}">当前</text></view>
-      <button class="secondary-button create-family-button" bindtap="createFamily">创建另一份家谱</button>
-    </view>
-  </view>
+  <view class="sheet-mask" wx:if="{{showFamilySheet}}" bindtap="closeFamilySheet"><view class="bottom-sheet" catchtap="stopEvent"><view class="sheet-handle"></view><view class="sheet-title">切换家谱</view><view class="family-option {{currentFamily && item._id === currentFamily._id ? 'selected' : ''}}" wx:for="{{familyList}}" wx:key="_id" data-id="{{item._id}}" bindtap="switchFamily"><view><text class="family-option-name">{{item.name}}</text><text class="family-option-role">{{item.currentRole === 'admin' ? '家谱管理员' : item.currentRole === 'member' ? '家庭成员' : '访客'}} · {{item.personCount}} 位成员</text></view><text class="selected-text" wx:if="{{currentFamily && item._id === currentFamily._id}}">当前</text></view><button class="secondary-button create-family-button" bindtap="createFamily">创建另一份家谱</button></view></view>
 </view>

@@ -26,6 +26,7 @@ const COLLECTIONS = [
   'backup_manifests',
   'profile_sync_tasks',
   'rate_limits',
+  'export_tasks',
   'example_templates',
   'example_template_versions'
 ];
@@ -91,7 +92,7 @@ async function ensureCollections(event) {
   }
   await db.collection('system_config').doc('schema').set({
     data: {
-      version: 3,
+      version: 4,
       graphPersonLimit: 500,
       archiveRetentionDays: 30,
       deletionCoolingDays: 7,
@@ -193,6 +194,22 @@ async function removeMany(collectionName, where, limit) {
     if (page.data.length < 100) break;
   }
   return removed;
+}
+
+async function listAllForExport(collectionName, where, limit) {
+  const hardLimit = limit || 50000;
+  let offset = 0;
+  const rows = [];
+  while (rows.length < hardLimit) {
+    const page = await db.collection(collectionName).where(where).skip(offset).limit(100).get();
+    const items = page.data || [];
+    rows.push.apply(rows, items);
+    if (items.length < 100) return rows;
+    offset += items.length;
+  }
+  const error = new Error('导出数据量超过当前任务安全上限，请联系微信客服');
+  error.code = 'EXPORT_RESULT_LIMIT_EXCEEDED';
+  throw error;
 }
 
 async function expireInvitations() {
@@ -490,6 +507,125 @@ async function cleanTemporaryData() {
   };
 }
 
+async function familyNameMap(memberships, changes) {
+  const ids = new Set();
+  (memberships || []).forEach(function (item) { if (item.familyId) ids.add(item.familyId); });
+  (changes || []).forEach(function (item) { if (item.familyId) ids.add(item.familyId); });
+  const names = {};
+  for (const familyId of ids) {
+    const family = await maybeGet('families', familyId);
+    names[familyId] = family && family.name ? String(family.name).slice(0, 40) : '已删除家谱';
+  }
+  return names;
+}
+
+async function buildAccountExport(task) {
+  const user = await maybeGet('users', task.userId);
+  if (!user || user.status === 'deleted') {
+    const error = new Error('账户已注销，无法生成导出文件');
+    error.code = 'EXPORT_ACCOUNT_UNAVAILABLE';
+    throw error;
+  }
+  const memberships = await listAllForExport('family_memberships', { userId: task.userId }, 50000);
+  const changes = await listAllForExport('change_requests', { createdBy: task.userId }, 50000);
+  const reports = await listAllForExport('reports', { reporterId: task.userId }, 50000);
+  const familyNames = await familyNameMap(memberships, changes);
+  return {
+    exportedAt: new Date().toISOString(),
+    account: {
+      nickName: user.nickName || '',
+      status: user.status || 'active',
+      createdAt: user.createdAt || null
+    },
+    memberships: memberships.map(function (item) {
+      return {
+        familyName: familyNames[item.familyId] || '已删除家谱',
+        role: item.role || 'viewer',
+        status: item.status || '',
+        joinedAt: item.joinedAt || null
+      };
+    }),
+    changeRequests: changes.map(function (item) {
+      return {
+        familyName: familyNames[item.familyId] || '已删除家谱',
+        type: item.type || '',
+        status: item.status || '',
+        createdAt: item.createdAt || null,
+        updatedAt: item.updatedAt || null
+      };
+    }),
+    reports: reports.map(function (item) {
+      return {
+        targetType: item.targetType || '',
+        status: item.status || '',
+        createdAt: item.createdAt || null,
+        updatedAt: item.updatedAt || null
+      };
+    })
+  };
+}
+
+async function claimExportTask(taskId) {
+  return db.runTransaction(async function (transaction) {
+    const result = await transaction.collection('export_tasks').doc(taskId).get();
+    const task = result.data;
+    if (!task || task.status !== 'pending') return null;
+    await transaction.collection('export_tasks').doc(taskId).update({
+      data: { status: 'processing', startedAt: db.serverDate(), updatedAt: db.serverDate() }
+    });
+    return task;
+  });
+}
+
+async function processExportTasks() {
+  const page = await db.collection('export_tasks').where({ status: 'pending' }).limit(2).get();
+  const completed = [];
+  const failed = [];
+  for (const queued of page.data || []) {
+    const task = await claimExportTask(queued._id);
+    if (!task) continue;
+    try {
+      const payload = await buildAccountExport(task);
+      const content = Buffer.from(JSON.stringify(payload, null, 2), 'utf8');
+      const cloudPath = ['exports', task.userId, queued._id + '.json'].join('/');
+      const uploaded = await cloud.uploadFile({ cloudPath: cloudPath, fileContent: content });
+      if (!uploaded || !uploaded.fileID) throw new Error('导出文件上传失败');
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      await db.collection('export_tasks').doc(queued._id).update({
+        data: {
+          status: 'completed', fileId: uploaded.fileID, cloudPath: cloudPath, size: content.length,
+          completedAt: db.serverDate(), expiresAt: expiresAt, updatedAt: db.serverDate()
+        }
+      });
+      completed.push(queued._id);
+    } catch (error) {
+      await db.collection('export_tasks').doc(queued._id).update({
+        data: {
+          status: 'failed', failureMessage: String(error.message || '导出任务失败').slice(0, 160),
+          failedAt: db.serverDate(), updatedAt: db.serverDate()
+        }
+      });
+      failed.push(queued._id);
+    }
+  }
+  return { completed: completed, failed: failed };
+}
+
+async function expireExportTasks() {
+  const page = await db.collection('export_tasks').where({
+    status: _.in(['completed', 'download_issued']),
+    expiresAt: _.lte(new Date())
+  }).limit(50).get();
+  const fileIds = (page.data || []).map(function (task) { return task.fileId; }).filter(Boolean);
+  if (fileIds.length) await deleteFilesStrict(fileIds);
+  for (const task of page.data || []) {
+    await db.collection('export_tasks').doc(task._id).update({
+      data: { status: 'expired', fileId: '', expiredAt: db.serverDate(), updatedAt: db.serverDate() }
+    });
+  }
+  return (page.data || []).length;
+}
+
 async function createBackupManifest() {
   const counts = {};
   for (const collectionName of COLLECTIONS) {
@@ -520,7 +656,9 @@ async function maintenanceRun() {
     invitations: await expireInvitations(),
     deletions: await processDeletions(),
     archivedFamilies: await purgeArchivedFamilies(),
+    exports: await processExportTasks(),
     cleanup: await cleanTemporaryData(),
+    expiredExports: await expireExportTasks(),
     backupManifest: await createBackupManifest()
   };
 }
@@ -530,7 +668,8 @@ async function frequentRun() {
     recoveredDeletions: await recoverStaleDeletions(),
     profileSync: await syncProfiles(),
     invitations: await expireInvitations(),
-    deletions: await processDeletions()
+    deletions: await processDeletions(),
+    exports: await processExportTasks()
   };
 }
 

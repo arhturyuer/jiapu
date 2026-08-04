@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "indexes": {
     "users": [
       { "name": "openid_unique", "unique": true, "sparse": true, "fields": [{ "field": "openid", "order": "asc" }] },
@@ -76,6 +76,10 @@
     ],
     "rate_limits": [
       { "name": "expires", "fields": [{ "field": "expiresAt", "order": "asc" }] }
+    ],
+    "export_tasks": [
+      { "name": "status_id", "fields": [{ "field": "status", "order": "asc" }, { "field": "_id", "order": "asc" }] },
+      { "name": "status_expires", "fields": [{ "field": "status", "order": "asc" }, { "field": "expiresAt", "order": "asc" }] }
     ],
     "operators": [
       { "name": "auth_uid_unique", "unique": true, "fields": [{ "field": "authUid", "order": "asc" }] },

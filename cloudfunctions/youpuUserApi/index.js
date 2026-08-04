@@ -11,6 +11,9 @@ const GRAPH_PERSON_LIMIT = 500;
 const GRAPH_RELATION_LIMIT = 2000;
 const ACTIVE_ROLES = domain.ACTIVE_ROLES;
 const RATE_LIMITS = {
+  'auth.updateProfile': { max: 20, windowMs: 60 * 60 * 1000 },
+  'auth.updateAvatar': { max: 20, windowMs: 60 * 60 * 1000 },
+  'account.export': { max: 3, windowMs: 24 * 60 * 60 * 1000 },
   'family.create': { max: 10, windowMs: 24 * 60 * 60 * 1000 },
   'invite.create': { max: 60, windowMs: 60 * 60 * 1000 },
   'invite.preview': { max: 60, windowMs: 60 * 1000 },
@@ -21,6 +24,8 @@ const RATE_LIMITS = {
 const MUTATION_TYPES = new Set([
   'auth.updateProfile',
   'auth.updateAvatar',
+  'account.export',
+  'account.exportUrl',
   'account.requestDeletion',
   'account.cancelDeletion',
   'family.create',
@@ -472,7 +477,11 @@ async function mutate(type, event, openid, handler) {
   const recordId = idempotencyId(openid, type, requestId);
   return db.runTransaction(async function (transaction) {
     const actor = await maybeGet(transaction, 'users', userId(openid));
-    const allowedActorStatuses = type === 'account.cancelDeletion' ? ['pending_delete'] : ['active'];
+    const allowedActorStatuses = ['account.cancelDeletion'].includes(type)
+      ? ['pending_delete']
+      : ['account.export', 'account.exportUrl'].includes(type)
+        ? ['active', 'pending_delete']
+        : ['active'];
     assert(actor && allowedActorStatuses.includes(actor.status), 'ACCOUNT_UNAVAILABLE', '账户当前无法执行此操作');
     const existing = await maybeGet(transaction, 'idempotency_records', recordId);
     if (existing && existing.status === 'completed') return existing.result || {};
@@ -722,32 +731,78 @@ async function authUpdateAvatar(event) {
   });
 }
 
-async function accountExport() {
+async function accountExport(event) {
   const openid = getOpenid();
   const user = await ensureUser(openid);
   assert(['active', 'pending_delete'].includes(user.status), 'ACCOUNT_UNAVAILABLE', '账户当前不可导出');
-  const memberships = await listAll('family_memberships', { userId: user._id }, 200);
-  const changes = await listAll('change_requests', { createdBy: user._id }, 1000);
-  const reports = await listAll('reports', { reporterId: user._id }, 1000);
+  return mutate('account.export', event, openid, async function (transaction) {
+    const current = await ensureUser(openid, transaction);
+    const taskId = 'exp_' + randomToken(18);
+    await transaction.collection('export_tasks').doc(taskId).set({
+      data: {
+        userId: current._id,
+        status: 'pending',
+        requestedAt: db.serverDate(),
+        expiresAt: null,
+        updatedAt: db.serverDate()
+      }
+    });
+    await audit(transaction, {
+      openid: openid,
+      actorName: current.nickName,
+      action: 'account.export_requested',
+      objectType: 'export_task',
+      objectId: taskId,
+      summary: '申请导出个人信息',
+      requestId: event.requestId
+    });
+    return { taskId: taskId, status: 'pending' };
+  });
+}
+
+function publicExportTask(task) {
   return {
-    exportedAt: new Date().toISOString(),
-    account: {
-      id: user._id,
-      nickName: user.nickName || '',
-      avatarAssetId: user.avatarAssetId || '',
-      status: user.status,
-      createdAt: user.createdAt || null
-    },
-    memberships: memberships.map(function (item) {
-      return { familyId: item.familyId, role: item.role, status: item.status, joinedAt: item.joinedAt || null };
-    }),
-    changeRequests: changes.map(function (item) {
-      return { id: item._id, familyId: item.familyId, type: item.type, status: item.status, createdAt: item.createdAt || null };
-    }),
-    reports: reports.map(function (item) {
-      return { id: item._id, targetType: item.targetType, status: item.status, createdAt: item.createdAt || null };
-    })
+    taskId: task._id,
+    status: task.status || 'pending',
+    requestedAt: task.requestedAt || null,
+    completedAt: task.completedAt || null,
+    expiresAt: task.expiresAt || null,
+    failureMessage: task.status === 'failed' ? cleanText(task.failureMessage, 120) : ''
   };
+}
+
+async function accountExportStatus(event) {
+  const openid = getOpenid();
+  const user = await ensureUser(openid);
+  assert(['active', 'pending_delete'].includes(user.status), 'ACCOUNT_UNAVAILABLE', '账户当前不可查询导出状态');
+  const taskId = cleanText(event.taskId, 80);
+  assert(taskId, 'EXPORT_TASK_REQUIRED', '缺少导出任务信息');
+  const task = await mustGet(db, 'export_tasks', taskId, 'EXPORT_TASK_NOT_FOUND', '导出任务不存在');
+  assert(task.userId === user._id, 'NO_PERMISSION', '不能查看其他用户的导出任务');
+  return publicExportTask(task);
+}
+
+async function accountExportUrl(event) {
+  const openid = getOpenid();
+  const user = await ensureUser(openid);
+  assert(['active', 'pending_delete'].includes(user.status), 'ACCOUNT_UNAVAILABLE', '账户当前不可获取导出文件');
+  const taskId = cleanText(event.taskId, 80);
+  assert(taskId, 'EXPORT_TASK_REQUIRED', '缺少导出任务信息');
+  const task = await mustGet(db, 'export_tasks', taskId, 'EXPORT_TASK_NOT_FOUND', '导出任务不存在');
+  assert(task.userId === user._id, 'NO_PERMISSION', '不能获取其他用户的导出文件');
+  assert(task.status === 'completed' && task.fileId && task.expiresAt && new Date(task.expiresAt).getTime() > Date.now(), 'EXPORT_NOT_READY', '导出文件暂不可用');
+  const tempResult = await cloud.getTempFileURL({ fileList: [task.fileId] });
+  const url = tempResult.fileList && tempResult.fileList[0] && tempResult.fileList[0].tempFileURL;
+  assert(url, 'EXPORT_URL_FAILED', '导出文件链接生成失败，请稍后重试');
+  return mutate('account.exportUrl', event, openid, async function (transaction) {
+    const current = await mustGet(transaction, 'export_tasks', taskId, 'EXPORT_TASK_NOT_FOUND', '导出任务不存在');
+    assert(current.userId === user._id, 'NO_PERMISSION', '不能获取其他用户的导出文件');
+    assert(current.status === 'completed' && !current.downloadIssuedAt, 'EXPORT_LINK_ALREADY_ISSUED', '导出链接已生成，请重新申请导出');
+    await transaction.collection('export_tasks').doc(taskId).update({
+      data: { status: 'download_issued', downloadIssuedAt: db.serverDate(), updatedAt: db.serverDate() }
+    });
+    return { url: url, expiresAt: current.expiresAt || null };
+  });
 }
 
 async function accountRequestDeletion(event) {
@@ -2107,6 +2162,35 @@ async function mediaGetStates(event) {
   return { states: states };
 }
 
+async function mediaGetPresentation(event) {
+  const openid = getOpenid();
+  await requireActiveUser(openid);
+  const ids = Array.from(new Set((event.assetIds || []).map(function (id) {
+    return cleanText(id, 80);
+  }).filter(Boolean))).slice(0, 50);
+  if (!ids.length) return { items: {} };
+  const result = await db.collection('media_assets').where({ _id: _.in(ids) }).get();
+  const accessible = [];
+  const items = {};
+  for (const asset of result.data || []) {
+    let allowed = false;
+    if (!asset.familyId) allowed = asset.ownerId === userId(openid);
+    else allowed = Boolean(await getMembership(db, asset.familyId, openid));
+    if (!allowed) continue;
+    const status = asset.status === 'deleted' ? 'deleted' : (asset.moderationStatus || 'pending');
+    items[asset._id] = { status: status, url: '' };
+    if (status === 'approved' && asset.status === 'active' && asset.fileId) accessible.push(asset);
+  }
+  if (accessible.length) {
+    const tempResult = await cloud.getTempFileURL({ fileList: accessible.map(function (asset) { return asset.fileId; }) });
+    accessible.forEach(function (asset, index) {
+      const item = tempResult.fileList[index];
+      if (item && item.tempFileURL) items[asset._id].url = item.tempFileURL;
+    });
+  }
+  return { items: items };
+}
+
 function publicExamplePerson(person) {
   const source = person || {};
   return {
@@ -2197,6 +2281,8 @@ const handlers = {
   'auth.updateProfile': authUpdateProfile,
   'auth.updateAvatar': authUpdateAvatar,
   'account.export': accountExport,
+  'account.exportStatus': accountExportStatus,
+  'account.exportUrl': accountExportUrl,
   'account.requestDeletion': accountRequestDeletion,
   'account.cancelDeletion': accountCancelDeletion,
   'family.create': familyCreate,
@@ -2231,6 +2317,7 @@ const handlers = {
   'media.complete': mediaComplete,
   'media.getUrls': mediaGetUrls,
   'media.getStates': mediaGetStates,
+  'media.getPresentation': mediaGetPresentation,
   'examples.list': examplesList,
   'examples.get': examplesGet
 };
