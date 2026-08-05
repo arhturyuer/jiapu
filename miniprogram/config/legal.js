@@ -1,7 +1,7 @@
 module.exports = {
-  operatorName: '运营者',
+  operatorName: '赵东明',
   contactChannel: '微信官方客服',
   registrationVerified: true,
-  effectiveDate: '2026-07-14',
+  effectiveDate: '2026-08-05',
   privacyVersion: '1.0'
 };

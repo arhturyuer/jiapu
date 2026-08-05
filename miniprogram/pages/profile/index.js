@@ -247,6 +247,6 @@ Page({
     });
   },
 
-  showAbout: function () { wx.showModal({ title: '关于有谱', content: '有谱 · 一家人，共修一份家谱\n\n一个人快速创建，一家人共同补全，由少数管理员维护秩序。', showCancel: false, confirmText: '知道了' }); },
+  showAbout: function () { wx.showModal({ title: '关于有谱', content: '有谱由独立开发者打造，尝试用小程序与云端能力，让家谱记录更轻松、更便于协作。\n\n我们关注清晰的亲属关系、多人共同维护，以及家庭资料的隐私保护。\n\n愿每份家庭记忆，都能被好好保存。', showCancel: false, confirmText: '知道了' }); },
   stopEvent: function () {}
 });

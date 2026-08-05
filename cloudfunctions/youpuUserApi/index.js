@@ -120,6 +120,25 @@ async function deleteFilesStrict(fileIds) {
   assert(!failed.length, 'STORAGE_DELETE_FAILED', '云存储文件删除失败，请稍后重试');
 }
 
+async function inspectPrivateUpload(fileId) {
+  const urls = await cloud.getTempFileURL({ fileList: [fileId] });
+  const item = urls.fileList && urls.fileList[0];
+  const url = item && item.tempFileURL;
+  assert(url, 'MEDIA_URL_FAILED', '图片校验准备失败');
+  let response;
+  try {
+    response = await fetch(url, { method: 'GET', headers: { Range: 'bytes=0-0' } });
+  } catch (error) {
+    throw new BusinessError('MEDIA_INSPECTION_FAILED', '无法校验图片大小，请重新上传');
+  }
+  const contentRange = response.headers.get('content-range') || '';
+  const rangeMatch = contentRange.match(/\/(\d+)$/);
+  const size = rangeMatch ? Number(rangeMatch[1]) : Number(response.headers.get('content-length'));
+  if (response.body && response.body.cancel) await response.body.cancel();
+  assert(response.ok && Number.isFinite(size) && size > 0, 'MEDIA_INSPECTION_FAILED', '无法校验图片大小，请重新上传');
+  return { url: url, size: size };
+}
+
 function userId(openid) {
   return 'u_' + hash(openid, 32);
 }
@@ -2040,9 +2059,9 @@ async function mediaComplete(event) {
   const asset = await mustGet(db, 'media_assets', event.assetId, 'MEDIA_NOT_FOUND', '上传任务不存在');
   assert(asset.ownerId === user._id, 'NO_PERMISSION', '不能处理其他用户的文件');
   const fileId = cleanText(event.fileId, 500);
-  assert(fileId && fileId.includes(asset.cloudPath), 'INVALID_MEDIA_PATH', '上传文件与任务不匹配');
-  const size = Math.max(0, Number(event.size) || 0);
-  assert(size > 0, 'MEDIA_SIZE_REQUIRED', '无法读取图片大小，请重新选择图片');
+  assert(fileId && fileId.endsWith('/' + asset.cloudPath), 'INVALID_MEDIA_PATH', '上传文件与任务不匹配');
+  const inspected = await inspectPrivateUpload(fileId);
+  const size = inspected.size;
   if (size > 5 * 1024 * 1024) {
     await db.collection('media_assets').doc(asset._id).update({
       data: {
@@ -2069,15 +2088,12 @@ async function mediaComplete(event) {
     moderationStatus = 'approved';
   } else {
     try {
-      const urls = await cloud.getTempFileURL({ fileList: [fileId] });
-      const url = urls.fileList && urls.fileList[0] && urls.fileList[0].tempFileURL;
-      assert(url, 'MEDIA_URL_FAILED', '图片审核准备失败');
       const response = await cloud.openapi.security.mediaCheckAsync({
         openid: openid,
         scene: 2,
         version: 2,
         mediaType: 2,
-        mediaUrl: url
+        mediaUrl: inspected.url
       });
       traceId = response.traceId || response.trace_id || '';
       moderationStatus = 'pending';

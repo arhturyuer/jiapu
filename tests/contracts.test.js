@@ -109,6 +109,20 @@ test('个人导出使用私有异步任务，不会复制数据到剪贴板', fu
   assert.ok(indexes.indexes.export_tasks);
 });
 
+test('正式发布锁定生产环境、登记主体和示例集合索引', function () {
+  const environment = require(path.join(root, 'miniprogram/config/env.js'));
+  const legal = require(path.join(root, 'miniprogram/config/legal.js'));
+  const preflight = fs.readFileSync(path.join(root, 'deployment/preflight.sh'), 'utf8');
+  const indexes = JSON.parse(fs.readFileSync(path.join(root, 'deployment/database-indexes.json'), 'utf8'));
+  assert.equal(environment.active, 'production');
+  assert.ok(environment.environments.production.cloudEnv);
+  assert.equal(legal.registrationVerified, true);
+  assert.doesNotMatch(legal.operatorName, /^(运营者|有谱小程序运营者|待填写|测试主体|示例主体)$/);
+  assert.match(preflight, /ACTIVE_ENV\}" != "production/);
+  assert.ok(indexes.indexes.example_templates.some(function (index) { return index.name === 'slug_unique' && index.unique; }));
+  assert.ok(indexes.indexes.example_template_versions.some(function (index) { return index.name === 'template_version_unique' && index.unique; }));
+});
+
 test('账户资料更新和导出请求具备用户级限流', function () {
   const userApi = fs.readFileSync(path.join(root, 'cloudfunctions/youpuUserApi/index.js'), 'utf8');
   assert.match(userApi, /'auth\.updateProfile':\s*\{ max: 20, windowMs: 60 \* 60 \* 1000 \}/);
@@ -143,7 +157,7 @@ test('生产基础库、云函数运行时和客户端直连禁用配置已锁�
   assert.equal(databaseRule.write, false);
 });
 
-test('函数与存储安全规则使用 CloudBase 支持的表达式且生产不静默降级', function () {
+test('函数与存储安全规则支持个人套餐显式 PRIVATE 生产基线', function () {
   const functionRules = JSON.parse(fs.readFileSync(path.join(root, 'deployment/security/function-rules.json'), 'utf8'));
   const authenticatedRule = "auth.loginType != 'ANONYMOUS' && auth != null";
   assert.equal(functionRules['*'].invoke, false);
@@ -159,7 +173,18 @@ test('函数与存储安全规则使用 CloudBase 支持的表达式且生产不
 
   const deployScript = fs.readFileSync(path.join(root, 'deployment/apply-security.mjs'), 'utf8');
   assert.match(deployScript, /OperationDenied\.FreePackageDenied/);
-  assert.match(deployScript, /ALLOW_PRIVATE_STORAGE_FALLBACK !== '1'/);
+  assert.match(deployScript, /ALLOW_PERSONAL_PRIVATE_STORAGE !== '1'/);
+  assert.match(deployScript, /storagePermissionName !== 'PRIVATE'/);
+});
+
+test('个人套餐上传由服务端核验对象路径和真实大小', function () {
+  const userApi = fs.readFileSync(path.join(root, 'cloudfunctions/youpuUserApi/index.js'), 'utf8');
+  assert.match(userApi, /fileId\.endsWith\('\/' \+ asset\.cloudPath\)/);
+  assert.match(userApi, /Range:\s*'bytes=0-0'/);
+  assert.match(userApi, /const size = inspected\.size/);
+  assert.doesNotMatch(userApi, /Number\(event\.size\)/);
+  assert.match(userApi, /size > 5 \* 1024 \* 1024/);
+  assert.match(userApi, /moderationStatus: 'approved', status: 'active'/);
 });
 
 test('事务只按文档主键读写且后台清理具备并发抢占和续跑保护', function () {

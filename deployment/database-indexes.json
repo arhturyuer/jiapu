@@ -97,6 +97,14 @@
     ],
     "notifications": [
       { "name": "family_id", "fields": [{ "field": "familyId", "order": "asc" }, { "field": "_id", "order": "asc" }] }
+    ],
+    "example_templates": [
+      { "name": "slug_unique", "unique": true, "fields": [{ "field": "slug", "order": "asc" }] },
+      { "name": "status_sort_id", "fields": [{ "field": "status", "order": "asc" }, { "field": "sortOrder", "order": "asc" }, { "field": "_id", "order": "asc" }] }
+    ],
+    "example_template_versions": [
+      { "name": "template_version_unique", "unique": true, "fields": [{ "field": "templateId", "order": "asc" }, { "field": "version", "order": "asc" }] },
+      { "name": "template_id", "fields": [{ "field": "templateId", "order": "asc" }, { "field": "_id", "order": "asc" }] }
     ]
   }
 }

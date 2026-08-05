@@ -149,7 +149,7 @@ try {
   customStorageApplied = true;
 } catch (error) {
   const isFreePlanRestriction = String(error.message || '').includes('OperationDenied.FreePackageDenied');
-  if (!isFreePlanRestriction || process.env.ALLOW_PRIVATE_STORAGE_FALLBACK !== '1') throw error;
+  if (!isFreePlanRestriction || process.env.ALLOW_PERSONAL_PRIVATE_STORAGE !== '1') throw error;
 }
 const storagePermission = callCli(['storage', 'rules', 'get', '--json', '-e', envId]);
 const storagePermissionName = storagePermission.Permission || storagePermission.permission || storagePermission.acl || storagePermission.Acl;
@@ -160,8 +160,8 @@ if (customStorageApplied) {
   }
   console.log('云存储安全规则已校验（' + storageBucket + '）：仅允许登录用户写入私有 staging 图片，客户端不可直读');
 } else {
-  if (storagePermissionName !== 'PRIVATE') throw new Error('免费套餐的 PRIVATE 存储降级规则回读校验失败');
-  console.warn('云存储使用预发布降级规则 PRIVATE（' + storageBucket + '）：升级套餐后必须重新部署 CUSTOM 规则');
+  if (storagePermissionName !== 'PRIVATE') throw new Error('个人套餐的 PRIVATE 存储规则回读校验失败');
+  console.warn('云存储使用个人套餐生产基线 PRIVATE（' + storageBucket + '）：对象创建者可访问本人上传对象，家庭展示仍仅通过服务端审核后的临时链接');
 }
 
 console.log('三层安全权限部署完成。');

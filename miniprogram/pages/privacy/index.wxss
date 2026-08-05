@@ -18,7 +18,9 @@
 .action-row { width: 100%; min-height: 116rpx; padding: 20rpx 0; display: flex; align-items: center; justify-content: space-between; background: transparent; border-bottom: 2rpx solid #EEF0ED; text-align: left; }
 .action-row-active { background: #F4F8F5; }
 .action-row:last-child { border-bottom: none; }
-.contact-row { border-radius: 0; }
+.contact-row { position: relative; }
+.contact-trigger { position: absolute; z-index: 1; top: 0; right: 0; bottom: 0; left: 0; margin: 0; padding: 0; background: transparent; border-radius: 0; }
+.contact-trigger::after { border: none; }
 .action-title, .action-desc { display: block; }
 .action-title { font-size: 32rpx; font-weight: 650; }
 .action-desc { margin-top: 6rpx; color: #65706A; font-size: 27rpx; line-height: 1.45; }

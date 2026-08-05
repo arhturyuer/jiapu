@@ -1,5 +1,5 @@
 module.exports = {
-  active: 'staging',
+  active: 'production',
   environments: {
     production: {
       cloudEnv: 'cloud1-d5gs5yj4l283d9c6d',
