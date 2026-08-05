@@ -81,7 +81,7 @@ test('我的页具备账户三态、单次家谱加载和受控媒体展示', fu
   assert.match(template, /账户正在注销冷静期/);
   assert.match(template, /创建第一份家谱/);
   assert.match(template, /查看家谱/);
-  assert.match(template, /同步到你加入的所有家谱/);
+  assert.match(template, /保存名字/);
   assert.match(clientApi, /function getMediaPresentation/);
   assert.match(userApi, /'media\.getPresentation':\s*mediaGetPresentation/);
   assert.match(userApi, /asset\.ownerId === userId\(openid\)/);

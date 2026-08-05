@@ -4,11 +4,34 @@ const privacy = require('../../utils/privacy');
 const formState = require('../../utils/form-state');
 const format = require('../../utils/format');
 
-function profileAvatarState(status) {
-  if (status === 'approved') return { state: 'approved', text: '头像已通过审核，正在所有家谱中展示' };
-  if (status === 'rejected' || status === 'deleted') return { state: 'rejected', text: '头像未通过审核，请重新选择' };
-  if (status === 'pending' || status === 'review') return { state: 'pending', text: '头像已保存，审核通过后会自动展示' };
-  return { state: '', text: '' };
+var AVATAR_CACHE_KEY = 'youpu_avatar_cache';
+
+function getCachedAvatarUrl(assetId) {
+  if (!assetId) return '';
+  try {
+    var cache = wx.getStorageSync(AVATAR_CACHE_KEY) || {};
+    var entry = cache[assetId];
+    if (entry && entry.url) return entry.url;
+  } catch (e) { /* ignore */ }
+  return '';
+}
+
+function cacheAvatarUrl(assetId, url) {
+  if (!assetId || !url) return;
+  try {
+    var cache = wx.getStorageSync(AVATAR_CACHE_KEY) || {};
+    cache[assetId] = { url: url, time: Date.now() };
+    wx.setStorageSync(AVATAR_CACHE_KEY, cache);
+  } catch (e) { /* ignore */ }
+}
+
+function clearCachedAvatarUrl(assetId) {
+  if (!assetId) return;
+  try {
+    var cache = wx.getStorageSync(AVATAR_CACHE_KEY) || {};
+    delete cache[assetId];
+    wx.setStorageSync(AVATAR_CACHE_KEY, cache);
+  } catch (e) { /* ignore */ }
 }
 
 function splitFamilies(items) {
@@ -44,17 +67,14 @@ Page({
     nickName: '',
     avatarUrl: '',
     avatarAssetId: '',
-    avatarState: '',
-    avatarStateText: '',
-    avatarError: '',
     savingAvatar: false,
+    savingProfile: false,
     hasNameChanges: false,
     familyList: [],
     archivedFamilies: [],
     currentFamily: null,
     currentRoleText: '',
     currentFamilyUpdatedText: '',
-    savingProfile: false,
     showFamilySheet: false
   },
 
@@ -70,10 +90,11 @@ Page({
       const accountState = app.globalData.accountState || user.status || 'active';
       const deletion = app.globalData.deletion || null;
       if (accountState === 'pending_delete') {
+        const pendingCachedUrl = getCachedAvatarUrl(user.avatarAssetId);
         self.setData({
           loading: false, accountState: accountState, deletion: deletion, user: user,
           nickName: user.nickName || '', avatarAssetId: user.avatarAssetId || '',
-          avatarUrl: '', avatarState: '', avatarStateText: '', familyList: [], archivedFamilies: [], currentFamily: null
+          avatarUrl: pendingCachedUrl, familyList: [], archivedFamilies: [], currentFamily: null
         });
         formState.clearLeaveAlert(self);
         return null;
@@ -82,10 +103,11 @@ Page({
         const grouped = splitFamilies(result.families);
         const currentFamily = reconcileCurrentFamily(grouped.active);
         self._initialNickName = user.nickName || '';
+        const cachedUrl = getCachedAvatarUrl(user.avatarAssetId);
         self.setData({
           loading: false, accountState: accountState, deletion: deletion, user: user,
-          nickName: user.nickName || '', avatarUrl: '', avatarAssetId: user.avatarAssetId || '',
-          avatarState: '', avatarStateText: '', avatarError: '', savingAvatar: false, hasNameChanges: false,
+          nickName: user.nickName || '', avatarUrl: cachedUrl, avatarAssetId: user.avatarAssetId || '',
+          savingAvatar: false, savingProfile: false,
           familyList: grouped.active, archivedFamilies: grouped.archived, currentFamily: currentFamily,
           currentRoleText: currentFamily ? format.roleText(currentFamily.currentRole) : '',
           currentFamilyUpdatedText: currentFamily && currentFamily.updatedAt ? '最近更新 ' + format.relativeTime(currentFamily.updatedAt) : ''
@@ -94,10 +116,12 @@ Page({
         if (!user.avatarAssetId) return null;
         return api.getMediaPresentation([user.avatarAssetId]).then(function (presentation) {
           const item = presentation[user.avatarAssetId] || {};
-          const avatarPresentation = profileAvatarState(item.status || '');
-          self.setData({ avatarUrl: item.url || '', avatarState: avatarPresentation.state, avatarStateText: avatarPresentation.text });
+          const freshUrl = item.url || '';
+          if (freshUrl) cacheAvatarUrl(user.avatarAssetId, freshUrl);
+          else if (item.status === 'rejected' || item.status === 'deleted') clearCachedAvatarUrl(user.avatarAssetId);
+          self.setData({ avatarUrl: freshUrl || cachedUrl });
         }).catch(function () {
-          self.setData({ avatarState: 'unavailable', avatarStateText: '头像状态暂时无法更新，不影响其他功能' });
+          // keep cached url on error
         });
       });
     }).catch(function (error) {
@@ -106,14 +130,13 @@ Page({
   },
 
   inputNickname: function (event) {
-    const self = this;
-    this.setData({ nickName: event.detail.value }, function () { self.refreshProfileState(); });
+    const value = event.detail.value || '';
+    const hasNameChanges = value.trim() !== String(this._initialNickName || '');
+    this.setData({ nickName: value, hasNameChanges: hasNameChanges });
   },
 
   refreshProfileState: function () {
-    const hasNameChanges = String(this.data.nickName || '').trim() !== String(this._initialNickName || '');
-    if (this.data.hasNameChanges !== hasNameChanges) this.setData({ hasNameChanges: hasNameChanges });
-    formState.syncLeaveAlert(this, hasNameChanges || this.data.savingAvatar || this.data.avatarState === 'failed', '名字或头像尚未保存，确定离开吗？');
+    formState.syncLeaveAlert(this, this.data.savingAvatar || this.data.savingProfile, '头像或名字尚未保存，确定离开吗？');
   },
 
   chooseAvatar: function () {
@@ -125,56 +148,60 @@ Page({
     }).then(function (result) {
       const file = result.tempFiles[0];
       selectedPath = file.tempFilePath;
-      self.setData({ avatarUrl: selectedPath, savingAvatar: true, avatarState: 'uploading', avatarStateText: '正在上传头像…', avatarError: '' }, function () { self.refreshProfileState(); });
+      self.setData({ avatarUrl: selectedPath, savingAvatar: true }, function () { self.refreshProfileState(); });
       return api.uploadImage(file.tempFilePath, 'user-avatars', { kind: 'user_avatar', size: file.size || 0 });
     }).then(function (media) {
       self._pendingAvatarMedia = media;
       return self.saveProfileAvatar(media);
     }).catch(function (error) {
       if (error && error.errMsg && error.errMsg.indexOf('cancel') >= 0) return;
-      self.setData({ avatarUrl: selectedPath || self.data.avatarUrl, savingAvatar: false, avatarState: 'failed', avatarStateText: '头像保存失败，请重新选择后重试', avatarError: error.message || error.errMsg || '头像保存失败' }, function () { self.refreshProfileState(); });
+      self.setData({ avatarUrl: selectedPath || self.data.avatarUrl, savingAvatar: false }, function () { self.refreshProfileState(); });
       wx.showToast({ title: error.message || error.errMsg || '头像上传失败', icon: 'none' });
     });
   },
 
   saveProfileAvatar: function (media) {
     const self = this;
-    this.setData({ avatarUrl: media.previewUrl || this.data.avatarUrl, avatarAssetId: media.assetId, savingAvatar: true, avatarState: 'saving', avatarStateText: '正在保存头像…', avatarError: '' }, function () { self.refreshProfileState(); });
+    this.setData({ avatarUrl: media.previewUrl || this.data.avatarUrl, avatarAssetId: media.assetId, savingAvatar: true }, function () { self.refreshProfileState(); });
     return api.call('auth.updateAvatar', { avatarAssetId: media.assetId }).then(function (data) {
       self._pendingAvatarMedia = null;
       app.setUser(data.user);
-      const presentation = profileAvatarState(data.moderationStatus || media.moderationStatus);
-      self.setData({ user: data.user, savingAvatar: false, avatarState: presentation.state, avatarStateText: presentation.text }, function () { self.refreshProfileState(); });
-      wx.showToast({ title: media.ready ? '头像已更新' : '头像已保存，等待审核', icon: media.ready ? 'success' : 'none' });
-      return data;
-    });
-  },
-
-  retryAvatarSave: function () {
-    if (this.data.savingAvatar || this.data.savingProfile) return;
-    if (this._pendingAvatarMedia) {
-      const self = this;
-      this.saveProfileAvatar(this._pendingAvatarMedia).catch(function (error) {
-        self.setData({ savingAvatar: false, avatarState: 'failed', avatarStateText: '头像保存失败，请重新选择后重试', avatarError: error.message || '头像保存失败' }, function () { self.refreshProfileState(); });
+      const approved = (data.moderationStatus || media.moderationStatus) === 'approved';
+      // Fetch the fresh presentation URL for approved avatars
+      const fetchPresentation = approved
+        ? api.getMediaPresentation([media.assetId]).then(function (result) {
+            const item = result[media.assetId] || {};
+            return item.url || '';
+          }).catch(function () { return ''; })
+        : Promise.resolve('');
+      return fetchPresentation.then(function (freshUrl) {
+        if (freshUrl) {
+          cacheAvatarUrl(media.assetId, freshUrl);
+        } else if (media.previewUrl) {
+          cacheAvatarUrl(media.assetId, media.previewUrl);
+        }
+        self.setData({ user: data.user, savingAvatar: false, avatarUrl: freshUrl || media.previewUrl || self.data.avatarUrl }, function () { self.refreshProfileState(); });
+        wx.showToast({ title: freshUrl ? '头像已更新' : '头像已保存，等待审核', icon: freshUrl ? 'success' : 'none' });
+        return data;
       });
-      return;
-    }
-    this.chooseAvatar();
+    });
   },
 
   saveProfile: function () {
     const self = this;
-    if (!this.data.hasNameChanges || this.data.savingProfile || this.data.savingAvatar || this.data.accountState !== 'active') return Promise.resolve();
+    const newName = (this.data.nickName || '').trim();
+    if (!newName || this.data.savingProfile || this.data.savingAvatar || this.data.accountState !== 'active') return Promise.resolve();
     this.setData({ savingProfile: true });
-    return api.call('auth.updateProfile', { nickName: this.data.nickName.trim() }).then(function (data) {
+    return api.call('auth.updateProfile', { nickName: newName }).then(function (data) {
       app.setUser(data.user);
       self._initialNickName = data.user.nickName || '';
-      self.setData({ user: data.user, nickName: data.user.nickName || '', hasNameChanges: false }, function () { self.refreshProfileState(); });
+      self.setData({ user: data.user, nickName: data.user.nickName || '', savingProfile: false, hasNameChanges: false });
       wx.showToast({ title: '名字已保存并同步', icon: 'success' });
       return data;
     }).catch(function (error) {
       wx.showToast({ title: error.message || '保存失败', icon: 'none' });
-    }).then(function () { self.setData({ savingProfile: false }); });
+      self.setData({ savingProfile: false });
+    });
   },
 
   openFamilySheet: function () { this.setData({ showFamilySheet: true }); },

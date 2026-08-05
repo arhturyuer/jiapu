@@ -167,6 +167,7 @@ App({
     wx.removeStorageSync('youpu_openid');
     wx.removeStorageSync('youpu_current_family');
     wx.removeStorageSync('youpu_pending_view');
+    wx.removeStorageSync('youpu_avatar_cache');
     this.globalData.user = null;
     this.globalData.familyList = [];
     this.globalData.currentFamily = null;
