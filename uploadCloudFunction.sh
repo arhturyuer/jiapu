@@ -2,19 +2,16 @@
 set -euo pipefail
 
 ENV_ID="${1:-}"
-PRODUCTION_ENV_ID="cloud1-d5gs5yj4l283d9c6d"
 if [[ -z "${ENV_ID}" ]]; then
-  echo "用法: ./uploadCloudFunction.sh <预发布环境ID>"
-  exit 2
-fi
-
-if [[ "${ENV_ID}" == "${PRODUCTION_ENV_ID}" && "${ALLOW_PRODUCTION_DEPLOY:-0}" != "1" ]]; then
-  echo "已阻止直接部署生产。完成生产备份和预发布验收后设置 ALLOW_PRODUCTION_DEPLOY=1。"
+  echo "用法: DEPLOYMENT_TARGET=staging STAGING_ENV_ID=<测试环境ID> ./uploadCloudFunction.sh <环境ID>"
   exit 2
 fi
 
 PROJECT_PATH="$(cd "$(dirname "$0")" && pwd)"
+cd "${PROJECT_PATH}"
 WECHAT_CLI="/Applications/wechatwebdevtools.app/Contents/MacOS/cli"
+
+node -e "import('./deployment/target-guard.mjs').then(m => m.assertDeploymentTarget(process.argv[1], '云函数部署'))" "${ENV_ID}"
 
 if [[ ! -x "${WECHAT_CLI}" ]]; then
   echo "未找到微信开发者工具 CLI: ${WECHAT_CLI}"

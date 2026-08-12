@@ -34,16 +34,20 @@ VITE_CLOUDBASE_ENV=<预发布环境ID> pnpm run build
   --project <项目绝对路径> --qr-format terminal
 ```
 
-正式预检使用：
+独立 staging 初始化与预检使用：
 
 ```bash
-TARGET_ENV_ID=<预发布环境ID> ./deployment/preflight.sh
+cp deployment/staging.local.env.example deployment/staging.local.env
+./deployment/staging-preflight.sh
+./deployment/deploy-staging.sh all
 ```
 
-预检会主动阻止以下情况：仍使用占位主体、环境未显式切换、管理端构建失败、测试失败或微信预览失败。
+staging 命令要求独立环境 ID，且对生产 ID、占位 ID 和不一致的目标一律失败。生产预检必须显式设置 `PREFLIGHT_MODE=production`、`TARGET_ENV_ID=cloud1-d5gs5yj4l283d9c6d` 和 `ALLOW_PRODUCTION=1`。
 
 ## 环境安全
 
-当前唯一环境 `cloud1-d5gs5yj4l283d9c6d` 经用户明确授权，在个人套餐基础上完成索引、安全规则、云函数、内容审核回调、运营登录、备份和全量验收后原地转为生产。云存储使用平台 `PRIVATE` 权限作为个人套餐生产基线，业务端仍只展示服务端审核通过的临时链接。第二个云环境不作为首次发布门槛；后续创建后再将其配置为独立测试环境。
+> **强制操作规则**：除非当前请求明确写出 `production`、`生产发布` 或 `部署生产`，所有云开发相关的开发、部署、联调、预览和验收均默认且仅能在 **staging** 执行。即使请求写有“部署”“上线”“发布”或“验收通过”，也不得推断为生产授权。生产变更必须由用户在当前请求明确确认，并通过生产脚本护栏。此规则同时写入仓库根目录 [`AGENTS.md`](./AGENTS.md)，供后续 Codex 任务执行。
 
-详细步骤见[开发部署说明](./docs/有谱开发部署说明.md)、[正式发布运行手册](./docs/正式发布运行手册.md)和[发布验收清单](./docs/发布验收清单.md)。
+生产环境为 `cloud1-d5gs5yj4l283d9c6d`。staging 环境 ID 不进入仓库，而由被忽略的本地配置注入；生产数据、密钥和真实个人资料不得复制到 staging。
+
+详细步骤见[staging 建立手册](./deployment/staging-runbook.md)、[开发部署说明](./docs/有谱开发部署说明.md)和[正式发布运行手册](./docs/正式发布运行手册.md)。

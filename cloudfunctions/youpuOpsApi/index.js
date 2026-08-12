@@ -334,7 +334,9 @@ function isMissingDocumentError(error) {
   const code = cleanText(error && (error.errCode || error.code), 120).toLowerCase();
   const message = cleanText(error && (error.errMsg || error.message), 500).toLowerCase();
   return code.includes('documentnotexist') || code.includes('document_not_exist') ||
-    message.includes('document not exist') || message.includes('document does not exist') ||
+    /document\s*(?:is\s*)?not\s*exist/.test(message) ||
+    /document\s*does\s*not\s*exist/.test(message) ||
+    /document\s*not\s*found/.test(message) ||
     message.includes('文档不存在');
 }
 
@@ -1224,7 +1226,11 @@ async function examplesCreate(event, context) {
     relations: [{ _id: 'relation-1', type: 'parent_child', fromPersonId: 'person-1', toPersonId: 'person-2' }, { _id: 'relation-2', type: 'parent_child', fromPersonId: 'person-1', toPersonId: 'person-3' }]
   });
   return opsMutate(operator, 'examples.create', event, async function (transaction) {
-    const existing = await findExampleDocument('example_templates', id, transaction, { allowMissingCollection: true });
+    // CloudBase transactions report a missing document differently across
+    // environments. For creation, an absent fixed-ID document is the expected
+    // state, so use the shared safe primary-key lookup instead of converting
+    // that state into a template-read failure.
+    const existing = await maybeGet('example_templates', id, transaction);
     assert(!existing, 'EXAMPLE_SLUG_EXISTS', '该示例链接标识已存在');
     try {
       await transaction.collection('example_templates').doc(id).set({

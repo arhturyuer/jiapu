@@ -3,12 +3,14 @@
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { assertDeploymentTarget } from './target-guard.mjs';
 
 const envId = process.argv[2];
 if (!envId) {
   console.error('用法: PNPM_BIN=pnpm node deployment/verify-cloud.mjs <环境ID>');
   process.exit(2);
 }
+assertDeploymentTarget(envId, '云端配置验证');
 
 const root = resolve(import.meta.dirname, '..');
 const pnpm = process.env.PNPM_BIN || 'pnpm';

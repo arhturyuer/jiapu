@@ -3,6 +3,7 @@
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { assertDeploymentTarget } from './target-guard.mjs';
 
 const envId = process.argv[2];
 const instanceId = process.argv[3];
@@ -10,10 +11,13 @@ if (!envId || !instanceId) {
   console.error('用法: NODE_BIN=node PNPM_BIN=pnpm node deployment/apply-indexes.mjs <环境ID> <数据库实例ID>');
   process.exit(2);
 }
+assertDeploymentTarget(envId, '索引部署');
 
 const root = resolve(import.meta.dirname, '..');
 const manifest = JSON.parse(readFileSync(resolve(root, 'deployment/database-indexes.json'), 'utf8'));
 const pnpm = process.env.PNPM_BIN || 'pnpm';
+const requestedCollections = new Set(String(process.env.INDEX_COLLECTIONS || '')
+  .split(',').map(function (item) { return item.trim(); }).filter(Boolean));
 
 function callApi(action, body) {
   const result = spawnSync(pnpm, [
@@ -63,6 +67,7 @@ function sameIndex(actual, expected) {
 let created = 0;
 let existing = 0;
 for (const [collectionName, indexes] of Object.entries(manifest.indexes)) {
+  if (requestedCollections.size && !requestedCollections.has(collectionName)) continue;
   const base = { EnvId: envId, Tag: instanceId, TableName: collectionName };
   const before = callApi('DescribeTable', base);
   const byName = new Map((before.Indexes || []).map(function (item) { return [item.Name, item]; }));

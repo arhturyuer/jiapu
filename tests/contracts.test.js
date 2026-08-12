@@ -109,16 +109,24 @@ test('个人导出使用私有异步任务，不会复制数据到剪贴板', fu
   assert.ok(indexes.indexes.export_tasks);
 });
 
-test('正式发布锁定生产环境、登记主体和示例集合索引', function () {
+test('默认正式环境锁定、受控 staging 覆盖和示例集合索引', function () {
   const environment = require(path.join(root, 'miniprogram/config/env.js'));
   const legal = require(path.join(root, 'miniprogram/config/legal.js'));
   const preflight = fs.readFileSync(path.join(root, 'deployment/preflight.sh'), 'utf8');
   const indexes = JSON.parse(fs.readFileSync(path.join(root, 'deployment/database-indexes.json'), 'utf8'));
-  assert.equal(environment.active, 'production');
+  const localStaging = path.join(root, 'miniprogram/config/env.local.js');
+  assert.ok(['production', 'staging'].includes(environment.active));
+  if (fs.existsSync(localStaging)) {
+    assert.equal(environment.active, 'staging');
+    assert.notEqual(environment.environments.staging.cloudEnv, environment.environments.production.cloudEnv);
+  } else {
+    assert.equal(environment.active, 'production');
+  }
   assert.ok(environment.environments.production.cloudEnv);
   assert.equal(legal.registrationVerified, true);
   assert.doesNotMatch(legal.operatorName, /^(运营者|有谱小程序运营者|待填写|测试主体|示例主体)$/);
   assert.match(preflight, /ACTIVE_ENV\}" != "production/);
+  assert.match(preflight, /已阻止 staging 预检指向 production/);
   assert.ok(indexes.indexes.example_templates.some(function (index) { return index.name === 'slug_unique' && index.unique; }));
   assert.ok(indexes.indexes.example_template_versions.some(function (index) { return index.name === 'template_version_unique' && index.unique; }));
 });

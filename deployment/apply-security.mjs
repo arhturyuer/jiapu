@@ -3,6 +3,7 @@
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { assertDeploymentTarget } from './target-guard.mjs';
 
 const envId = process.argv[2];
 const storageBucket = process.argv[3];
@@ -12,6 +13,7 @@ if (!envId || !storageBucket) {
   console.error('用法: PNPM_BIN=pnpm node deployment/apply-security.mjs <环境ID> <存储桶> [云函数规则文件]');
   process.exit(2);
 }
+assertDeploymentTarget(envId, '安全规则部署');
 
 const root = resolve(import.meta.dirname, '..');
 const pnpm = process.env.PNPM_BIN || 'pnpm';
@@ -161,7 +163,7 @@ if (customStorageApplied) {
   console.log('云存储安全规则已校验（' + storageBucket + '）：仅允许登录用户写入私有 staging 图片，客户端不可直读');
 } else {
   if (storagePermissionName !== 'PRIVATE') throw new Error('个人套餐的 PRIVATE 存储规则回读校验失败');
-  console.warn('云存储使用个人套餐生产基线 PRIVATE（' + storageBucket + '）：对象创建者可访问本人上传对象，家庭展示仍仅通过服务端审核后的临时链接');
+  console.warn('云存储使用个人套餐 staging 基线 PRIVATE（' + storageBucket + '）：对象创建者可访问本人上传对象，家庭展示仍仅通过服务端审核后的临时链接');
 }
 
 console.log('三层安全权限部署完成。');

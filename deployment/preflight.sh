@@ -2,7 +2,7 @@
 set -euo pipefail
 
 PROJECT_PATH="$(cd "$(dirname "$0")/.." && pwd)"
-MODE="${PREFLIGHT_MODE:-release}"
+MODE="${PREFLIGHT_MODE:-staging}"
 TARGET_ENV_ID="${TARGET_ENV_ID:-}"
 PRODUCTION_ENV_ID="cloud1-d5gs5yj4l283d9c6d"
 WECHAT_CLI="${WECHAT_CLI:-/Applications/wechatwebdevtools.app/Contents/MacOS/cli}"
@@ -32,14 +32,20 @@ fi
 
 export PATH="$(dirname "${NODE}"):$(dirname "${PNPM}"):${PATH}"
 
-if [[ "${MODE}" == "release" ]]; then
-  if [[ -z "${TARGET_ENV_ID}" ]]; then
-    echo "正式预检必须设置 TARGET_ENV_ID。"
+if [[ -z "${TARGET_ENV_ID}" ]]; then
+  echo "预检必须显式设置 TARGET_ENV_ID。"
+  exit 3
+fi
+
+ACTIVE_ENV="$("${NODE}" -e "console.log(require('${PROJECT_PATH}/miniprogram/config/env').active||'')")"
+CONFIGURED_ENV_ID="$("${NODE}" -e "const c=require('${PROJECT_PATH}/miniprogram/config/env'); console.log((c.environments[c.active]||{}).cloudEnv||'')")"
+
+if [[ "${MODE}" == "production" ]]; then
+  if [[ "${TARGET_ENV_ID}" != "${PRODUCTION_ENV_ID}" || "${ALLOW_PRODUCTION:-0}" != "1" ]]; then
+    echo "生产预检仅允许目标为 production 环境，且必须显式设置 ALLOW_PRODUCTION=1。"
     exit 3
   fi
 
-  ACTIVE_ENV="$("${NODE}" -e "console.log(require('${PROJECT_PATH}/miniprogram/config/env').active||'')")"
-  CONFIGURED_ENV_ID="$("${NODE}" -e "const c=require('${PROJECT_PATH}/miniprogram/config/env'); console.log((c.environments[c.active]||{}).cloudEnv||'')")"
   if [[ "${ACTIVE_ENV}" != "production" ]]; then
     echo "正式预检要求小程序 active 环境为 production，当前为 ${ACTIVE_ENV:-未配置}。"
     exit 3
@@ -56,12 +62,18 @@ if [[ "${MODE}" == "release" ]]; then
     exit 3
   fi
 
-  if [[ "${TARGET_ENV_ID}" == "${PRODUCTION_ENV_ID}" && "${ALLOW_PRODUCTION:-0}" != "1" ]]; then
-    echo "已阻止生产预检；确认备份和预发布验收后设置 ALLOW_PRODUCTION=1。"
+elif [[ "${MODE}" == "staging" ]]; then
+  if [[ "${TARGET_ENV_ID}" == "${PRODUCTION_ENV_ID}" || "${TARGET_ENV_ID}" == *"REPLACE_WITH"* ]]; then
+    echo "已阻止 staging 预检指向 production 或占位环境。"
+    exit 3
+  fi
+  if [[ "${ACTIVE_ENV}" != "staging" || "${CONFIGURED_ENV_ID}" != "${TARGET_ENV_ID}" ]]; then
+    echo "staging 预检要求本地小程序配置为 staging/${TARGET_ENV_ID}，当前为 ${ACTIVE_ENV}/${CONFIGURED_ENV_ID:-未配置}。"
     exit 3
   fi
 else
-  TARGET_ENV_ID="${TARGET_ENV_ID:-${PRODUCTION_ENV_ID}}"
+  echo "PREFLIGHT_MODE 仅支持 staging 或 production。"
+  exit 3
 fi
 
 find "${PROJECT_PATH}/miniprogram" "${PROJECT_PATH}/cloudfunctions" "${PROJECT_PATH}/tests" \
@@ -76,9 +88,15 @@ find "${PROJECT_PATH}/miniprogram" "${PROJECT_PATH}/cloudfunctions" "${PROJECT_P
 
 if [[ "${SKIP_WECHAT_PREVIEW:-0}" != "1" ]]; then
   "${WECHAT_CLI}" preview --project "${PROJECT_PATH}" --qr-format terminal
-elif [[ "${MODE}" == "release" ]]; then
+elif [[ "${MODE}" == "production" ]]; then
   echo "正式发布预检不允许跳过微信预览。"
   exit 4
+else
+  echo "已按 SKIP_WECHAT_PREVIEW=1 跳过微信预览。"
 fi
 
-echo "代码、单元测试、管理端生产构建和微信预览均已通过。"
+if [[ "${SKIP_WECHAT_PREVIEW:-0}" == "1" ]]; then
+  echo "${MODE} 环境的代码、单元测试和管理端构建均已通过；微信预览未执行。"
+else
+  echo "${MODE} 环境的代码、单元测试、管理端构建和微信预览均已通过。"
+fi

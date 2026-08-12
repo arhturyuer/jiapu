@@ -118,6 +118,15 @@ test('首次发布会在事务外补齐示例版本集合，避免空集合导�
   assert.match(security, /'example_template_versions'/);
 });
 
+test('首次创建示例使用安全主键读取，兼容 CloudBase 事务中的缺失文档返回', function () {
+  const ops = read('cloudfunctions/youpuOpsApi/index.js');
+  assert.match(ops, /document\\s\*\(\?:is\\s\*\)\?not\\s\*exist/);
+  assert.match(ops, /document\\s\*not\\s\*found/);
+  const create = ops.match(/async function examplesCreate[\s\S]*?\n}\n\nasync function examplesUpdateDraft/)[0];
+  assert.match(create, /maybeGet\('example_templates', id, transaction\)/);
+  assert.doesNotMatch(create, /findExampleDocument\('example_templates', id, transaction/);
+});
+
 test('运营端详情失败可重试并展示请求 ID', function () {
   const manager = read('admin/src/components/ExampleManager.vue');
   const cloudbase = read('admin/src/cloudbase.ts');

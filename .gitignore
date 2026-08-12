@@ -7,4 +7,6 @@ admin/dist/
 project.private.config.json
 deployment/*.local.env
 deployment/*.local.json
+deployment/cloudbaserc.staging.local.json
+miniprogram/config/env.local.js
 deployment/backups/
