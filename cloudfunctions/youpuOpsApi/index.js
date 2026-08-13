@@ -585,11 +585,14 @@ function publicUser(user, statistics) {
   };
 }
 
-function publicFamily(family) {
+function publicFamily(family, statistics) {
+  const stats = statistics || {};
   return {
     _id: family._id,
     name: family.name ? family.name.slice(0, 1) + '**' : '未命名',
     status: family.status,
+    userCount: Number(stats.userCount) || 0,
+    memberCount: Number(stats.memberCount) || 0,
     personCount: family.personCount || 0,
     relationCount: family.relationCount || 0,
     createdAt: family.createdAt || null,
@@ -789,7 +792,20 @@ async function familiesList(event, context) {
   await requireOperator(context, ['super_admin', 'operator']);
   const where = event.status ? { status: cleanText(event.status, 30) } : {};
   const result = await page('families', where, event);
-  result.items = result.items.map(publicFamily);
+  const familyCounts = await Promise.all(result.items.map(async function (family) {
+    const counts = await Promise.all([
+      db.collection('family_memberships').where({ familyId: family._id, status: 'active' }).count(),
+      db.collection('persons').where({ familyId: family._id, status: 'active' }).count()
+    ]);
+    return { familyId: family._id, userCount: counts[0].total || 0, memberCount: counts[1].total || 0 };
+  }));
+  const countsByFamilyId = familyCounts.reduce(function (map, item) {
+    map[item.familyId] = item;
+    return map;
+  }, {});
+  result.items = result.items.map(function (family) {
+    return publicFamily(family, countsByFamilyId[family._id]);
+  });
   return result;
 }
 
@@ -819,7 +835,7 @@ async function familiesDetail(event, context) {
   });
   await writeOpsAudit(db, operator, 'ops.family.view', 'family', family._id, '运营后台直接查看', '查看家谱资料', event.requestId);
   return {
-    family: publicFamily(family),
+    family: publicFamily(family, { userCount: memberships.length, memberCount: family.personCount }),
     collaborators: memberships.map(function (item) {
       return { displayName: item.displayName ? item.displayName.slice(0, 1) + '**' : '家人', role: item.role, status: item.status };
     }),

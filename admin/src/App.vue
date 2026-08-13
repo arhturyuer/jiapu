@@ -522,11 +522,13 @@ onMounted(bootstrap);
         <div v-else-if="!rows.length" class="empty-state"><div>空</div><h3>{{ activeModule === 'moderation' && moderationScope === 'pending' ? '当前没有待复核内容' : '当前没有记录' }}</h3><p>{{ activeModule === 'moderation' && moderationScope === 'reviewed' ? '人工复核和机器审核完成后会显示在这里。' : '新的数据会自动显示在这里。' }}</p></div>
         <div v-else class="table-wrap">
           <table>
-            <thead><tr><th>标识 / 名称</th><th>类型 / 角色</th><th v-if="activeModule === 'users'">家谱参与</th><th>状态</th><th>时间</th><th>操作</th></tr></thead>
+            <thead><tr><th>标识 / 名称</th><th>类型 / 角色</th><th v-if="activeModule === 'families'">用户数</th><th v-if="activeModule === 'families'">成员数</th><th v-if="activeModule === 'users'">家谱参与</th><th>状态</th><th>时间</th><th>操作</th></tr></thead>
             <tbody>
               <tr v-for="row in rows" :key="row._id">
                 <td><strong>{{ row.name || row.nickName || row.displayName || row.actorName || row.identity || row.targetType || row.action || row._id }}</strong><small>{{ row.email || row.actorId || row.reason || row.summary || row.familyId || row._id }}</small></td>
                 <td><template v-if="activeModule === 'moderation'"><span>{{ row.kind }}</span><small v-if="moderationScope === 'reviewed'" class="source-tag" :class="row.reviewSource">{{ reviewSourceLabel(row.reviewSource) }}</small></template><template v-else>{{ row.role || row.kind || row.objectType || row.targetType || '—' }}</template></td>
+                <td v-if="activeModule === 'families'"><strong>{{ row.userCount || 0 }}</strong><small>已加入用户</small></td>
+                <td v-if="activeModule === 'families'"><strong>{{ row.memberCount || 0 }}</strong><small>谱内成员</small></td>
                 <td v-if="activeModule === 'users'"><strong>{{ participationLabel(row.participationType) }}</strong><small>{{ participationSummary(row) }}</small></td>
                 <td><span class="status" :class="row.status || row.moderationStatus">{{ activeModule === 'moderation' ? moderationStatusLabel(row.moderationStatus) : statusLabel(row.status || row.moderationStatus) }}</span></td>
                 <td>{{ formatDate(activeModule === 'moderation' && moderationScope === 'reviewed' ? row.decidedAt : row.createdAt || row.requestedAt || row.updatedAt) }}</td>
