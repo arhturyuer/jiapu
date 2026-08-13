@@ -37,8 +37,13 @@ if [[ -z "${TARGET_ENV_ID}" ]]; then
   exit 3
 fi
 
-ACTIVE_ENV="$("${NODE}" -e "console.log(require('${PROJECT_PATH}/miniprogram/config/env').active||'')")"
-CONFIGURED_ENV_ID="$("${NODE}" -e "const c=require('${PROJECT_PATH}/miniprogram/config/env'); console.log((c.environments[c.active]||{}).cloudEnv||'')")"
+if [[ "${MODE}" == "production" ]]; then
+  RUNTIME_VERSION="release"
+else
+  RUNTIME_VERSION="trial"
+fi
+ACTIVE_ENV="$("${NODE}" -e "const c=require('${PROJECT_PATH}/miniprogram/config/env'); const r=c.resolveRuntimeEnvironment({getAccountInfoSync:()=>({miniProgram:{envVersion:'${RUNTIME_VERSION}'}})}); console.log(r.active||'')")"
+CONFIGURED_ENV_ID="$("${NODE}" -e "const c=require('${PROJECT_PATH}/miniprogram/config/env'); const r=c.resolveRuntimeEnvironment({getAccountInfoSync:()=>({miniProgram:{envVersion:'${RUNTIME_VERSION}'}})}); console.log((r.environment||{}).cloudEnv||'')")"
 
 if [[ "${MODE}" == "production" ]]; then
   if [[ "${TARGET_ENV_ID}" != "${PRODUCTION_ENV_ID}" || "${ALLOW_PRODUCTION:-0}" != "1" ]]; then
@@ -47,7 +52,7 @@ if [[ "${MODE}" == "production" ]]; then
   fi
 
   if [[ "${ACTIVE_ENV}" != "production" ]]; then
-    echo "正式预检要求小程序 active 环境为 production，当前为 ${ACTIVE_ENV:-未配置}。"
+    echo "正式预检要求小程序 release 运行时环境为 production，当前为 ${ACTIVE_ENV:-未配置}。"
     exit 3
   fi
   if [[ "${CONFIGURED_ENV_ID}" != "${TARGET_ENV_ID}" ]]; then
@@ -68,7 +73,7 @@ elif [[ "${MODE}" == "staging" ]]; then
     exit 3
   fi
   if [[ "${ACTIVE_ENV}" != "staging" || "${CONFIGURED_ENV_ID}" != "${TARGET_ENV_ID}" ]]; then
-    echo "staging 预检要求本地小程序配置为 staging/${TARGET_ENV_ID}，当前为 ${ACTIVE_ENV}/${CONFIGURED_ENV_ID:-未配置}。"
+    echo "staging 预检要求小程序 trial 运行时配置为 staging/${TARGET_ENV_ID}，当前为 ${ACTIVE_ENV}/${CONFIGURED_ENV_ID:-未配置}。"
     exit 3
   fi
 else

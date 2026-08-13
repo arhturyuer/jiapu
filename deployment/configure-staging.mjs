@@ -40,7 +40,6 @@ if (!bootstrapSecret || /REPLACE_WITH|CHANGE_BEFORE_DEPLOY|\s/.test(bootstrapSec
 writeFileSync(destination, [
   '// 由 deployment/configure-staging.mjs 生成；请勿提交。',
   'module.exports = {',
-  "  active: 'staging',",
   '  stagingCloudEnv: ' + JSON.stringify(envId),
   '};',
   ''

@@ -48,5 +48,6 @@ test('四类维护触发器按职责严格路由，手动全量维护入口保�
   assert.match(jobs, /async function hourlyRun\(\) \{[\s\S]*recoverStaleDeletions[\s\S]*processDeletions/);
   assert.match(jobs, /async function dailyRun\(\) \{[\s\S]*expireInvitations[\s\S]*purgeArchivedFamilies[\s\S]*expireExportTasks/);
   assert.match(jobs, /if \(!data && action === 'maintenance\.run'\)/);
-  assert.doesNotMatch(jobs, /request\.Type === 'Timer'/);
+  assert.match(jobs, /event\.triggerName \|\| event\.TriggerName/);
+  assert.match(jobs, /request\.triggerName \|\| request\.TriggerName/);
 });

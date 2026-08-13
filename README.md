@@ -27,9 +27,10 @@
 需要 Node.js 20.19+、pnpm 和微信开发者工具 CLI。
 
 ```bash
+./deployment/staging-preflight.sh
 node --test tests/*.test.js
 cd admin && pnpm install --frozen-lockfile
-VITE_CLOUDBASE_ENV=<预发布环境ID> pnpm run build
+VITE_CLOUDBASE_ENV=<staging 环境ID> pnpm run build
 /Applications/wechatwebdevtools.app/Contents/MacOS/cli preview \
   --project <项目绝对路径> --qr-format terminal
 ```
@@ -43,6 +44,20 @@ cp deployment/staging.local.env.example deployment/staging.local.env
 ```
 
 staging 命令要求独立环境 ID，且对生产 ID、占位 ID 和不一致的目标一律失败。生产预检必须显式设置 `PREFLIGHT_MODE=production`、`TARGET_ENV_ID=cloud1-d5gs5yj4l283d9c6d` 和 `ALLOW_PRODUCTION=1`。
+
+小程序包根据微信官方 `wx.getAccountInfoSync().miniProgram.envVersion` 在运行时选择环境：开发版 `develop` 与体验版 `trial` 连接 staging，正式版 `release` 连接 production；未知值安全降级到 staging。因此同一上传包可用于体验和正式发布，但必须先完成 staging 验收。
+
+```bash
+bash deployment/upload-miniprogram.sh staging <版本号> <描述>
+```
+
+仅在明确获准正式发布后，才上传待发布版本并提交审核：
+
+```bash
+bash deployment/upload-miniprogram.sh production <版本号> <描述>
+```
+
+`staging` / `production` 参数用于上传前验证预期运行版本，不再生成不同环境的代码包。禁止删除 `miniprogram/config/env.local.js` 或修改受版本控制的 `miniprogram/config/env.js` 来切换环境。
 
 ## 环境安全
 

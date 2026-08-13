@@ -1,6 +1,5 @@
 const api = require('./utils/api');
 const environmentConfig = require('./config/env');
-const activeEnvironment = environmentConfig.environments[environmentConfig.active];
 const CACHE_TTL = 60 * 1000;
 
 function cacheEntry() {
@@ -23,7 +22,8 @@ App({
 
   globalData: {
     environment: environmentConfig.active,
-    env: activeEnvironment.cloudEnv,
+    runtimeVersion: environmentConfig.runtimeVersion,
+    env: environmentConfig.environments[environmentConfig.active].cloudEnv,
     user: null,
     familyList: [],
     currentFamily: null,
@@ -31,6 +31,10 @@ App({
   },
 
   onLaunch: function () {
+    const runtime = environmentConfig.resolveRuntimeEnvironment(wx);
+    this.globalData.environment = runtime.active;
+    this.globalData.runtimeVersion = runtime.runtimeVersion;
+    this.globalData.env = runtime.environment.cloudEnv;
     if (!wx.cloud) {
       wx.showModal({
         title: '版本提示',

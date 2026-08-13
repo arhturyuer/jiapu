@@ -53,13 +53,14 @@ function assertAuthorized(event) {
   const expected = process.env.BOOTSTRAP_SECRET;
   const context = cloud.getWXContext() || {};
   const hasUserIdentity = Boolean(context.OPENID || context.UNIONID || context.UID);
+  const triggerName = event && (event.triggerName || event.TriggerName);
   const isKnownTimer = event && [
     'youpu-frequent-maintenance',
     'youpu-profile-maintenance',
     'youpu-hourly-maintenance',
     'youpu-daily-maintenance'
-  ].includes(event.triggerName);
-  const isTimer = event && (event.Type === 'Timer' || isKnownTimer);
+  ].includes(triggerName);
+  const isTimer = event && (event.Type === 'Timer' || event.type === 'Timer' || isKnownTimer);
   if (isTimer && !hasUserIdentity) return;
   if (!expected || expected === 'CHANGE_BEFORE_DEPLOY' || event.secret !== expected) {
     const error = new Error('后台任务鉴权失败');
@@ -728,6 +729,9 @@ exports.main = async function (event) {
   const startedAt = Date.now();
   const request = event || {};
   const action = request.action || request.type;
+  // CloudBase timer events use TriggerName in some runtime versions and
+  // triggerName in others. Accept both without relaxing non-timer access.
+  const triggerName = request.triggerName || request.TriggerName;
   const requestId = String(request.requestId || crypto.randomBytes(8).toString('hex')).slice(0, 80);
   try {
     if (action === 'moderation.callback' || request.traceId || request.trace_id) {
@@ -739,19 +743,19 @@ exports.main = async function (event) {
     let data;
     let resolvedAction = action;
     if (action === 'system.bootstrap') data = await ensureCollections(request);
-    if (request.triggerName === 'youpu-frequent-maintenance') {
+    if (triggerName === 'youpu-frequent-maintenance') {
       resolvedAction = 'maintenance.frequent';
       data = await frequentRun();
     }
-    if (request.triggerName === 'youpu-profile-maintenance') {
+    if (triggerName === 'youpu-profile-maintenance') {
       resolvedAction = 'maintenance.profile';
       data = await profileRun();
     }
-    if (request.triggerName === 'youpu-hourly-maintenance') {
+    if (triggerName === 'youpu-hourly-maintenance') {
       resolvedAction = 'maintenance.hourly';
       data = await hourlyRun();
     }
-    if (request.triggerName === 'youpu-daily-maintenance') {
+    if (triggerName === 'youpu-daily-maintenance') {
       resolvedAction = 'maintenance.daily';
       data = await dailyRun();
     }

@@ -1,5 +1,9 @@
 const environmentConfig = require('../config/env');
-const activeEnvironment = environmentConfig.environments[environmentConfig.active];
+const CLOUD_CALL_TIMEOUT = 8000;
+
+function currentEnvironment() {
+  return environmentConfig.resolveRuntimeEnvironment(typeof wx === 'undefined' ? null : wx).environment;
+}
 
 function requestId() {
   return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12);
@@ -16,30 +20,54 @@ function call(type, data) {
 
   function invoke(retriesLeft) {
     return new Promise(function (resolve, reject) {
-    wx.cloud.callFunction({
-      name: activeEnvironment.userApi,
-      data: payload
-    }).then(function (response) {
-      const result = response.result || {};
-      if (result.success) {
-        resolve(result.data || {});
-        return;
+      let settled = false;
+      const timer = setTimeout(function () {
+        if (settled) return;
+        settled = true;
+        const error = new Error('服务响应超时，请检查网络后重试');
+        error.code = 'CLOUD_FUNCTION_TIMEOUT';
+        reject(error);
+      }, CLOUD_CALL_TIMEOUT);
+
+      function finish(callback, value) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        callback(value);
       }
 
-      const error = new Error(result.message || result.errMsg || '请求失败');
-      error.code = result.code || 'UNKNOWN_ERROR';
-      error.details = result.details || null;
-      error.isBusinessError = true;
-      reject(error);
-    }).catch(function (error) {
-      if (!error.isBusinessError && retriesLeft > 0) {
-        setTimeout(function () {
-          invoke(retriesLeft - 1).then(resolve).catch(reject);
-        }, 250);
+      let cloudRequest;
+      try {
+        cloudRequest = wx.cloud.callFunction({
+          name: currentEnvironment().userApi,
+          data: payload
+        });
+      } catch (error) {
+        finish(reject, error);
         return;
       }
-      reject(error);
-    });
+      Promise.resolve(cloudRequest).then(function (response) {
+        const result = response.result || {};
+        if (result.success) {
+          finish(resolve, result.data || {});
+          return;
+        }
+
+        const error = new Error(result.message || result.errMsg || '请求失败');
+        error.code = result.code || 'UNKNOWN_ERROR';
+        error.details = result.details || null;
+        error.isBusinessError = true;
+        finish(reject, error);
+      }).catch(function (error) {
+        finish(reject, error);
+      });
+    }).catch(function (error) {
+      if (!error.isBusinessError && retriesLeft > 0) {
+        return new Promise(function (resolve) { setTimeout(resolve, 250); }).then(function () {
+          return invoke(retriesLeft - 1);
+        });
+      }
+      throw error;
     });
   }
 

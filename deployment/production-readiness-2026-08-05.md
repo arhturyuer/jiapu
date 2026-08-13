@@ -1,5 +1,7 @@
 # 个人套餐生产就绪记录（2026-08-05）
 
+> 历史快照：本文件记录 2026-08-05 的当时结果，不是现行发布步骤。当前小程序环境策略为开发版/体验版使用独立 staging，线上版重新构建为 production；当前定时器数量和职责以 `deployment/cloudbaserc.example.json` 与正式发布运行手册为准。
+
 ## 已完成
 
 - 唯一云环境 `cloud1-d5gs5yj4l283d9c6d` 已确认为 `production` 构建目标。
