@@ -22,9 +22,11 @@
     <view class="empty-mark">谱</view>
     <text class="empty-title">从一个人开始</text>
     <text class="empty-description">几分钟建立第一张家谱，再邀请家人一起补完整。</text>
-    <button class="primary-button empty-action" bindtap="openCreateFamily">创建家谱</button>
-    <button class="secondary-button empty-action" bindtap="openExamples">浏览示例家谱</button>
-    <text class="invite-help" bindtap="showAcceptInviteHelp">收到家人邀请？请从家庭群中打开邀请卡片</text>
+    <view class="empty-guide-actions">
+      <button class="primary-button empty-action" bindtap="openCreateFamily">创建家谱</button>
+      <button class="secondary-button empty-action" bindtap="openExamples">浏览示例家谱</button>
+      <text class="invite-help" bindtap="showAcceptInviteHelp">收到家人邀请，在微信中打开邀请卡片</text>
+    </view>
   </view>
 
   <block wx:else>

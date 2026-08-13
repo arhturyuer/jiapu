@@ -82,50 +82,63 @@ Page({
 
   onUnload: function () { formState.clearLeaveAlert(this); },
 
-  loadPage: function () {
+  loadPage: function (options) {
     const self = this;
-    this.setData({ loading: true, error: '', showFamilySheet: false });
-    return app.ensureLogin().then(function () {
+    const config = options || {};
+    const hasContent = this._hasLoaded && !this.data.loading;
+    if (!config.force && hasContent && app.isCacheFresh('profile')) return Promise.resolve();
+    if (!hasContent) this.setData({ loading: true, error: '', showFamilySheet: false });
+    else this.setData({ error: '', showFamilySheet: false });
+    return app.getProfileData(function () {
+      return app.ensureLogin(config).then(function () {
       const user = app.globalData.user || {};
       const accountState = app.globalData.accountState || user.status || 'active';
       const deletion = app.globalData.deletion || null;
       if (accountState === 'pending_delete') {
-        const pendingCachedUrl = getCachedAvatarUrl(user.avatarAssetId);
-        self.setData({
-          loading: false, accountState: accountState, deletion: deletion, user: user,
-          nickName: user.nickName || '', avatarAssetId: user.avatarAssetId || '',
-          avatarUrl: pendingCachedUrl, familyList: [], archivedFamilies: [], currentFamily: null
-        });
-        formState.clearLeaveAlert(self);
-        return null;
+        return { pending: true, user: user, accountState: accountState, deletion: deletion };
       }
-      return app.loadFamilyPages(true).then(function (result) {
+      // app.loadFamilyPages(true) remains the all-family source; the app cache deduplicates it.
+      return app.loadFamilyPages(true /* cached */, config).then(function (result) {
         const grouped = splitFamilies(result.families);
         const currentFamily = reconcileCurrentFamily(grouped.active);
         self._initialNickName = user.nickName || '';
         const cachedUrl = getCachedAvatarUrl(user.avatarAssetId);
-        self.setData({
-          loading: false, accountState: accountState, deletion: deletion, user: user,
+        const pageData = {
+          pending: false, user: user, accountState: accountState, deletion: deletion,
           nickName: user.nickName || '', avatarUrl: cachedUrl, avatarAssetId: user.avatarAssetId || '',
-          savingAvatar: false, savingProfile: false,
           familyList: grouped.active, archivedFamilies: grouped.archived, currentFamily: currentFamily,
           currentRoleText: currentFamily ? format.roleText(currentFamily.currentRole) : '',
           currentFamilyUpdatedText: currentFamily && currentFamily.updatedAt ? '最近更新 ' + format.relativeTime(currentFamily.updatedAt) : ''
-        });
-        formState.clearLeaveAlert(self);
-        if (!user.avatarAssetId) return null;
+        };
+        if (!user.avatarAssetId) return pageData;
         return api.getMediaPresentation([user.avatarAssetId]).then(function (presentation) {
           const item = presentation[user.avatarAssetId] || {};
           const freshUrl = item.url || '';
           if (freshUrl) cacheAvatarUrl(user.avatarAssetId, freshUrl);
           else if (item.status === 'rejected' || item.status === 'deleted') clearCachedAvatarUrl(user.avatarAssetId);
-          self.setData({ avatarUrl: freshUrl || cachedUrl });
+          pageData.avatarUrl = freshUrl || cachedUrl;
+          return pageData;
         }).catch(function () {
-          // keep cached url on error
+          return pageData;
         });
       });
+      });
+    }, config).then(function (pageData) {
+      if (pageData.pending) {
+        const cachedUrl = getCachedAvatarUrl(pageData.user.avatarAssetId);
+        self.setData({
+          loading: false, accountState: pageData.accountState, deletion: pageData.deletion, user: pageData.user,
+          nickName: pageData.user.nickName || '', avatarAssetId: pageData.user.avatarAssetId || '', avatarUrl: cachedUrl,
+          familyList: [], archivedFamilies: [], currentFamily: null
+        });
+      } else {
+        self.setData(Object.assign({ loading: false, savingAvatar: false, savingProfile: false }, pageData));
+      }
+      self._hasLoaded = true;
+      formState.clearLeaveAlert(self);
     }).catch(function (error) {
-      self.setData({ loading: false, error: error.message || '页面加载失败，请检查网络后重试' });
+      if (!hasContent) self.setData({ loading: false, error: error.message || '页面加载失败，请检查网络后重试' });
+      else console.warn('后台刷新我的页面失败，保留当前内容', error);
     });
   },
 
@@ -196,6 +209,7 @@ Page({
       app.setUser(data.user);
       self._initialNickName = data.user.nickName || '';
       self.setData({ user: data.user, nickName: data.user.nickName || '', savingProfile: false, hasNameChanges: false });
+      if (app.invalidateCache) app.invalidateCache({ profile: true });
       wx.showToast({ title: '名字已保存并同步', icon: 'success' });
       return data;
     }).catch(function (error) {
@@ -212,6 +226,7 @@ Page({
     const family = this.data.familyList.find(function (item) { return item._id === familyId; });
     if (!family) return;
     app.setCurrentFamily(family);
+    app.invalidateCache({ graph: family._id, dashboard: family._id });
     wx.setStorageSync('youpu_pending_view', { mode: 'full', personId: '' });
     this.setData({ currentFamily: family, currentRoleText: format.roleText(family.currentRole), currentFamilyUpdatedText: family.updatedAt ? '最近更新 ' + format.relativeTime(family.updatedAt) : '', showFamilySheet: false });
     wx.showModal({ title: '已切换到“' + family.name + '”', content: '现在去查看这份家谱吗？', confirmText: '去查看', cancelText: '留在这里' }).then(function (result) {

@@ -1,3 +1,4 @@
+const app = getApp();
 const api = require('../../utils/api');
 const privacy = require('../../utils/privacy');
 const formState = require('../../utils/form-state');
@@ -196,6 +197,7 @@ Page({
       personId: this.data.personId,
       data: { avatarAssetId: media.assetId }
     }).then(function (data) {
+      if (app.invalidateFamilyData) app.invalidateFamilyData(self.data.familyId);
       self._pendingAvatarMedia = null;
       let presentation;
       if (data.pending) {
@@ -253,6 +255,7 @@ Page({
       personId: this.data.personId,
       data: changes
     }).then(function (data) {
+      if (app.invalidateFamilyData) app.invalidateFamilyData(self.data.familyId);
       self._initialForm = current;
       self.setData({ submitting: false, hasFormChanges: false }, function () { self.refreshFormState(); });
       wx.showToast({

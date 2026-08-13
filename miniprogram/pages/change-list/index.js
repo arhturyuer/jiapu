@@ -127,6 +127,7 @@ Page({
       return api.call('change.review', { requestId: requestId, decision: decision });
     }).then(function (data) {
       if (!data) return;
+      app.invalidateFamilyData(self.data.familyId);
       wx.showToast({ title: decision === 'approve' ? '已通过' : '已拒绝', icon: 'success' });
       return self.loadChanges(true);
     }).catch(function (error) {

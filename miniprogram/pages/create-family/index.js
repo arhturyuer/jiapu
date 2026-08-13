@@ -70,6 +70,7 @@ Page({
       }
     }).then(function (data) {
       app.setCurrentFamily(data.family);
+      app.invalidateCache({ families: true, profile: true, graph: data.family._id, dashboard: data.family._id });
       if (self.data.source !== 'example') {
         wx.setStorageSync('youpu_new_family_tour_' + data.family._id, true);
       }

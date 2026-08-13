@@ -25,17 +25,26 @@ Page({
   },
 
   onPullDownRefresh: function () {
-    this.loadDashboard().then(function () { wx.stopPullDownRefresh(); });
+    this.loadDashboard({ force: true }).then(function () { wx.stopPullDownRefresh(); });
   },
 
-  loadDashboard: function () {
+  loadDashboard: function (options) {
     const self = this;
-    this.setData({ loading: true });
-    return app.loadFamilies().then(function () {
+    const config = options || {};
+    const hasContent = this._hasLoaded && !this.data.loading;
+    const currentFamily = app.getCurrentFamily();
+    if (!config.force && hasContent && app.isCacheFresh('familyPages', false) && (!currentFamily || app.isCacheFresh('dashboard', currentFamily._id))) {
+      return Promise.resolve();
+    }
+    if (!hasContent) this.setData({ loading: true });
+    return app.loadFamilies(config).then(function () {
       const family = app.getCurrentFamily();
       self.setData({ currentFamily: family, loading: false });
-      if (!family) return null;
-      return api.call('family.dashboard', { familyId: family._id });
+      if (!family) {
+        self._hasLoaded = true;
+        return null;
+      }
+      return app.getDashboard(family._id, config);
     }).then(function (data) {
       if (!data) return;
       const collaborators = (data.collaborators || []).map(function (item) {
@@ -59,6 +68,7 @@ Page({
         })
       });
       app.setCurrentFamily(data.family);
+      self._hasLoaded = true;
       return api.getMediaUrls(collaborators.map(function (item) { return item.avatarAssetId; })).then(function (urls) {
         self.setData({
           collaborators: collaborators.map(function (item) {
@@ -67,8 +77,10 @@ Page({
         });
       });
     }).catch(function (error) {
-      self.setData({ loading: false });
-      wx.showToast({ title: error.message || '家庭数据加载失败', icon: 'none' });
+      if (!hasContent) {
+        self.setData({ loading: false });
+        wx.showToast({ title: error.message || '家庭数据加载失败', icon: 'none' });
+      } else console.warn('后台刷新家庭看板失败，保留当前内容', error);
     });
   },
 
@@ -117,7 +129,8 @@ Page({
     }).then(function (data) {
       if (!data) return;
       wx.showToast({ title: decision === 'approve' ? '已通过' : '已拒绝', icon: 'success' });
-      self.loadDashboard();
+      app.invalidateFamilyData(self.data.currentFamily && self.data.currentFamily._id);
+      self.loadDashboard({ force: true });
     }).catch(function (error) {
       wx.showToast({ title: error.message || '处理失败', icon: 'none' });
     });
@@ -149,6 +162,7 @@ Page({
       role: this.data.shareRole,
       viewMode: 'full'
     }).then(function (data) {
+      app.invalidateCache({ dashboard: self.data.currentFamily._id });
       self.setData({
         shareReady: true,
         shareCreating: false,
@@ -173,7 +187,10 @@ Page({
         api.call('family.markOnboardingShared', {
           familyId: self.data.currentFamily._id,
           invitationId: self.data.shareCard.invitationId
-        }).then(function () { self.loadDashboard(); }).catch(function () {});
+        }).then(function () {
+          app.invalidateCache({ dashboard: self.data.currentFamily._id });
+          self.loadDashboard({ force: true });
+        }).catch(function () {});
       }
     };
     return { title: '有谱｜一家人，共修一份家谱', path: '/pages/tree/index' };

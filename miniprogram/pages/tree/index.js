@@ -63,7 +63,7 @@ Page({
 
   onShow: function () {
     const pendingView = app.consumePendingView();
-    this.loadPage(pendingView);
+    this.loadPage(pendingView, { force: Boolean(pendingView) });
   },
 
   onUnload: function () {
@@ -71,15 +71,24 @@ Page({
   },
 
   onPullDownRefresh: function () {
-    this.loadPage().then(function () {
+    this.loadPage(null, { force: true }).then(function () {
       wx.stopPullDownRefresh();
     });
   },
 
-  loadPage: function (pendingView) {
+  loadPage: function (pendingView, options) {
     const self = this;
-    this.setData({ loading: true, loadError: '' });
-    return app.loadFamilies().then(function (families) {
+    const config = options || {};
+    const hasContent = this._hasLoaded && !this.data.loading;
+    const familyIsFresh = app.isCacheFresh('familyPages', false);
+    const currentFamily = app.getCurrentFamily();
+    const graphIsFresh = currentFamily && app.isCacheFresh('graph', currentFamily._id);
+    if (!config.force && !pendingView && hasContent && familyIsFresh && (!currentFamily || graphIsFresh)) {
+      return Promise.resolve();
+    }
+    if (!hasContent) this.setData({ loading: true, loadError: '' });
+    else this.setData({ loadError: '' });
+    return app.loadFamilies(config).then(function (families) {
       const currentFamily = app.getCurrentFamily();
       self.setData({
         familyList: families,
@@ -87,8 +96,11 @@ Page({
         accountPending: app.globalData.accountState === 'pending_delete',
         loading: false
       });
-      if (!currentFamily) return null;
-      return api.call('graph.get', { familyId: currentFamily._id }).then(function (data) {
+      if (!currentFamily) {
+        self._hasLoaded = true;
+        return null;
+      }
+      return app.getGraph(currentFamily._id, config).then(function (data) {
         const persons = (data.persons || []).map(function (person) {
           return Object.assign({}, person, {
             avatar: '',
@@ -132,6 +144,7 @@ Page({
         });
         app.setCurrentFamily(data.family);
         self.renderGraph(mode, personId);
+        self._hasLoaded = true;
         const tourKey = 'youpu_new_family_tour_' + data.family._id;
         if (wx.getStorageSync(tourKey)) {
           wx.removeStorageSync(tourKey);
@@ -161,7 +174,8 @@ Page({
       });
     }).catch(function (error) {
       console.error('加载家谱失败', error);
-      self.setData({ loading: false, loadError: error.message || '家谱加载失败' });
+      if (!hasContent) self.setData({ loading: false, loadError: error.message || '家谱加载失败' });
+      else console.warn('后台刷新家谱失败，保留当前内容', error);
     });
   },
 
@@ -381,7 +395,8 @@ Page({
       selectedPersonId: ''
     });
     this._autoCollapseFamilyId = '';
-    this.loadPage({ mode: 'full', personId: '' });
+    app.invalidateFamilyData(familyId);
+    this.loadPage({ mode: 'full', personId: '' }, { force: true });
   },
 
   showPerson: function (event) {
@@ -621,6 +636,7 @@ Page({
       const title = data.viewMode === 'perspective'
         ? '从' + data.viewPersonName + '看' + data.familyName
         : data.familyName + '｜一起把家谱补完整';
+      app.invalidateCache({ dashboard: self.data.currentFamily._id });
       self.setData({
         shareReady: true,
         shareCreating: false,
@@ -646,6 +662,8 @@ Page({
         api.call('family.markOnboardingShared', {
           familyId: self.data.currentFamily._id,
           invitationId: card.invitationId
+        }).then(function () {
+          app.invalidateCache({ dashboard: self.data.currentFamily._id });
         }).catch(function () {});
       }
     };

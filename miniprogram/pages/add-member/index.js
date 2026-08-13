@@ -1,3 +1,4 @@
+const app = getApp();
 const api = require('../../utils/api');
 const privacy = require('../../utils/privacy');
 const formState = require('../../utils/form-state');
@@ -302,6 +303,7 @@ Page({
       });
     }
     return request.then(function (data) {
+      if (app.invalidateFamilyData) app.invalidateFamilyData(self.data.familyId);
       self.clearDirty();
       wx.showToast({
         title: data.pending ? '已提交管理员审核' : self.data.entryMode === 'existing' ? '关系已关联' : '家人已添加',

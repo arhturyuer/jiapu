@@ -121,6 +121,7 @@ Page({
       description: this.data.description.trim()
     }).then(function (data) {
       app.setCurrentFamily(data.family);
+      app.invalidateFamilyData(self.data.familyId);
       self.setData({ family: data.family });
       wx.showToast({ title: '家谱资料已保存', icon: 'success' });
     }).catch(function (error) {
@@ -143,6 +144,7 @@ Page({
         role: roles[result.tapIndex]
       });
     }).then(function () {
+      app.invalidateFamilyData(self.data.familyId);
       wx.showToast({ title: '角色已更新', icon: 'success' });
       self.loadPage();
     }).catch(function (error) {
@@ -169,6 +171,7 @@ Page({
       });
     }).then(function (data) {
       if (!data) return;
+      app.invalidateFamilyData(self.data.familyId);
       wx.showToast({ title: '管理员已添加', icon: 'success' });
       self.loadPage();
     }).catch(function (error) {
@@ -195,6 +198,7 @@ Page({
       });
     }).then(function (data) {
       if (!data) return;
+      app.invalidateFamilyData(self.data.familyId);
       wx.showToast({ title: '管理权已转让', icon: 'success' });
       self.loadPage();
     }).catch(function (error) {
@@ -231,6 +235,7 @@ Page({
       return api.call('invite.revoke', { invitationId: invitationId });
     }).then(function (data) {
       if (!data) return;
+      app.invalidateCache({ dashboard: self.data.familyId });
       wx.showToast({ title: '邀请已撤销', icon: 'success' });
       self.loadPage();
     }).catch(function (error) {
@@ -250,6 +255,7 @@ Page({
       return api.call('family.archive', { familyId: self.data.familyId });
     }).then(function (data) {
       if (!data) return;
+      app.invalidateFamilyData(self.data.familyId);
       self.setData({ family: Object.assign({}, self.data.family, { status: 'archived', purgeAt: data.purgeAt }) });
       app.setCurrentFamily(null);
       wx.showToast({ title: '已移入回收站', icon: 'none' });
@@ -261,6 +267,7 @@ Page({
   restoreFamily: function () {
     const self = this;
     api.call('family.restore', { familyId: this.data.familyId }).then(function () {
+      app.invalidateFamilyData(self.data.familyId);
       wx.showToast({ title: '家谱已恢复', icon: 'success' });
       self.loadPage();
     }).catch(function (error) {
@@ -280,6 +287,7 @@ Page({
       return api.call('membership.leave', { familyId: self.data.familyId });
     }).then(function (data) {
       if (!data) return;
+      app.invalidateFamilyData(self.data.familyId);
       app.setCurrentFamily(null);
       wx.showToast({ title: '已退出家谱', icon: 'none' });
       setTimeout(function () { wx.reLaunch({ url: '/pages/tree/index' }); }, 500);

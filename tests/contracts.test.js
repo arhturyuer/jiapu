@@ -79,12 +79,23 @@ test('我的页具备账户三态、单次家谱加载和受控媒体展示', fu
   assert.doesNotMatch(profile, /app\.loadFamilies\(\)/);
   assert.match(profile, /api\.getMediaPresentation/);
   assert.match(template, /账户正在注销冷静期/);
-  assert.match(template, /创建第一份家谱/);
+  assert.match(template, />创建家谱</);
   assert.match(template, /查看家谱/);
   assert.match(template, /保存名字/);
   assert.match(clientApi, /function getMediaPresentation/);
   assert.match(userApi, /'media\.getPresentation':\s*mediaGetPresentation/);
   assert.match(userApi, /asset\.ownerId === userId\(openid\)/);
+});
+
+test('家谱页和我的页空状态使用一致的三级创建引导', function () {
+  const tree = fs.readFileSync(path.join(root, 'miniprogram/pages/tree/index.wxml'), 'utf8');
+  const profile = fs.readFileSync(path.join(root, 'miniprogram/pages/profile/index.wxml'), 'utf8');
+  [tree, profile].forEach(function (template) {
+    assert.match(template, />创建家谱</);
+    assert.match(template, />浏览示例家谱</);
+    assert.match(template, /收到家人邀请，在微信中打开邀请卡片/);
+    assert.match(template, /empty-guide-actions/);
+  });
 });
 
 test('个人导出使用私有异步任务，不会复制数据到剪贴板', function () {

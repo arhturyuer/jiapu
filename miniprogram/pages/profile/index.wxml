@@ -8,7 +8,7 @@
   </view>
 
   <block wx:elif="{{!familyList.length}}">
-    <view class="empty-panel profile-empty"><view class="empty-mark">家</view><text class="empty-title">从第一位家人开始</text><text class="empty-description">先建一份家谱，再邀请家人一起补全家庭故事。</text><button class="primary-button empty-action" bindtap="createFamily">创建第一份家谱</button><button class="secondary-button empty-action" bindtap="openExamples">先看看示例</button><button class="text-button" bindtap="explainInvitation">我有家人邀请</button><view class="archived-empty-list surface-card" wx:if="{{archivedFamilies.length}}"><view class="setting-row" wx:for="{{archivedFamilies}}" wx:key="_id" data-id="{{item._id}}" bindtap="openArchivedFamily"><view><text class="setting-title">{{item.name}}</text><text class="setting-desc">{{item.archiveStatusText}}</text></view><text class="setting-arrow">›</text></view></view></view>
+    <view class="empty-panel profile-empty"><view class="empty-mark">家</view><text class="empty-title">从第一位家人开始</text><text class="empty-description">几分钟建立第一张家谱，再邀请家人一起补完整。</text><view class="empty-guide-actions"><button class="primary-button empty-action" bindtap="createFamily">创建家谱</button><button class="secondary-button empty-action" bindtap="openExamples">浏览示例家谱</button><text class="invite-help" bindtap="explainInvitation">收到家人邀请，在微信中打开邀请卡片</text></view><view class="archived-empty-list surface-card" wx:if="{{archivedFamilies.length}}"><view class="setting-row" wx:for="{{archivedFamilies}}" wx:key="_id" data-id="{{item._id}}" bindtap="openArchivedFamily"><view><text class="setting-title">{{item.name}}</text><text class="setting-desc">{{item.archiveStatusText}}</text></view><text class="setting-arrow">›</text></view></view></view>
   </block>
 
   <block wx:else>

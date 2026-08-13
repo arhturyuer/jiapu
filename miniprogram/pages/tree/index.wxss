@@ -8,13 +8,23 @@
   width: 360rpx;
 }
 
+.empty-guide-actions {
+  width: 100%;
+  margin-top: 32rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20rpx;
+}
+
 .invite-help {
   width: 520rpx;
-  margin-top: 24rpx;
+  margin-top: 12rpx;
   color: #65706A;
   font-size: 25rpx;
   line-height: 1.5;
   text-decoration: underline;
+  text-align: center;
 }
 
 .tree-toolbar {

@@ -145,6 +145,7 @@ Page({
       if (!result.confirm) return null;
       self.setData({ removingRelationId: relationId });
       return api.call('relation.remove', { relationId: relationId }).then(function (data) {
+        if (app.invalidateFamilyData) app.invalidateFamilyData(self.data.person.familyId);
         self.setData({ removingRelationId: '', openRelationId: '' });
         wx.showToast({ title: '关系已移除', icon: 'success' });
         return self.loadPerson().then(function () { return data; });
@@ -205,6 +206,7 @@ Page({
       return api.call('person.delete', { personId: self.data.personId });
     }).then(function (data) {
       if (!data) return;
+      if (app.invalidateFamilyData) app.invalidateFamilyData(self.data.person.familyId);
       wx.showToast({ title: '成员已删除', icon: 'success' });
       setTimeout(function () { wx.navigateBack(); }, 600);
     }).catch(function (error) {
