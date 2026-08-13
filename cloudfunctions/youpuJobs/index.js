@@ -55,6 +55,8 @@ function assertAuthorized(event) {
   const hasUserIdentity = Boolean(context.OPENID || context.UNIONID || context.UID);
   const isKnownTimer = event && [
     'youpu-frequent-maintenance',
+    'youpu-profile-maintenance',
+    'youpu-hourly-maintenance',
     'youpu-daily-maintenance'
   ].includes(event.triggerName);
   const isTimer = event && (event.Type === 'Timer' || isKnownTimer);
@@ -649,14 +651,10 @@ async function createBackupManifest() {
   return counts;
 }
 
-async function maintenanceRun() {
+async function dailyRun() {
   return {
-    recoveredDeletions: await recoverStaleDeletions(),
-    profileSync: await syncProfiles(),
     invitations: await expireInvitations(),
-    deletions: await processDeletions(),
     archivedFamilies: await purgeArchivedFamilies(),
-    exports: await processExportTasks(),
     cleanup: await cleanTemporaryData(),
     expiredExports: await expireExportTasks(),
     backupManifest: await createBackupManifest()
@@ -664,12 +662,26 @@ async function maintenanceRun() {
 }
 
 async function frequentRun() {
+  return { exports: await processExportTasks() };
+}
+
+async function profileRun() {
+  return { profileSync: await syncProfiles() };
+}
+
+async function hourlyRun() {
   return {
     recoveredDeletions: await recoverStaleDeletions(),
-    profileSync: await syncProfiles(),
-    invitations: await expireInvitations(),
-    deletions: await processDeletions(),
-    exports: await processExportTasks()
+    deletions: await processDeletions()
+  };
+}
+
+async function maintenanceRun() {
+  return {
+    frequent: await frequentRun(),
+    profile: await profileRun(),
+    hourly: await hourlyRun(),
+    daily: await dailyRun()
   };
 }
 
@@ -731,8 +743,20 @@ exports.main = async function (event) {
       resolvedAction = 'maintenance.frequent';
       data = await frequentRun();
     }
-    if (!data && (action === 'maintenance.run' || request.Type === 'Timer' || request.triggerName === 'youpu-daily-maintenance')) {
+    if (request.triggerName === 'youpu-profile-maintenance') {
+      resolvedAction = 'maintenance.profile';
+      data = await profileRun();
+    }
+    if (request.triggerName === 'youpu-hourly-maintenance') {
+      resolvedAction = 'maintenance.hourly';
+      data = await hourlyRun();
+    }
+    if (request.triggerName === 'youpu-daily-maintenance') {
       resolvedAction = 'maintenance.daily';
+      data = await dailyRun();
+    }
+    if (!data && action === 'maintenance.run') {
+      resolvedAction = 'maintenance.run';
       data = await maintenanceRun();
     }
     if (!data) throw new Error('unknown job action');

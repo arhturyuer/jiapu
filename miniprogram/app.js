@@ -4,7 +4,7 @@ const activeEnvironment = environmentConfig.environments[environmentConfig.activ
 const CACHE_TTL = 60 * 1000;
 
 function cacheEntry() {
-  return { data: null, updatedAt: 0, invalidated: false, promise: null };
+  return { data: null, updatedAt: 0, invalidated: false, promise: null, version: 0, promiseVersion: -1 };
 }
 
 function isFresh(entry) {
@@ -129,20 +129,40 @@ App({
   },
 
   loadCached: function (entry, loader, options) {
+    const self = this;
     const force = Boolean(options && options.force);
     if (!force && isFresh(entry)) return Promise.resolve(entry.data);
-    if (entry.promise) return entry.promise;
-    entry.promise = Promise.resolve().then(loader).then(function (data) {
+    if (force && entry.promise && entry.promiseVersion === (Number(entry.version) || 0)) {
+      this.invalidateEntry(entry);
+    }
+    const version = Number(entry.version) || 0;
+    if (entry.promise && entry.promiseVersion === version) return entry.promise;
+    const request = Promise.resolve().then(loader).then(function (data) {
+      // A write can invalidate a cache while an earlier read is still in flight.
+      // Do not let that response update the cache or a waiting page with stale data.
+      if ((Number(entry.version) || 0) !== version) {
+        return self.loadCached(entry, loader);
+      }
       entry.data = data;
       entry.updatedAt = Date.now();
       entry.invalidated = false;
-      entry.promise = null;
+      return data;
+    });
+    entry.promise = request;
+    entry.promiseVersion = version;
+    return request.then(function (data) {
+      if (entry.promise === request) {
+        entry.promise = null;
+        entry.promiseVersion = -1;
+      }
       return data;
     }, function (error) {
-      entry.promise = null;
+      if (entry.promise === request) {
+        entry.promise = null;
+        entry.promiseVersion = -1;
+      }
       throw error;
     });
-    return entry.promise;
   },
 
   getCacheEntry: function (type, key) {
@@ -196,12 +216,17 @@ App({
   invalidateCache: function (options) {
     const config = options || {};
     if (config.families) {
-      this.dataCache.familyPages.active.invalidated = true;
-      this.dataCache.familyPages.all.invalidated = true;
+      this.invalidateEntry(this.dataCache.familyPages.active);
+      this.invalidateEntry(this.dataCache.familyPages.all);
     }
-    if (config.profile) this.dataCache.profile.invalidated = true;
-    if (config.graph) this.getCacheEntry('graph', config.graph).invalidated = true;
-    if (config.dashboard) this.getCacheEntry('dashboard', config.dashboard).invalidated = true;
+    if (config.profile) this.invalidateEntry(this.dataCache.profile);
+    if (config.graph) this.invalidateEntry(this.getCacheEntry('graph', config.graph));
+    if (config.dashboard) this.invalidateEntry(this.getCacheEntry('dashboard', config.dashboard));
+  },
+
+  invalidateEntry: function (entry) {
+    entry.invalidated = true;
+    entry.version = (Number(entry.version) || 0) + 1;
   },
 
   invalidateFamilyData: function (familyId) {

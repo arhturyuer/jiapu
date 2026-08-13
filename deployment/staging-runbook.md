@@ -16,7 +16,7 @@
 
 1. 在与生产相同账号下新建一个云开发环境，名称建议 `youpu-staging`；创建后记录**新**环境 ID、数据库实例 ID 和默认存储桶名称。不要选择导入、恢复、迁移或复制生产数据库/存储。
 2. 切换到新环境，在“登录授权 / 身份认证”只开启运营后台需要的邮箱密码登录；为 staging 单独创建一个运营测试账号。不要复用生产账号密码、`BOOTSTRAP_SECRET`、第三方密钥或真实用户数据。
-3. 在“云函数”或发布页为 `youpuJobs` 设置一个新随机 `BOOTSTRAP_SECRET`，并按 `deployment/cloudbaserc.example.json` 配置三个函数的 Nodejs20.19、内存、超时和两个定时触发器。初次 bootstrap 后立即轮换该密钥。
+3. 在“云函数”或发布页为 `youpuJobs` 设置一个新随机 `BOOTSTRAP_SECRET`，并按 `deployment/cloudbaserc.example.json` 配置三个函数的 Nodejs20.19、内存、超时和四个定时触发器。初次 bootstrap 后立即轮换该密钥。
 4. 在新环境配置静态托管并部署 `admin/dist`；若要测试图片审核，再为新环境单独配置 `security.mediaCheckAsync` 回调到 `youpuJobs`，以及 `staging/` 前缀的 24 小时生命周期规则。
 
 除以上四项外，集合、索引、数据库/函数/存储规则由下方脚本部署并回读验证。生产环境无需进行任何控制台操作。

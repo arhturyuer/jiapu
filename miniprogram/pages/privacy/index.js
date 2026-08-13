@@ -21,8 +21,23 @@ Page({
     deleting: false, cancelling: false
   },
 
-  onShow: function () { this.loadAccount(); },
-  onUnload: function () { if (this._exportTimer) clearTimeout(this._exportTimer); },
+  onShow: function () {
+    this._pageVisible = true;
+    this.loadAccount();
+  },
+  onHide: function () {
+    this._pageVisible = false;
+    this.clearExportTimer();
+  },
+  onUnload: function () {
+    this._pageVisible = false;
+    this.clearExportTimer();
+  },
+
+  clearExportTimer: function () {
+    if (this._exportTimer) clearTimeout(this._exportTimer);
+    this._exportTimer = null;
+  },
 
   loadAccount: function () {
     const self = this;
@@ -49,9 +64,11 @@ Page({
     if (!taskId) return Promise.resolve();
     return api.call('account.exportStatus', { taskId: taskId }).then(function (task) {
       self.setData({ exportTask: decorateExportTask(task) });
-      if ((task.status === 'pending' || task.status === 'processing') && scheduleRetry !== false) {
-        if (self._exportTimer) clearTimeout(self._exportTimer);
-        self._exportTimer = setTimeout(function () { self.refreshExportTask(taskId, true); }, 15000);
+      if ((task.status === 'pending' || task.status === 'processing') && scheduleRetry !== false && self._pageVisible !== false) {
+        self.clearExportTimer();
+        self._exportTimer = setTimeout(function () { self.refreshExportTask(taskId, true); }, 30000);
+      } else if (task.status !== 'pending' && task.status !== 'processing') {
+        self.clearExportTimer();
       }
       return task;
     }).catch(function () {

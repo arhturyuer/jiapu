@@ -10,6 +10,16 @@
       "config": "0 */5 * * * * *"
     },
     {
+      "name": "youpu-profile-maintenance",
+      "type": "timer",
+      "config": "0 */15 * * * * *"
+    },
+    {
+      "name": "youpu-hourly-maintenance",
+      "type": "timer",
+      "config": "0 0 * * * * *"
+    },
+    {
       "name": "youpu-daily-maintenance",
       "type": "timer",
       "config": "0 0 3 * * * *"

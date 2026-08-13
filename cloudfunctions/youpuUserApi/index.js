@@ -1001,9 +1001,14 @@ async function familyList(event) {
   const openid = getOpenid();
   const user = await requireActiveUser(openid);
   const page = await listPage('family_memberships', { userId: user._id, status: 'active' }, event, ['joinedAt']);
+  const familyIds = Array.from(new Set(page.items.map(function (membership) { return membership.familyId; }).filter(Boolean)));
+  const familyResult = familyIds.length
+    ? await db.collection('families').where({ _id: _.in(familyIds) }).limit(familyIds.length).get()
+    : { data: [] };
+  const familiesById = new Map((familyResult.data || []).map(function (family) { return [family._id, family]; }));
   const families = [];
   for (const membership of page.items) {
-    const family = await maybeGet(db, 'families', membership.familyId);
+    const family = familiesById.get(membership.familyId);
     if (!family || !['active', 'archived'].includes(family.status)) continue;
     if (!event.includeArchived && family.status !== 'active') continue;
     families.push(publicFamily(family, membership.role));
@@ -1107,7 +1112,7 @@ async function graphGet(event) {
   const openid = getOpenid();
   await requireActiveUser(openid);
   const access = await requireMembership(event.familyId, ACTIVE_ROLES, db, openid);
-  const family = await getFamily(db, event.familyId);
+  const family = access.family;
   const persons = await listAll('persons', { familyId: event.familyId, status: 'active' }, GRAPH_PERSON_LIMIT);
   const relations = await listAll('relations', { familyId: event.familyId, status: 'active' }, GRAPH_RELATION_LIMIT);
   const personIds = new Set(persons.map(function (person) { return person._id; }));
@@ -1144,7 +1149,7 @@ async function familyDashboard(event) {
   const openid = getOpenid();
   await requireActiveUser(openid);
   const access = await requireMembership(event.familyId, ACTIVE_ROLES, db, openid);
-  const family = await getFamily(db, event.familyId);
+  const family = access.family;
   const memberships = await listAll('family_memberships', { familyId: event.familyId, status: 'active' }, 500);
   const persons = await listAll('persons', { familyId: event.familyId, status: 'active' }, GRAPH_PERSON_LIMIT);
   const completedFields = persons.reduce(function (total, person) {
@@ -2139,14 +2144,7 @@ async function mediaGetUrls(event) {
   const ids = Array.from(new Set((event.assetIds || []).map(function (id) { return cleanText(id, 80); }).filter(Boolean))).slice(0, 50);
   if (!ids.length) return { urls: {} };
   const assetsResult = await db.collection('media_assets').where({ _id: _.in(ids), moderationStatus: 'approved', status: 'active' }).get();
-  const accessible = [];
-  for (const asset of assetsResult.data || []) {
-    if (!asset.familyId) {
-      if (asset.ownerId === userId(openid)) accessible.push(asset);
-      continue;
-    }
-    if (await getMembership(db, asset.familyId, openid)) accessible.push(asset);
-  }
+  const accessible = await accessibleMediaAssets(assetsResult.data || [], openid);
   if (!accessible.length) return { urls: {} };
   const tempResult = await cloud.getTempFileURL({ fileList: accessible.map(function (asset) { return asset.fileId; }) });
   const urls = {};
@@ -2166,11 +2164,8 @@ async function mediaGetStates(event) {
   if (!ids.length) return { states: {} };
   const result = await db.collection('media_assets').where({ _id: _.in(ids) }).get();
   const states = {};
-  for (const asset of result.data || []) {
-    let accessible = false;
-    if (!asset.familyId) accessible = asset.ownerId === userId(openid);
-    else accessible = Boolean(await getMembership(db, asset.familyId, openid));
-    if (!accessible) continue;
+  const accessible = await accessibleMediaAssets(result.data || [], openid);
+  for (const asset of accessible) {
     states[asset._id] = asset.status === 'deleted'
       ? 'deleted'
       : asset.moderationStatus || 'pending';
@@ -2186,25 +2181,38 @@ async function mediaGetPresentation(event) {
   }).filter(Boolean))).slice(0, 50);
   if (!ids.length) return { items: {} };
   const result = await db.collection('media_assets').where({ _id: _.in(ids) }).get();
-  const accessible = [];
+  const approved = [];
   const items = {};
-  for (const asset of result.data || []) {
-    let allowed = false;
-    if (!asset.familyId) allowed = asset.ownerId === userId(openid);
-    else allowed = Boolean(await getMembership(db, asset.familyId, openid));
-    if (!allowed) continue;
+  const accessible = await accessibleMediaAssets(result.data || [], openid);
+  for (const asset of accessible) {
     const status = asset.status === 'deleted' ? 'deleted' : (asset.moderationStatus || 'pending');
     items[asset._id] = { status: status, url: '' };
-    if (status === 'approved' && asset.status === 'active' && asset.fileId) accessible.push(asset);
+    if (status === 'approved' && asset.status === 'active' && asset.fileId) approved.push(asset);
   }
-  if (accessible.length) {
-    const tempResult = await cloud.getTempFileURL({ fileList: accessible.map(function (asset) { return asset.fileId; }) });
-    accessible.forEach(function (asset, index) {
+  if (approved.length) {
+    const tempResult = await cloud.getTempFileURL({ fileList: approved.map(function (asset) { return asset.fileId; }) });
+    approved.forEach(function (asset, index) {
       const item = tempResult.fileList[index];
       if (item && item.tempFileURL) items[asset._id].url = item.tempFileURL;
     });
   }
   return { items: items };
+}
+
+async function accessibleMediaAssets(assets, openid) {
+  const memberships = new Map();
+  const accessible = [];
+  for (const asset of assets || []) {
+    if (!asset.familyId) {
+      if (asset.ownerId === userId(openid)) accessible.push(asset);
+      continue;
+    }
+    if (!memberships.has(asset.familyId)) {
+      memberships.set(asset.familyId, getMembership(db, asset.familyId, openid));
+    }
+    if (await memberships.get(asset.familyId)) accessible.push(asset);
+  }
+  return accessible;
 }
 
 function publicExamplePerson(person) {

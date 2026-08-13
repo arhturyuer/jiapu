@@ -24,8 +24,8 @@ function createApp() {
   const app = Object.assign({}, definition);
   app.globalData = Object.assign({}, definition.globalData);
   app.dataCache = {
-    familyPages: { active: { data: null, updatedAt: 0, invalidated: false, promise: null }, all: { data: null, updatedAt: 0, invalidated: false, promise: null } },
-    graph: {}, dashboard: {}, profile: { data: null, updatedAt: 0, invalidated: false, promise: null }
+    familyPages: { active: { data: null, updatedAt: 0, invalidated: false, promise: null, version: 0, promiseVersion: -1 }, all: { data: null, updatedAt: 0, invalidated: false, promise: null, version: 0, promiseVersion: -1 } },
+    graph: {}, dashboard: {}, profile: { data: null, updatedAt: 0, invalidated: false, promise: null, version: 0, promiseVersion: -1 }
   };
   return app;
 }
@@ -97,6 +97,54 @@ test('缓存超过 60 秒后不再视为新鲜数据', function () {
   assert.equal(app.isCacheFresh('dashboard', 'family-1'), false);
   entry.updatedAt = Date.now();
   assert.equal(app.isCacheFresh('dashboard', 'family-1'), true);
+});
+
+test('写操作失效后，先发出的图谱请求不会回写旧数据', async function () {
+  const api = require('../miniprogram/utils/api');
+  const originalCall = api.call;
+  const requests = [];
+  api.call = function () {
+    return new Promise(function (resolve) { requests.push(resolve); });
+  };
+  const app = createApp();
+
+  const staleRequest = app.getGraph('family-1');
+  await Promise.resolve();
+  app.invalidateFamilyData('family-1');
+  const freshRequest = app.getGraph('family-1');
+  await Promise.resolve();
+  assert.equal(requests.length, 2);
+
+  requests[0]({ family: { _id: 'family-1' }, persons: [{ _id: 'stale' }], relations: [] });
+  requests[1]({ family: { _id: 'family-1' }, persons: [{ _id: 'fresh' }], relations: [] });
+  const fresh = await freshRequest;
+  const stale = await staleRequest;
+  assert.equal(fresh.persons[0]._id, 'fresh');
+  assert.equal(stale.persons[0]._id, 'fresh');
+  assert.equal(app.getCacheEntry('graph', 'family-1').data.persons[0]._id, 'fresh');
+  api.call = originalCall;
+});
+
+test('强制刷新会隔离已在途读取并只保留刷新结果', async function () {
+  const api = require('../miniprogram/utils/api');
+  const originalCall = api.call;
+  const requests = [];
+  api.call = function () {
+    return new Promise(function (resolve) { requests.push(resolve); });
+  };
+  const app = createApp();
+
+  const initial = app.getDashboard('family-1');
+  await Promise.resolve();
+  const forced = app.getDashboard('family-1', { force: true });
+  await Promise.resolve();
+  assert.equal(requests.length, 2);
+  requests[0]({ stats: { personCount: 1 } });
+  requests[1]({ stats: { personCount: 2 } });
+  assert.equal((await initial).stats.personCount, 2);
+  assert.equal((await forced).stats.personCount, 2);
+  assert.equal(app.getCacheEntry('dashboard', 'family-1').data.stats.personCount, 2);
+  api.call = originalCall;
 });
 
 test('没有家谱的账号结束加载并展示空状态，重复切 Tab 不重复请求', async function () {
