@@ -53,17 +53,24 @@ header h1 { margin: 0; font: 650 40px/1.1 Georgia, "Noto Serif SC", serif; }
 .alert button { color: inherit; background: none; border: 0; }
 .alert.success { color: #286147; background: #edf7f1; border-color: #cce5d6; }
 .dashboard-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 18px; }
-.dashboard-grid article { min-height: 176px; padding: 26px; display: flex; flex-direction: column; background: white; border: 1px solid #e0e5e1; border-radius: 22px; box-shadow: 0 12px 35px rgba(29,51,42,.05); }
-.dashboard-grid article span { color: #65706a; font-weight: 650; }
-.dashboard-grid article strong { margin: 18px 0 auto; font-size: 46px; letter-spacing: -.04em; }
-.dashboard-grid article small { color: #89918d; }
-.dashboard-grid article.attention { background: #fffaf0; border-color: #ead6af; }
-.dashboard-grid article.attention strong { color: #94601b; }
+.dashboard-grid article, .dashboard-card { min-height: 176px; padding: 26px; display: flex; flex-direction: column; background: white; border: 1px solid #e0e5e1; border-radius: 22px; box-shadow: 0 12px 35px rgba(29,51,42,.05); }
+.dashboard-grid article span, .dashboard-card span { color: #65706a; font-weight: 650; }
+.dashboard-grid article strong, .dashboard-card strong { margin: 18px 0 auto; font-size: 46px; letter-spacing: -.04em; }
+.dashboard-grid article small, .dashboard-card small { color: #89918d; }
+.dashboard-grid article.attention, .dashboard-card.attention { background: #fffaf0; border-color: #ead6af; }
+.dashboard-grid article.attention strong, .dashboard-card.attention strong { color: #94601b; }
+.dashboard-card { width: 100%; color: inherit; text-align: left; transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease; }
+.dashboard-card em { margin-top: 16px; color: #3f705f; font-size: 12px; font-style: normal; font-weight: 750; }
+.dashboard-card:hover:not(:disabled) { border-color: #8eafa2; box-shadow: 0 18px 42px rgba(29,51,42,.12); transform: translateY(-2px); }
+.dashboard-card:focus-visible { outline: 3px solid rgba(36,92,74,.35); outline-offset: 3px; }
+.dashboard-card:active:not(:disabled) { box-shadow: 0 7px 18px rgba(29,51,42,.1); transform: translateY(0); }
 .dashboard-grid .principle-card { color: white; background: #245c4a; border-color: #245c4a; }
 .dashboard-grid .principle-card span, .dashboard-grid .principle-card small { color: #c8ddd5; }
 .dashboard-grid .principle-card strong { font-size: 27px; letter-spacing: 0; }
 .table-card { min-height: 440px; overflow: hidden; background: white; border: 1px solid #dfe5e1; border-radius: 22px; box-shadow: 0 12px 35px rgba(29,51,42,.05); }
-.moderation-tabs { padding: 14px 18px; display: flex; gap: 8px; background: #f8faf7; border-bottom: 1px solid #e5eae6; }
+.active-filter { padding: 13px 18px; display: flex; align-items: center; justify-content: space-between; gap: 16px; color: #3d5d50; background: #edf5f1; border-bottom: 1px solid #dbe9e1; font-size: 13px; font-weight: 700; }
+.active-filter button { padding: 6px 10px; color: #245c4a; background: white; border: 1px solid #b8cfc4; border-radius: 8px; font-size: 12px; font-weight: 700; }
+.moderation-tabs { padding: 14px 18px; display: flex; flex-wrap: wrap; gap: 8px; background: #f8faf7; border-bottom: 1px solid #e5eae6; }
 .moderation-tabs button { min-width: 104px; padding: 9px 15px; color: #64736c; background: transparent; border: 1px solid transparent; border-radius: 10px; font-size: 13px; font-weight: 700; }
 .moderation-tabs button.active { color: #245c4a; background: white; border-color: #cfdcd6; box-shadow: 0 4px 12px rgba(36,92,74,.08); }
 .table-wrap { overflow-x: auto; }

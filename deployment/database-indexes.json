@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 4,
+  "schemaVersion": 5,
   "indexes": {
     "users": [
       { "name": "openid_unique", "unique": true, "sparse": true, "fields": [{ "field": "openid", "order": "asc" }] },
@@ -10,6 +10,7 @@
       { "name": "status_created", "fields": [{ "field": "status", "order": "asc" }, { "field": "createdAt", "order": "desc" }] },
       { "name": "status_purge", "fields": [{ "field": "status", "order": "asc" }, { "field": "purgeAt", "order": "asc" }] },
       { "name": "status_deletion_started", "fields": [{ "field": "status", "order": "asc" }, { "field": "deletionStartedAt", "order": "asc" }] },
+      { "name": "creator_status", "fields": [{ "field": "creatorId", "order": "asc" }, { "field": "status", "order": "asc" }] },
       { "name": "status_id", "fields": [{ "field": "status", "order": "asc" }, { "field": "_id", "order": "asc" }] }
     ],
     "family_memberships": [

@@ -5,6 +5,7 @@ import ExampleManager from './components/ExampleManager.vue';
 
 type ModuleKey = 'dashboard' | 'users' | 'families' | 'examples' | 'reports' | 'moderation' | 'deletions' | 'audits' | 'operators';
 type ModerationScope = 'pending' | 'reviewed';
+type ParticipationFilter = 'all' | 'visitor' | 'creator' | 'member' | 'creator_member' | 'participating';
 type Row = Record<string, any>;
 
 type MediaPreview = Row & {
@@ -58,13 +59,16 @@ const authenticated = ref(false);
 const operator = ref<Operator | null>(null);
 const activeModule = ref<ModuleKey>('dashboard');
 const moderationScope = ref<ModerationScope>('pending');
+const userParticipationFilter = ref<ParticipationFilter>('all');
+const listScope = ref('');
+const listStatus = ref('');
 const loading = ref(false);
 const error = ref('');
 const notice = ref('');
 const rows = ref<Row[]>([]);
 const nextCursor = ref('');
 const hasMore = ref(false);
-const totals = reactive({ activeUsers: 0, activeFamilies: 0, reportBacklog: 0, moderationBacklog: 0, deletionBacklog: 0 });
+const totals = reactive({ activeUsers: 0, currentParticipatingUsers: 0, visitorUsers: 0, activeFamilies: 0, reportBacklog: 0, moderationBacklog: 0, deletionBacklog: 0 });
 const dialog = reactive({
   open: false,
   title: '',
@@ -126,6 +130,18 @@ function roleLabel(value: string): string {
   return labels[value] || value || '—';
 }
 
+function participationLabel(value: string): string {
+  const labels: Record<string, string> = {
+    visitor: '访问用户', creator: '创建者', member: '加入者', creator_member: '创建并加入'
+  };
+  return labels[value] || '访问用户';
+}
+
+function participationSummary(row: Row): string {
+  if (row.participationType === 'visitor') return '仅访问，尚未参与家谱';
+  return `创建 ${row.createdFamilyCount || 0} · 加入 ${row.joinedFamilyCount || 0}`;
+}
+
 function targetTypeLabel(value: string): string {
   const labels: Record<string, string> = {
     person: '人物资料', avatar: '人物头像', family: '家谱资料',
@@ -164,10 +180,6 @@ function lifeYears(person: Row): string {
   if (birth) return `${birth} 年生`;
   if (death) return `${death} 年卒`;
   return '生卒年未填写';
-}
-
-function countActiveMemberships(items: Row[] | undefined): number {
-  return Array.isArray(items) ? items.filter((item) => item.status === 'active').length : 0;
 }
 
 async function bootstrap(): Promise<void> {
@@ -241,6 +253,9 @@ async function loadModule(module: ModuleKey, append = false): Promise<void> {
       cursor: append ? nextCursor.value : ''
     };
     if (module === 'moderation') params.scope = moderationScope.value;
+    if (['users', 'families'].includes(module) && listStatus.value) params.status = listStatus.value;
+    if (['reports', 'deletions'].includes(module) && listScope.value) params.scope = listScope.value;
+    if (module === 'users' && userParticipationFilter.value !== 'all') params.participationType = userParticipationFilter.value;
     const data = await callOps<PageResult>(actionByModule[module], params);
     rows.value = append ? rows.value.concat(data.items) : data.items;
     nextCursor.value = data.nextCursor;
@@ -250,6 +265,58 @@ async function loadModule(module: ModuleKey, append = false): Promise<void> {
   } finally {
     loading.value = false;
   }
+}
+
+function clearListFilters(): void {
+  userParticipationFilter.value = 'all';
+  listScope.value = '';
+  listStatus.value = '';
+  moderationScope.value = 'pending';
+}
+
+async function navigateModule(module: ModuleKey): Promise<void> {
+  if (loading.value) return;
+  clearListFilters();
+  await loadModule(module);
+}
+
+async function openDashboardList(module: ModuleKey, options: { participationType?: ParticipationFilter; scope?: string; status?: string } = {}): Promise<void> {
+  if (loading.value) return;
+  clearListFilters();
+  if (options.participationType) userParticipationFilter.value = options.participationType;
+  if (options.scope) listScope.value = options.scope;
+  if (options.status) listStatus.value = options.status;
+  await loadModule(module);
+}
+
+async function showAllRecords(): Promise<void> {
+  if (loading.value) return;
+  clearListFilters();
+  await loadModule(activeModule.value);
+}
+
+function activeFilterDescription(): string {
+  if (activeModule.value === 'users') {
+    const labels: Record<ParticipationFilter, string> = {
+      all: '', visitor: '仅访问未参与用户', participating: '当前参与家谱用户', creator: '创建者', member: '加入者', creator_member: '创建并加入用户'
+    };
+    const type = labels[userParticipationFilter.value];
+    return type || (listStatus.value === 'active' ? '活跃用户' : '');
+  }
+  if (activeModule.value === 'families' && listStatus.value === 'active') return '活跃家谱（未归档、未冻结）';
+  if (activeModule.value === 'reports' && listScope.value === 'backlog') return '举报待办（待领取或处理中）';
+  if (activeModule.value === 'deletions' && listScope.value === 'backlog') return '注销待办（待执行或失败）';
+  return '';
+}
+
+async function switchUserParticipationFilter(filter: ParticipationFilter): Promise<void> {
+  if (userParticipationFilter.value === filter || loading.value) return;
+  userParticipationFilter.value = filter;
+  listScope.value = '';
+  rows.value = [];
+  nextCursor.value = '';
+  hasMore.value = false;
+  await loadModule('users');
 }
 
 async function switchModerationScope(scope: ModerationScope): Promise<void> {
@@ -419,28 +486,34 @@ onMounted(bootstrap);
   <div v-else class="app-shell">
     <aside class="sidebar">
       <div class="sidebar-brand"><div class="brand-mark small">谱</div><div><strong>有谱</strong><span>运营控制台</span></div></div>
-      <nav><button v-for="item in visibleNav" :key="item.key" :class="{ active: activeModule === item.key }" @click="loadModule(item.key)"><span>{{ item.label }}</span><small>{{ item.caption }}</small></button></nav>
+      <nav><button v-for="item in visibleNav" :key="item.key" :class="{ active: activeModule === item.key }" @click="navigateModule(item.key)"><span>{{ item.label }}</span><small>{{ item.caption }}</small></button></nav>
       <div class="operator-card"><div class="operator-avatar">{{ operator?.displayName?.slice(0, 1) }}</div><div><strong>{{ operator?.displayName }}</strong><span>{{ operator?.role === 'super_admin' ? '超级管理员' : '运营人员' }}</span></div><button @click="logout">退出</button></div>
     </aside>
 
     <main class="workspace">
-      <header><div><p class="eyebrow">{{ currentNav.caption }}</p><h1>{{ currentNav.label }}</h1></div><div class="header-actions"><button v-if="activeModule === 'operators' && operator?.role === 'super_admin'" class="primary compact" @click="operatorForm.open = true">新增运营账号</button><button class="secondary compact" :disabled="loading" @click="loadModule(activeModule)">刷新数据</button></div></header>
+      <header><div><p class="eyebrow">{{ currentNav.caption }}</p><h1>{{ currentNav.label }}</h1></div><div class="header-actions"><button v-if="activeModule === 'operators' && operator?.role === 'super_admin'" class="primary compact" @click="operatorForm.open = true">新增运营账号</button><button class="secondary compact" :disabled="loading" @click="showAllRecords">刷新数据</button></div></header>
 
       <p v-if="error" class="alert">{{ error }} <button @click="error = ''">关闭</button></p>
       <p v-if="notice" class="alert success" role="status">{{ notice }} <button @click="notice = ''">关闭</button></p>
 
       <section v-if="activeModule === 'dashboard'" class="dashboard-grid">
-        <article><span>活跃用户</span><strong>{{ totals.activeUsers }}</strong><small>当前可用账号</small></article>
-        <article><span>活跃家谱</span><strong>{{ totals.activeFamilies }}</strong><small>未归档、未冻结</small></article>
-        <article :class="{ attention: totals.reportBacklog > 0 }"><span>举报待办</span><strong>{{ totals.reportBacklog }}</strong><small>待领取或处理中</small></article>
-        <article :class="{ attention: totals.moderationBacklog > 0 }"><span>内容复核</span><strong>{{ totals.moderationBacklog }}</strong><small>机器疑似与审核中</small></article>
-        <article :class="{ attention: totals.deletionBacklog > 0 }"><span>注销任务</span><strong>{{ totals.deletionBacklog }}</strong><small>待执行或失败</small></article>
+        <button class="dashboard-card" :disabled="loading" @click="openDashboardList('users', { status: 'active' })"><span>活跃用户</span><strong>{{ totals.activeUsers }}</strong><small>已进入小程序的可用用户</small><em>查看列表 →</em></button>
+        <button class="dashboard-card" :disabled="loading" @click="openDashboardList('users', { status: 'active', participationType: 'participating' })"><span>当前参与家谱用户</span><strong>{{ totals.currentParticipatingUsers }}</strong><small>创建或加入有效家谱</small><em>查看列表 →</em></button>
+        <button class="dashboard-card" :disabled="loading" @click="openDashboardList('users', { status: 'active', participationType: 'visitor' })"><span>仅访问未参与用户</span><strong>{{ totals.visitorUsers }}</strong><small>已进入，尚未参与家谱</small><em>查看列表 →</em></button>
+        <button class="dashboard-card" :disabled="loading" @click="openDashboardList('families', { status: 'active' })"><span>活跃家谱</span><strong>{{ totals.activeFamilies }}</strong><small>未归档、未冻结</small><em>查看列表 →</em></button>
+        <button class="dashboard-card" :disabled="loading" :class="{ attention: totals.reportBacklog > 0 }" @click="openDashboardList('reports', { scope: 'backlog' })"><span>举报待办</span><strong>{{ totals.reportBacklog }}</strong><small>待领取或处理中</small><em>查看列表 →</em></button>
+        <button class="dashboard-card" :disabled="loading" :class="{ attention: totals.moderationBacklog > 0 }" @click="openDashboardList('moderation')"><span>内容复核</span><strong>{{ totals.moderationBacklog }}</strong><small>机器疑似与审核中</small><em>查看列表 →</em></button>
+        <button class="dashboard-card" :disabled="loading" :class="{ attention: totals.deletionBacklog > 0 }" @click="openDashboardList('deletions', { scope: 'backlog' })"><span>注销任务</span><strong>{{ totals.deletionBacklog }}</strong><small>待执行或失败</small><em>查看列表 →</em></button>
         <article class="principle-card"><span>今日原则</span><strong>访问可追溯</strong><small>查看家庭资料时自动记录运营账号与访问对象。</small></article>
       </section>
 
       <ExampleManager v-else-if="activeModule === 'examples'" :is-super-admin="operator?.role === 'super_admin'" />
 
       <section v-else class="table-card">
+        <div v-if="activeFilterDescription()" class="active-filter"><span>当前查看：{{ activeFilterDescription() }}</span><button :disabled="loading" @click="showAllRecords">查看全部</button></div>
+        <div v-if="activeModule === 'users'" class="moderation-tabs" role="tablist" aria-label="用户家谱参与筛选">
+          <button v-for="filter in ([['all', '全部'], ['visitor', '仅访问'], ['participating', '参与中'], ['creator', '创建者'], ['member', '加入者'], ['creator_member', '创建并加入']] as Array<[ParticipationFilter, string]>)" :key="filter[0]" role="tab" :aria-selected="userParticipationFilter === filter[0]" :class="{ active: userParticipationFilter === filter[0] }" :disabled="loading" @click="switchUserParticipationFilter(filter[0])">{{ filter[1] }}</button>
+        </div>
         <div v-if="activeModule === 'moderation'" class="moderation-tabs" role="tablist" aria-label="内容复核视图">
           <button role="tab" :aria-selected="moderationScope === 'pending'" :class="{ active: moderationScope === 'pending' }" :disabled="loading" @click="switchModerationScope('pending')">待复核</button>
           <button role="tab" :aria-selected="moderationScope === 'reviewed'" :class="{ active: moderationScope === 'reviewed' }" :disabled="loading" @click="switchModerationScope('reviewed')">审核记录</button>
@@ -449,11 +522,12 @@ onMounted(bootstrap);
         <div v-else-if="!rows.length" class="empty-state"><div>空</div><h3>{{ activeModule === 'moderation' && moderationScope === 'pending' ? '当前没有待复核内容' : '当前没有记录' }}</h3><p>{{ activeModule === 'moderation' && moderationScope === 'reviewed' ? '人工复核和机器审核完成后会显示在这里。' : '新的数据会自动显示在这里。' }}</p></div>
         <div v-else class="table-wrap">
           <table>
-            <thead><tr><th>标识 / 名称</th><th>类型 / 角色</th><th>状态</th><th>时间</th><th>操作</th></tr></thead>
+            <thead><tr><th>标识 / 名称</th><th>类型 / 角色</th><th v-if="activeModule === 'users'">家谱参与</th><th>状态</th><th>时间</th><th>操作</th></tr></thead>
             <tbody>
               <tr v-for="row in rows" :key="row._id">
                 <td><strong>{{ row.name || row.nickName || row.displayName || row.actorName || row.identity || row.targetType || row.action || row._id }}</strong><small>{{ row.email || row.actorId || row.reason || row.summary || row.familyId || row._id }}</small></td>
                 <td><template v-if="activeModule === 'moderation'"><span>{{ row.kind }}</span><small v-if="moderationScope === 'reviewed'" class="source-tag" :class="row.reviewSource">{{ reviewSourceLabel(row.reviewSource) }}</small></template><template v-else>{{ row.role || row.kind || row.objectType || row.targetType || '—' }}</template></td>
+                <td v-if="activeModule === 'users'"><strong>{{ participationLabel(row.participationType) }}</strong><small>{{ participationSummary(row) }}</small></td>
                 <td><span class="status" :class="row.status || row.moderationStatus">{{ activeModule === 'moderation' ? moderationStatusLabel(row.moderationStatus) : statusLabel(row.status || row.moderationStatus) }}</span></td>
                 <td>{{ formatDate(activeModule === 'moderation' && moderationScope === 'reviewed' ? row.decidedAt : row.createdAt || row.requestedAt || row.updatedAt) }}</td>
                 <td class="row-actions">
@@ -491,9 +565,10 @@ onMounted(bootstrap);
             </div>
           </div>
 
-          <div class="detail-stats">
-            <article><span>加入家谱</span><strong>{{ detail.memberships?.length || 0 }}</strong><small>全部成员关系</small></article>
-            <article><span>当前有效</span><strong>{{ countActiveMemberships(detail.memberships) }}</strong><small>正常参与家谱</small></article>
+          <div class="detail-stats three">
+            <article><span>创建家谱</span><strong>{{ detail.user?.createdFamilyCount || 0 }}</strong><small>当前有效家谱</small></article>
+            <article><span>加入家谱</span><strong>{{ detail.user?.joinedFamilyCount || 0 }}</strong><small>不含自己创建的家谱</small></article>
+            <article><span>当前参与</span><strong>{{ detail.user?.activeFamilyCount || 0 }}</strong><small>{{ participationLabel(detail.user?.participationType) }}</small></article>
           </div>
 
           <section class="detail-section">
@@ -501,17 +576,17 @@ onMounted(bootstrap);
             <dl class="detail-info-grid">
               <div><dt>用户 ID</dt><dd>{{ detail.user?._id || '—' }}</dd></div>
               <div><dt>身份标识</dt><dd>{{ detail.user?.identity || '—' }}</dd></div>
-              <div><dt>注册时间</dt><dd>{{ formatDate(detail.user?.createdAt) }}</dd></div>
+              <div><dt>首次进入时间</dt><dd>{{ formatDate(detail.user?.createdAt) }}</dd></div>
               <div><dt>最近更新</dt><dd>{{ formatDate(detail.user?.updatedAt) }}</dd></div>
             </dl>
           </section>
 
           <section class="detail-section">
-            <div class="detail-section-title"><h3>加入的家谱</h3><span>{{ detail.memberships?.length || 0 }} 项</span></div>
+            <div class="detail-section-title"><h3>家谱参与记录</h3><span>{{ detail.memberships?.length || 0 }} 项</span></div>
             <div v-if="detail.memberships?.length" class="detail-list">
               <article v-for="item in detail.memberships" :key="`${item.familyId}-${item.role}`">
                 <div><strong>{{ item.familyId || '未知家谱' }}</strong><small>加入于 {{ formatDate(item.joinedAt) }}</small></div>
-                <span class="detail-role">{{ roleLabel(item.role) }}</span>
+                <span class="detail-role">{{ item.participationSource === 'created' ? '创建' : '加入' }} · {{ roleLabel(item.role) }}</span>
                 <span class="status" :class="item.status">{{ statusLabel(item.status) }}</span>
               </article>
             </div>

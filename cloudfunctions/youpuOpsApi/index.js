@@ -1,5 +1,6 @@
 const cloud = require('wx-server-sdk');
 const crypto = require('crypto');
+const participation = require('./participation');
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
@@ -493,20 +494,94 @@ async function listAll(collectionName, where, hardLimit) {
   throw new OpsError('RESULT_LIMIT_EXCEEDED', '记录数量超过运营端单次查看上限，请使用筛选条件');
 }
 
+function chunks(values, size) {
+  const result = [];
+  for (let index = 0; index < values.length; index += size) result.push(values.slice(index, index + size));
+  return result;
+}
+
+async function listByIds(collectionName, field, ids, where, hardLimit) {
+  const uniqueIds = Array.from(new Set((ids || []).filter(Boolean)));
+  if (!uniqueIds.length) return [];
+  const rows = [];
+  for (const batch of chunks(uniqueIds, 50)) {
+    const condition = Object.assign({}, where || {});
+    condition[field] = _.in(batch);
+    const batchRows = await listAll(collectionName, condition, hardLimit || 2500);
+    rows.push.apply(rows, batchRows);
+  }
+  return rows;
+}
+
+async function userParticipation(userIds) {
+  const ids = Array.from(new Set((userIds || []).filter(Boolean)));
+  const result = {};
+  ids.forEach(function (userId) { result[userId] = participation.summarize(0, 0); });
+  if (!ids.length) return result;
+
+  const queries = await Promise.all([
+    listByIds('families', 'creatorId', ids, { status: 'active' }),
+    listByIds('family_memberships', 'userId', ids, { status: 'active' })
+  ]);
+  const createdFamilies = queries[0];
+  const memberships = queries[1];
+  createdFamilies.forEach(function (family) {
+    if (result[family.creatorId]) result[family.creatorId].createdFamilyCount += 1;
+  });
+
+  const activeFamilies = await listByIds('families', '_id', memberships.map(function (item) { return item.familyId; }), { status: 'active' });
+  const familyById = activeFamilies.reduce(function (map, family) {
+    map[family._id] = family;
+    return map;
+  }, {});
+  memberships.forEach(function (membership) {
+    const family = familyById[membership.familyId];
+    if (family && family.creatorId !== membership.userId && result[membership.userId]) {
+      result[membership.userId].joinedFamilyCount += 1;
+    }
+  });
+  ids.forEach(function (userId) {
+    const item = result[userId];
+    result[userId] = participation.summarize(item.createdFamilyCount, item.joinedFamilyCount);
+  });
+  return result;
+}
+
+async function currentParticipatingUserCount() {
+  const queries = await Promise.all([
+    listAll('families', { status: 'active' }, 5000),
+    listAll('family_memberships', { status: 'active' }, 5000)
+  ]);
+  const families = queries[0];
+  const memberships = queries[1];
+  const activeFamilyIds = new Set(families.map(function (family) { return family._id; }));
+  const userIds = new Set(families.map(function (family) { return family.creatorId; }).filter(Boolean));
+  memberships.forEach(function (membership) {
+    if (activeFamilyIds.has(membership.familyId)) userIds.add(membership.userId);
+  });
+  const activeUsers = await listByIds('users', '_id', Array.from(userIds), { status: 'active' });
+  return activeUsers.length;
+}
+
 function maskIdentity(value) {
   const text = cleanText(value, 200);
   if (!text) return '';
   return text.length <= 8 ? hash(text, 8) : text.slice(0, 4) + '…' + text.slice(-4);
 }
 
-function publicUser(user) {
+function publicUser(user, statistics) {
+  const stats = statistics || participation.summarize(0, 0);
   return {
     _id: user._id,
     identity: maskIdentity(user.openid || user._id),
     nickName: user.nickName ? user.nickName.slice(0, 1) + '**' : '未设置',
     status: user.status,
     createdAt: user.createdAt || null,
-    updatedAt: user.updatedAt || null
+    updatedAt: user.updatedAt || null,
+    createdFamilyCount: stats.createdFamilyCount,
+    joinedFamilyCount: stats.joinedFamilyCount,
+    activeFamilyCount: stats.activeFamilyCount,
+    participationType: stats.participationType
   };
 }
 
@@ -582,16 +657,21 @@ async function sessionMe(event, context) {
 
 async function dashboardSummary(event, context) {
   await requireOperator(context, ['super_admin', 'operator']);
-  const [users, families, reports, moderation, deletions] = await Promise.all([
+  const [users, families, reports, moderation, deletions, participatingUsers] = await Promise.all([
     db.collection('users').where({ status: 'active' }).count(),
     db.collection('families').where({ status: 'active' }).count(),
     db.collection('reports').where({ status: _.in(['open', 'processing']) }).count(),
     db.collection('media_assets').where({ moderationStatus: _.in(['review', 'pending']) }).count(),
-    db.collection('account_deletion_requests').where({ status: _.in(['pending', 'failed']) }).count()
+    db.collection('account_deletion_requests').where({ status: _.in(['pending', 'failed']) }).count(),
+    currentParticipatingUserCount()
   ]);
+  const activeUsers = users.total || 0;
+  const currentParticipatingUsers = participatingUsers || 0;
   return {
     totals: {
-      activeUsers: users.total || 0,
+      activeUsers: activeUsers,
+      currentParticipatingUsers: currentParticipatingUsers,
+      visitorUsers: Math.max(0, activeUsers - currentParticipatingUsers),
       activeFamilies: families.total || 0,
       reportBacklog: reports.total || 0,
       moderationBacklog: moderation.total || 0,
@@ -601,12 +681,45 @@ async function dashboardSummary(event, context) {
   };
 }
 
+function participationFilter(value) {
+  const filter = cleanText(value, 30);
+  return ['visitor', 'creator', 'member', 'creator_member', 'participating'].includes(filter) ? filter : '';
+}
+
+async function usersPageWithParticipation(where, event, filter) {
+  const pageSize = Math.max(1, Math.min(Number(event.pageSize) || 20, 50));
+  let cursor = cleanText(event.cursor, 80);
+  let hasMore = true;
+  const users = [];
+  while (users.length < pageSize && hasMore) {
+    const remaining = pageSize - users.length;
+    const sourcePage = await page('users', where, { pageSize: remaining, cursor: cursor });
+    if (!sourcePage.items.length) {
+      hasMore = false;
+      break;
+    }
+    const statistics = await userParticipation(sourcePage.items.map(function (user) { return user._id; }));
+    sourcePage.items.forEach(function (user) {
+      const stats = statistics[user._id];
+      if (!filter || (filter === 'participating' ? stats.participationType !== 'visitor' : stats.participationType === filter)) {
+        users.push(publicUser(user, stats));
+      }
+    });
+    cursor = sourcePage.items[sourcePage.items.length - 1]._id;
+    hasMore = sourcePage.hasMore;
+  }
+  return {
+    items: users,
+    nextCursor: hasMore ? cursor : '',
+    hasMore: hasMore
+  };
+}
+
 async function usersList(event, context) {
   await requireOperator(context, ['super_admin', 'operator']);
   const where = event.status ? { status: cleanText(event.status, 30) } : {};
-  const result = await page('users', where, event);
-  result.items = result.items.map(publicUser);
-  return result;
+  const filter = participationFilter(event.participationType);
+  return usersPageWithParticipation(where, event, filter);
 }
 
 async function usersDetail(event, context) {
@@ -614,6 +727,13 @@ async function usersDetail(event, context) {
   const user = await maybeGet('users', event.userId);
   assert(user, 'USER_NOT_FOUND', '用户不存在');
   const memberships = await listAll('family_memberships', { userId: user._id }, 500);
+  const familyRows = await listByIds('families', '_id', memberships.map(function (item) { return item.familyId; }), {});
+  const familyById = familyRows.reduce(function (map, family) {
+    map[family._id] = family;
+    return map;
+  }, {});
+  const statistics = await userParticipation([user._id]);
+  const stats = statistics[user._id];
   await writeOpsAudit(db, operator, 'ops.user.view', 'user', user._id, '运营后台直接查看', '查看用户资料', event.requestId);
   return {
     user: {
@@ -622,10 +742,22 @@ async function usersDetail(event, context) {
       nickName: user.nickName || '未设置',
       status: user.status,
       createdAt: user.createdAt || null,
-      updatedAt: user.updatedAt || null
+      updatedAt: user.updatedAt || null,
+      createdFamilyCount: stats.createdFamilyCount,
+      joinedFamilyCount: stats.joinedFamilyCount,
+      activeFamilyCount: stats.activeFamilyCount,
+      participationType: stats.participationType
     },
     memberships: memberships.map(function (item) {
-      return { familyId: item.familyId, role: item.role, status: item.status, joinedAt: item.joinedAt || null };
+      const family = familyById[item.familyId];
+      return {
+        familyId: item.familyId,
+        role: item.role,
+        status: item.status,
+        familyStatus: family ? family.status : 'deleted',
+        participationSource: family && family.creatorId === user._id ? 'created' : 'joined',
+        joinedAt: item.joinedAt || null
+      };
     })
   };
 }
@@ -816,7 +948,10 @@ async function familiesFreeze(event, context) {
 
 async function reportsList(event, context) {
   await requireOperator(context, ['super_admin', 'operator']);
-  const where = event.status ? { status: cleanText(event.status, 30) } : {};
+  const scope = cleanText(event.scope, 30);
+  const where = scope === 'backlog'
+    ? { status: _.in(['open', 'processing']) }
+    : event.status ? { status: cleanText(event.status, 30) } : {};
   const result = await page('reports', where, event);
   result.items = result.items.map(function (item) {
     return {
@@ -829,6 +964,7 @@ async function reportsList(event, context) {
       updatedAt: item.updatedAt || null
     };
   });
+  result.scope = scope === 'backlog' ? 'backlog' : 'all';
   return result;
 }
 
@@ -1022,8 +1158,13 @@ async function moderationReview(event, context) {
 
 async function deletionsList(event, context) {
   await requireOperator(context, ['super_admin', 'operator']);
-  const where = event.status ? { status: cleanText(event.status, 30) } : {};
-  return page('account_deletion_requests', where, event);
+  const scope = cleanText(event.scope, 30);
+  const where = scope === 'backlog'
+    ? { status: _.in(['pending', 'failed']) }
+    : event.status ? { status: cleanText(event.status, 30) } : {};
+  const result = await page('account_deletion_requests', where, event);
+  result.scope = scope === 'backlog' ? 'backlog' : 'all';
+  return result;
 }
 
 async function deletionsRetry(event, context) {
