@@ -106,6 +106,8 @@
   font-weight: 600;
 }
 
+.tree-share-reminder { position:absolute; top:128rpx; right:24rpx; left:24rpx; z-index:24; padding:24rpx; display:flex; align-items:center; gap:20rpx; background:rgba(241,247,243,.98); border:2rpx solid #B9D2C5; border-radius:22rpx; box-shadow:0 10rpx 28rpx rgba(36,92,74,.12); }.tree-share-reminder-copy { min-width:0; flex:1; display:flex; flex-direction:column; }.tree-share-reminder-title { font-size:29rpx; font-weight:650; }.tree-share-reminder-desc { margin-top:5rpx; color:#53655C; font-size:22rpx; line-height:1.45; }.tree-share-reminder-actions { flex:none; display:flex; flex-direction:column; align-items:flex-end; gap:6rpx; }.tree-share-reminder-invite { min-width:132rpx; height:60rpx; margin:0; padding:0 16rpx; color:#FFFFFF; background:#245C4A; border-radius:16rpx; font-size:23rpx; line-height:60rpx; }.tree-share-reminder-dismiss { min-height:38rpx; padding:0; color:#65706A; background:transparent; font-size:21rpx; line-height:38rpx; }
+
 .graph-viewport {
   width: 100%;
   height: calc(100vh - 112rpx - 120rpx);

@@ -3,6 +3,7 @@ const api = require('../../utils/api');
 const graphLayout = require('../../utils/graph-layout');
 const graphViewport = require('../../utils/graph-viewport');
 const kinship = require('../../utils/kinship');
+const shareInvite = require('../../utils/share-invite');
 
 const MAX_INTERACTIVE_NODES = 80;
 
@@ -52,6 +53,7 @@ Page({
     shareReady: false,
     shareCreating: false,
     shareCard: null,
+    showShareReminder: false,
     relationOptions: [
       { key: 'father', label: '父亲' },
       { key: 'mother', label: '母亲' },
@@ -134,6 +136,7 @@ Page({
           currentFamily: data.family,
           currentRole: data.currentRole,
           canEdit: data.currentRole === 'admin' || data.currentRole === 'member',
+          showShareReminder: self.shouldShowShareReminder(data.family),
           rawPersons: persons,
           rawRelations: data.relations || [],
           loading: false,
@@ -177,6 +180,14 @@ Page({
       if (!hasContent) self.setData({ loading: false, loadError: error.message || '家谱加载失败' });
       else console.warn('后台刷新家谱失败，保留当前内容', error);
     });
+  },
+
+  shouldShowShareReminder: function (family) {
+    return Boolean(family
+      && family.currentRole === 'admin'
+      && Number(family.personCount || 0) >= 3
+      && !family.sharedAt
+      && !family.shareReminderDismissedAt);
   },
 
   renderGraph: function (mode, viewpointId, renderOptions) {
@@ -596,6 +607,23 @@ Page({
     this.openShareSheet(this.data.viewMode, this.data.viewpointId, this.data.viewpointName);
   },
 
+  dismissShareReminder: function () {
+    const self = this;
+    const family = this.data.currentFamily;
+    if (!family || !this.data.showShareReminder) return;
+    api.call('family.dismissShareReminder', { familyId: family._id }).then(function () {
+      const updatedFamily = Object.assign({}, family, { shareReminderDismissedAt: new Date().toISOString() });
+      app.invalidateFamilyData(family._id);
+      app.setCurrentFamily(updatedFamily);
+      self.setData({
+        showShareReminder: false,
+        currentFamily: updatedFamily
+      });
+    }).catch(function (error) {
+      wx.showToast({ title: error.message || '暂时无法关闭提醒', icon: 'none' });
+    });
+  },
+
   shareSelectedPerson: function () {
     const person = this.data.selectedPerson;
     if (!person) return;
@@ -611,44 +639,67 @@ Page({
       sharePersonName: personName || '',
       shareRole: this.data.currentRole === 'admin' ? 'member' : 'viewer',
       shareReady: false,
-      shareCard: null
-    });
+      shareCard: null,
+      shareCreating: false
+    }, this.prepareShare);
   },
 
   closeShareSheet: function () {
+    this._sharePreparationSequence = (this._sharePreparationSequence || 0) + 1;
     this.setData({ showShareSheet: false, shareReady: false, shareCard: null });
   },
 
   chooseShareRole: function (event) {
-    this.setData({ shareRole: event.currentTarget.dataset.role, shareReady: false });
+    const role = event.currentTarget.dataset.role;
+    if (!role || role === this.data.shareRole) return;
+    this.setData({ shareRole: role, shareReady: false, shareCard: null }, this.prepareShare);
   },
 
   prepareShare: function () {
     const self = this;
-    if (this.data.shareCreating) return;
+    const family = this.data.currentFamily;
+    if (!family) return;
+    const shareContext = {
+      ownerId: (app.globalData.user || {})._id || '',
+      familyId: family._id,
+      role: this.data.shareRole,
+      viewMode: this.data.shareMode,
+      viewPersonId: this.data.sharePersonId
+    };
+    const cachedCard = shareInvite.get(shareContext);
+    const sequence = (this._sharePreparationSequence || 0) + 1;
+    this._sharePreparationSequence = sequence;
+    if (cachedCard) {
+      this.setData({ shareReady: true, shareCreating: false, shareCard: cachedCard });
+      return;
+    }
     this.setData({ shareCreating: true });
     api.call('invite.create', {
-      familyId: this.data.currentFamily._id,
+      familyId: family._id,
       role: this.data.shareRole,
       viewMode: this.data.shareMode,
       viewPersonId: this.data.sharePersonId
     }).then(function (data) {
+      if (sequence !== self._sharePreparationSequence || !self.data.showShareSheet) return;
       const title = data.viewMode === 'perspective'
         ? '从' + data.viewPersonName + '看' + data.familyName
         : data.familyName + '｜一起把家谱补完整';
-      app.invalidateCache({ dashboard: self.data.currentFamily._id });
+      const card = {
+        title: title,
+        path: '/pages/invite/index?token=' + data.token,
+        invitationId: data.invitationId
+      };
+      shareInvite.set(shareContext, card, data.expiresAt);
+      app.invalidateCache({ dashboard: family._id });
       self.setData({
         shareReady: true,
         shareCreating: false,
-        shareCard: {
-          title: title,
-          path: '/pages/invite/index?token=' + data.token,
-          invitationId: data.invitationId
-        }
+        shareCard: card
       });
     }).catch(function (error) {
+      if (sequence !== self._sharePreparationSequence || !self.data.showShareSheet) return;
       self.setData({ shareCreating: false });
-      wx.showToast({ title: error.message || '邀请生成失败', icon: 'none' });
+      wx.showToast({ title: error.message || '微信邀请准备失败，请重试', icon: 'none' });
     });
   },
 
@@ -663,7 +714,15 @@ Page({
           familyId: self.data.currentFamily._id,
           invitationId: card.invitationId
         }).then(function () {
-          app.invalidateCache({ dashboard: self.data.currentFamily._id });
+          const family = self.data.currentFamily;
+          const updatedFamily = Object.assign({}, family, { sharedAt: new Date().toISOString() });
+          app.invalidateFamilyData(family._id);
+          app.setCurrentFamily(updatedFamily);
+          self.setData({
+            showShareReminder: false,
+            currentFamily: updatedFamily
+          });
+          self.loadPage(null, { force: true });
         }).catch(function () {});
       }
     };

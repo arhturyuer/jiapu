@@ -1,6 +1,7 @@
 const app = getApp();
 const api = require('../../utils/api');
 const format = require('../../utils/format');
+const shareInvite = require('../../utils/share-invite');
 
 Page({
   data: {
@@ -141,40 +142,63 @@ Page({
       showShareSheet: true,
       shareRole: this.data.isAdmin ? 'member' : 'viewer',
       shareReady: false,
-      shareCard: null
-    });
+      shareCard: null,
+      shareCreating: false
+    }, this.prepareShare);
   },
 
   closeShareSheet: function () {
+    this._sharePreparationSequence = (this._sharePreparationSequence || 0) + 1;
     this.setData({ showShareSheet: false, shareReady: false, shareCard: null });
   },
 
   chooseShareRole: function (event) {
-    this.setData({ shareRole: event.currentTarget.dataset.role, shareReady: false });
+    const role = event.currentTarget.dataset.role;
+    if (!role || role === this.data.shareRole) return;
+    this.setData({ shareRole: role, shareReady: false, shareCard: null }, this.prepareShare);
   },
 
   prepareShare: function () {
     const self = this;
-    if (this.data.shareCreating) return;
+    const family = this.data.currentFamily;
+    if (!family) return;
+    const shareContext = {
+      ownerId: (app.globalData.user || {})._id || '',
+      familyId: family._id,
+      role: this.data.shareRole,
+      viewMode: 'full',
+      viewPersonId: ''
+    };
+    const cachedCard = shareInvite.get(shareContext);
+    const sequence = (this._sharePreparationSequence || 0) + 1;
+    this._sharePreparationSequence = sequence;
+    if (cachedCard) {
+      this.setData({ shareReady: true, shareCreating: false, shareCard: cachedCard });
+      return;
+    }
     this.setData({ shareCreating: true });
     api.call('invite.create', {
-      familyId: this.data.currentFamily._id,
+      familyId: family._id,
       role: this.data.shareRole,
       viewMode: 'full'
     }).then(function (data) {
-      app.invalidateCache({ dashboard: self.data.currentFamily._id });
+      if (sequence !== self._sharePreparationSequence || !self.data.showShareSheet) return;
+      const card = {
+        title: data.familyName + '｜一起把家谱补完整',
+        path: '/pages/invite/index?token=' + data.token,
+        invitationId: data.invitationId
+      };
+      shareInvite.set(shareContext, card, data.expiresAt);
+      app.invalidateCache({ dashboard: family._id });
       self.setData({
         shareReady: true,
         shareCreating: false,
-        shareCard: {
-          title: data.familyName + '｜一起把家谱补完整',
-          path: '/pages/invite/index?token=' + data.token,
-          invitationId: data.invitationId
-        }
+        shareCard: card
       });
     }).catch(function (error) {
+      if (sequence !== self._sharePreparationSequence || !self.data.showShareSheet) return;
       self.setData({ shareCreating: false });
-      wx.showToast({ title: error.message || '邀请生成失败', icon: 'none' });
+      wx.showToast({ title: error.message || '微信邀请准备失败，请重试', icon: 'none' });
     });
   },
 
@@ -188,7 +212,12 @@ Page({
           familyId: self.data.currentFamily._id,
           invitationId: self.data.shareCard.invitationId
         }).then(function () {
-          app.invalidateCache({ dashboard: self.data.currentFamily._id });
+          const updatedFamily = Object.assign({}, self.data.currentFamily, { sharedAt: new Date().toISOString() });
+          app.invalidateFamilyData(self.data.currentFamily._id);
+          app.setCurrentFamily(updatedFamily);
+          self.setData({
+            currentFamily: updatedFamily
+          });
           self.loadDashboard({ force: true });
         }).catch(function () {});
       }
@@ -198,10 +227,6 @@ Page({
 
   continueOnboardingAdd: function () {
     this.openGraph();
-  },
-
-  refreshOnboarding: function () {
-    this.loadDashboard();
   },
 
   stopEvent: function () {}

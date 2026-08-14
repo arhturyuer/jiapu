@@ -15,7 +15,7 @@
     <view class="onboarding-row done"><text>✓</text><view><text>家谱已创建</text><text>你已经完成第一步</text></view></view>
     <view class="onboarding-row {{stats.personCount >= 3 ? 'done' : ''}}"><text>{{stats.personCount >= 3 ? '✓' : '2'}}</text><view><text>推荐补到 3 位家人</text><text>当前 {{stats.personCount}} 位，可先分享</text></view><button class="secondary-button mini-action" wx:if="{{stats.personCount < 3}}" bindtap="continueOnboardingAdd">继续添加</button></view>
     <view class="onboarding-row {{onboarding.sharedAt ? 'done' : ''}}"><text>{{onboarding.sharedAt ? '✓' : '3'}}</text><view><text>发送到家庭群</text><text>{{onboarding.sharedAt ? '已完成首次分享' : '选择“邀请家人”生成分享卡'}}</text></view><button class="secondary-button mini-action" wx:if="{{!onboarding.sharedAt}}" bindtap="openShareSheet">去分享</button></view>
-    <view class="onboarding-wait"><text>等待第一位家人加入（当前 {{stats.collaboratorCount}} 人）</text><button bindtap="refreshOnboarding">刷新状态</button></view>
+    <view class="onboarding-wait"><text>等待第一位家人加入（当前 {{stats.collaboratorCount}} 人）</text></view>
   </view>
 
   <view class="stats-grid">
@@ -62,8 +62,8 @@
       <text class="share-help">家人将从完整家谱进入，可以随时切换任意成员视角。</text>
       <view class="share-role {{shareRole === 'member' ? 'selected' : ''}}" data-role="member" bindtap="chooseShareRole" wx:if="{{isAdmin}}"><text class="share-role-title">共同补全</text><text class="share-role-desc">可补普通资料，关键修改需审核</text></view>
       <view class="share-role {{shareRole === 'viewer' ? 'selected' : ''}}" data-role="viewer" bindtap="chooseShareRole"><text class="share-role-title">仅查看</text><text class="share-role-desc">可以看全谱和切换视角</text></view>
-      <button class="primary-button share-button" wx:if="{{!shareReady}}" loading="{{shareCreating}}" bindtap="prepareShare">生成微信邀请</button>
-      <button class="primary-button share-button" wx:else open-type="share">发送给家人</button>
+      <button class="primary-button share-button" wx:if="{{!shareReady}}" loading="{{shareCreating}}" disabled="{{shareCreating}}" bindtap="prepareShare">{{shareCreating ? '正在准备微信邀请' : '重新准备微信邀请'}}</button>
+      <button class="primary-button share-button" wx:else open-type="share">转发给微信好友</button>
     </view>
   </view>
 </view>

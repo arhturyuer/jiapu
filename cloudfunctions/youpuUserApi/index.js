@@ -34,6 +34,7 @@ const MUTATION_TYPES = new Set([
   'family.restore',
   'family.setPreference',
   'family.markOnboardingShared',
+  'family.dismissShareReminder',
   'membership.updateRole',
   'membership.transferAdmin',
   'membership.leave',
@@ -155,6 +156,7 @@ function publicAccount(user) {
 }
 
 function publicFamily(family, currentRole) {
+  const sharedAt = family.sharedAt || family.onboardingSharedAt || null;
   return {
     _id: family._id,
     name: family.name || '',
@@ -167,7 +169,9 @@ function publicFamily(family, currentRole) {
     purgeAt: family.purgeAt || null,
     createdAt: family.createdAt || null,
     updatedAt: family.updatedAt || null,
-    currentRole: currentRole || ''
+    currentRole: currentRole || '',
+    sharedAt: sharedAt,
+    shareReminderDismissedAt: family.shareReminderDismissedAt || null
   };
 }
 
@@ -1177,7 +1181,8 @@ async function familyDashboard(event) {
     },
     onboarding: {
       isCreator: family.creatorId === userId(openid),
-      sharedAt: family.onboardingSharedAt || null
+      sharedAt: family.sharedAt || family.onboardingSharedAt || null,
+      shareReminderDismissedAt: family.shareReminderDismissedAt || null
     },
     collaborators: memberships.map(function (item) {
       return {
@@ -1197,14 +1202,19 @@ async function familyDashboard(event) {
 
 async function familyMarkOnboardingShared(event) {
   const openid = getOpenid();
-  const user = await requireActiveUser(openid);
+  await requireActiveUser(openid);
   return mutate('family.markOnboardingShared', event, openid, async function (transaction) {
-    const family = await getFamily(transaction, event.familyId);
-    assert(family.creatorId === user._id, 'NO_PERMISSION', '只有家谱创建者可以完成首次分享引导');
+    const access = await requireMembership(event.familyId, ['admin'], transaction, openid);
+    const family = access.family;
     const invitation = await mustGet(transaction, 'invitations', event.invitationId, 'INVITE_NOT_FOUND', '邀请不存在');
-    assert(invitation.familyId === family._id && invitation.createdBy === user._id, 'INVALID_INVITATION', '邀请不属于当前创建者');
+    assert(invitation.familyId === family._id && invitation.createdBy === userId(openid), 'INVALID_INVITATION', '邀请不属于当前管理员');
     await transaction.collection('families').doc(family._id).update({
-      data: { onboardingSharedAt: family.onboardingSharedAt || db.serverDate(), updatedAt: db.serverDate() }
+      data: {
+        sharedAt: family.sharedAt || family.onboardingSharedAt || db.serverDate(),
+        // Keep the original field for old clients during the transition.
+        onboardingSharedAt: family.onboardingSharedAt || db.serverDate(),
+        updatedAt: db.serverDate()
+      }
     });
     await audit(transaction, {
       familyId: family._id,
@@ -1216,6 +1226,31 @@ async function familyMarkOnboardingShared(event) {
       requestId: event.requestId
     });
     return { shared: true };
+  });
+}
+
+async function familyDismissShareReminder(event) {
+  const openid = getOpenid();
+  await requireActiveUser(openid);
+  return mutate('family.dismissShareReminder', event, openid, async function (transaction) {
+    const access = await requireMembership(event.familyId, ['admin'], transaction, openid);
+    await transaction.collection('families').doc(event.familyId).update({
+      data: {
+        shareReminderDismissedAt: access.family.shareReminderDismissedAt || db.serverDate(),
+        updatedAt: db.serverDate()
+      }
+    });
+    await audit(transaction, {
+      familyId: event.familyId,
+      openid: openid,
+      actorName: access.membership.displayName,
+      action: 'family.share_reminder_dismiss',
+      objectType: 'family',
+      objectId: event.familyId,
+      summary: '关闭家人邀请提醒',
+      requestId: event.requestId
+    });
+    return { dismissed: true };
   });
 }
 
@@ -2317,6 +2352,7 @@ const handlers = {
   'family.dashboard': familyDashboard,
   'family.setPreference': familySetPreference,
   'family.markOnboardingShared': familyMarkOnboardingShared,
+  'family.dismissShareReminder': familyDismissShareReminder,
   'graph.get': graphGet,
   'membership.list': membershipList,
   'membership.updateRole': membershipUpdateRole,

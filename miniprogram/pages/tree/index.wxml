@@ -44,6 +44,11 @@
       <view class="toolbar-share" wx:if="{{currentRole === 'admin'}}" bindtap="startShare">分享</view>
     </view>
 
+    <view class="tree-share-reminder" wx:if="{{showShareReminder}}">
+      <view class="tree-share-reminder-copy"><text class="tree-share-reminder-title">邀请家人一起补全</text><text class="tree-share-reminder-desc">已有 {{currentFamily.personCount}} 位家人，分享给家庭群，一起把家谱补完整。</text></view>
+      <view class="tree-share-reminder-actions"><button class="tree-share-reminder-invite" bindtap="startShare">邀请家人</button><button class="tree-share-reminder-dismiss" bindtap="dismissShareReminder">暂不分享</button></view>
+    </view>
+
     <view class="graph-empty" wx:if="{{nodes.length === 0}}">
       <text class="graph-empty-title">家谱还是空的</text>
       <text class="muted-text">先添加第一位家庭成员</text>
@@ -216,8 +221,8 @@
           <text class="share-role-desc">可以看全谱和切换视角</text>
         </view>
       </view>
-      <button class="primary-button sheet-button" wx:if="{{!shareReady}}" loading="{{shareCreating}}" bindtap="prepareShare">生成微信邀请</button>
-      <button class="primary-button sheet-button" wx:else open-type="share">发送给家人</button>
+      <button class="primary-button sheet-button" wx:if="{{!shareReady}}" loading="{{shareCreating}}" disabled="{{shareCreating}}" bindtap="prepareShare">{{shareCreating ? '正在准备微信邀请' : '重新准备微信邀请'}}</button>
+      <button class="primary-button sheet-button" wx:else open-type="share">转发给微信好友</button>
     </view>
   </view>
 </view>

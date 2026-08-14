@@ -98,6 +98,53 @@ test('家谱页和我的页空状态使用一致的三级创建引导', function
   });
 });
 
+test('家庭页保留首次引导，家谱页在三位成员后提供可关闭的邀请待办', function () {
+  const userApi = fs.readFileSync(path.join(root, 'cloudfunctions/youpuUserApi/index.js'), 'utf8');
+  const members = fs.readFileSync(path.join(root, 'miniprogram/pages/members/index.js'), 'utf8');
+  const membersTemplate = fs.readFileSync(path.join(root, 'miniprogram/pages/members/index.wxml'), 'utf8');
+  const tree = fs.readFileSync(path.join(root, 'miniprogram/pages/tree/index.js'), 'utf8');
+  const treeTemplate = fs.readFileSync(path.join(root, 'miniprogram/pages/tree/index.wxml'), 'utf8');
+  assert.match(userApi, /'family\.dismissShareReminder': familyDismissShareReminder/);
+  assert.match(userApi, /requireMembership\(event\.familyId, \['admin'\]/);
+  assert.match(userApi, /shareReminderDismissedAt/);
+  assert.match(userApi, /sharedAt: family\.sharedAt \|\| family\.onboardingSharedAt \|\| null/);
+  assert.doesNotMatch(members, /showShareReminder|dismissShareReminder/);
+  assert.match(membersTemplate, /让家谱活起来/);
+  assert.match(membersTemplate, /家谱已创建/);
+  assert.match(membersTemplate, /推荐补到 3 位家人/);
+  assert.match(membersTemplate, /发送到家庭群/);
+  assert.doesNotMatch(membersTemplate, /邀请家人一起补全|暂不分享/);
+  assert.match(tree, /personCount[\s\S]{0,80}>= 3/);
+  assert.match(tree, /!family\.sharedAt/);
+  assert.match(tree, /!family\.shareReminderDismissedAt/);
+  assert.match(tree, /api\.call\('family\.dismissShareReminder'/);
+  assert.match(treeTemplate, /邀请家人一起补全/);
+  assert.match(treeTemplate, /暂不分享/);
+  assert.match(treeTemplate, /bindtap="startShare"/);
+});
+
+test('分享弹框预先准备本机邀请码并直接转发给微信好友', function () {
+  const members = fs.readFileSync(path.join(root, 'miniprogram/pages/members/index.js'), 'utf8');
+  const membersTemplate = fs.readFileSync(path.join(root, 'miniprogram/pages/members/index.wxml'), 'utf8');
+  const tree = fs.readFileSync(path.join(root, 'miniprogram/pages/tree/index.js'), 'utf8');
+  const treeTemplate = fs.readFileSync(path.join(root, 'miniprogram/pages/tree/index.wxml'), 'utf8');
+  const cache = fs.readFileSync(path.join(root, 'miniprogram/utils/share-invite.js'), 'utf8');
+  [members, tree].forEach(function (source) {
+    assert.match(source, /require\('\.\.\/\.\.\/utils\/share-invite'\)/);
+    assert.match(source, /\}, this\.prepareShare\)/);
+    assert.match(source, /shareInvite\.get\(shareContext\)/);
+    assert.match(source, /shareInvite\.set\(shareContext, card, data\.expiresAt\)/);
+  });
+  [membersTemplate, treeTemplate].forEach(function (template) {
+    assert.match(template, /open-type="share">转发给微信好友/);
+    assert.match(template, /正在准备微信邀请/);
+    assert.doesNotMatch(template, /生成微信邀请/);
+  });
+  assert.match(cache, /youpu_share_invite_cards/);
+  assert.match(cache, /expirationTime\(entry\.expiresAt\) > now/);
+  assert.match(cache, /ownerId.*familyId.*role.*viewMode.*viewPersonId/s);
+});
+
 test('个人导出使用私有异步任务，不会复制数据到剪贴板', function () {
   const privacy = fs.readFileSync(path.join(root, 'miniprogram/pages/privacy/index.js'), 'utf8');
   const template = fs.readFileSync(path.join(root, 'miniprogram/pages/privacy/index.wxml'), 'utf8');
