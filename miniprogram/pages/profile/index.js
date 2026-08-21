@@ -253,15 +253,6 @@ Page({
 
   openArchivedFamily: function (event) { wx.navigateTo({ url: '/pages/family-manage/index?familyId=' + event.currentTarget.dataset.id }); },
 
-  clearCache: function () {
-    wx.showModal({ title: '清除本机缓存？', content: '只会清除这台设备上的临时资料，不会退出微信登录，也不会删除云端家谱。' }).then(function (result) {
-      if (!result.confirm) return;
-      app.clearLocalData();
-      wx.showToast({ title: '本机缓存已清除', icon: 'success' });
-      setTimeout(function () { wx.reLaunch({ url: '/pages/tree/index' }); }, 500);
-    });
-  },
-
   showAbout: function () { wx.showModal({ title: '关于有谱', content: '有谱由独立开发者打造，尝试用小程序与云端能力，让家谱记录更轻松、更便于协作。\n\n我们关注清晰的亲属关系、多人共同维护，以及家庭资料的隐私保护。\n\n愿每份家庭记忆，都能被好好保存。', showCancel: false, confirmText: '知道了' }); },
   stopEvent: function () {}
 });

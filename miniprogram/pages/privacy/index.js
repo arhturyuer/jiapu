@@ -144,6 +144,15 @@ Page({
     }).catch(function (error) { wx.showToast({ title: error.message || '撤销失败', icon: 'none' }); }).then(function () { self.setData({ cancelling: false }); });
   },
 
+  clearCache: function () {
+    wx.showModal({ title: '清除本机缓存？', content: '只会清除这台设备上的临时资料，不会退出微信登录，也不会删除云端家谱。' }).then(function (result) {
+      if (!result.confirm) return;
+      app.clearLocalData();
+      wx.showToast({ title: '本机缓存已清除', icon: 'success' });
+      setTimeout(function () { wx.reLaunch({ url: '/pages/tree/index' }); }, 500);
+    });
+  },
+
   openPermissionSettings: function () { wx.openSetting().catch(function () { wx.showToast({ title: '请在微信设置中管理小程序权限', icon: 'none' }); }); },
   openLegal: function (event) { wx.navigateTo({ url: '/pages/legal/index?type=' + event.currentTarget.dataset.type }); },
   openReportTarget: function (event) {

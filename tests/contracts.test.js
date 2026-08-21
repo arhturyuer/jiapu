@@ -167,6 +167,18 @@ test('个人导出使用私有异步任务，不会复制数据到剪贴板', fu
   assert.ok(indexes.indexes.export_tasks);
 });
 
+test('缓存清理入口位于隐私与账户页的权限与保存模块', function () {
+  const profile = fs.readFileSync(path.join(root, 'miniprogram/pages/profile/index.js'), 'utf8');
+  const profileTemplate = fs.readFileSync(path.join(root, 'miniprogram/pages/profile/index.wxml'), 'utf8');
+  const privacy = fs.readFileSync(path.join(root, 'miniprogram/pages/privacy/index.js'), 'utf8');
+  const privacyTemplate = fs.readFileSync(path.join(root, 'miniprogram/pages/privacy/index.wxml'), 'utf8');
+  assert.match(profileTemplate, /隐私与账户/);
+  assert.doesNotMatch(profileTemplate, /隐私、导出与注销|清除本机缓存|bindtap="clearCache"/);
+  assert.doesNotMatch(profile, /clearCache\s*:\s*function/);
+  assert.match(privacyTemplate, /权限与保存[\s\S]*bindtap="clearCache"[\s\S]*清除本机缓存/);
+  assert.match(privacy, /clearCache\s*:\s*function[\s\S]*app\.clearLocalData\(\)/);
+});
+
 test('小程序按官方运行时版本路由环境，体验版只能连接 staging', function () {
   const environment = require(path.join(root, 'miniprogram/config/env.js'));
   const legal = require(path.join(root, 'miniprogram/config/legal.js'));
