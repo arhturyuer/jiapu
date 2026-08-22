@@ -14,6 +14,7 @@
     "pages/change-list/index",
     "pages/invite/index",
     "pages/privacy/index",
+    "pages/feedback-group/index",
     "pages/family-manage/index",
     "pages/report/index",
     "pages/legal/index"

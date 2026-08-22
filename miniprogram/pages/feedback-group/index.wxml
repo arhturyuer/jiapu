@@ -1,0 +1,7 @@
+<view class="loading-panel" wx:if="{{loading}}"><view class="loading-dot"></view><text>正在读取反馈群信息...</text></view>
+<view class="page-shell" wx:elif="{{error}}"><view class="empty-panel"><view class="empty-mark">!</view><text class="empty-title">暂时无法打开用户反馈群</text><text class="empty-description">{{error}}</text><button class="primary-button empty-action" bindtap="loadFeedbackGroup">重新加载</button></view></view>
+<view class="feedback-page page-shell" wx:else>
+  <view class="feedback-hero surface-card"><text class="feedback-eyebrow">用户反馈群</text><text class="feedback-title">和我们一起把有谱做得更好</text><text class="feedback-desc">遇到问题、想分享建议，欢迎加入微信群和运营人员交流。</text></view>
+  <view class="qr-card surface-card" wx:if="{{available}}"><text class="qr-title">长按识别二维码加入微信群</text><image class="qr-image" src="{{qrCodeUrl}}" mode="aspectFit" show-menu-by-longpress="{{true}}" bindtap="previewQrCode"></image><text class="qr-hint">轻点可放大查看；在图片上长按并选择“识别图中二维码”。</text></view>
+  <view class="empty-panel feedback-unavailable" wx:else><view class="empty-mark">群</view><text class="empty-title">反馈群暂未开放</text><text class="empty-description">你可以先通过微信客服提交问题或建议。</text><button class="secondary-button empty-action" open-type="contact">联系微信客服</button></view>
+</view>

@@ -2,8 +2,9 @@
 import { computed, onMounted, reactive, ref } from 'vue';
 import { callOps, getErrorMessage, hasLoginState, signIn, signOut } from './cloudbase';
 import ExampleManager from './components/ExampleManager.vue';
+import FeedbackGroupManager from './components/FeedbackGroupManager.vue';
 
-type ModuleKey = 'dashboard' | 'users' | 'families' | 'examples' | 'reports' | 'moderation' | 'deletions' | 'audits' | 'operators';
+type ModuleKey = 'dashboard' | 'users' | 'families' | 'examples' | 'feedbackGroup' | 'reports' | 'moderation' | 'deletions' | 'audits' | 'operators';
 type ModerationScope = 'pending' | 'reviewed';
 type ParticipationFilter = 'all' | 'visitor' | 'creator' | 'member' | 'creator_member' | 'participating';
 type Row = Record<string, any>;
@@ -36,6 +37,7 @@ const navItems: Array<{ key: ModuleKey; label: string; caption: string }> = [
   { key: 'users', label: '用户', caption: '账号处置' },
   { key: 'families', label: '家谱', caption: '风险治理' },
   { key: 'examples', label: '示例家谱', caption: '内容发布' },
+  { key: 'feedbackGroup', label: '反馈群', caption: '用户沟通' },
   { key: 'reports', label: '举报', caption: '工单闭环' },
   { key: 'moderation', label: '内容复核', caption: '图片审核' },
   { key: 'deletions', label: '注销工单', caption: '数据权利' },
@@ -43,7 +45,7 @@ const navItems: Array<{ key: ModuleKey; label: string; caption: string }> = [
   { key: 'operators', label: '运营账号', caption: '白名单' }
 ];
 
-const actionByModule: Record<Exclude<ModuleKey, 'dashboard' | 'examples'>, string> = {
+const actionByModule: Record<Exclude<ModuleKey, 'dashboard' | 'examples' | 'feedbackGroup'>, string> = {
   users: 'users.list',
   families: 'families.list',
   reports: 'reports.list',
@@ -242,7 +244,7 @@ async function loadModule(module: ModuleKey, append = false): Promise<void> {
       hasMore.value = false;
       return;
     }
-    if (module === 'examples') {
+    if (module === 'examples' || module === 'feedbackGroup') {
       rows.value = [];
       nextCursor.value = '';
       hasMore.value = false;
@@ -508,6 +510,7 @@ onMounted(bootstrap);
       </section>
 
       <ExampleManager v-else-if="activeModule === 'examples'" :is-super-admin="operator?.role === 'super_admin'" />
+      <FeedbackGroupManager v-else-if="activeModule === 'feedbackGroup'" />
 
       <section v-else class="table-card">
         <div v-if="activeFilterDescription()" class="active-filter"><span>当前查看：{{ activeFilterDescription() }}</span><button :disabled="loading" @click="showAllRecords">查看全部</button></div>

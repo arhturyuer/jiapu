@@ -153,6 +153,7 @@ Page({
     });
   },
 
+  showFeedbackGroup: function () { wx.navigateTo({ url: '/pages/feedback-group/index' }); },
   openPermissionSettings: function () { wx.openSetting().catch(function () { wx.showToast({ title: '请在微信设置中管理小程序权限', icon: 'none' }); }); },
   openLegal: function (event) { wx.navigateTo({ url: '/pages/legal/index?type=' + event.currentTarget.dataset.type }); },
   openReportTarget: function (event) {

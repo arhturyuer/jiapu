@@ -244,6 +244,7 @@ Page({
   openExamples: function () { wx.navigateTo({ url: '/pages/examples/index' }); },
   explainInvitation: function () { wx.showModal({ title: '接受家人邀请', content: '请从家人发给你的家谱邀请卡进入。这样我们才能确认你要加入的家谱和权限。', showCancel: false, confirmText: '知道了' }); },
   showPrivacy: function () { wx.navigateTo({ url: '/pages/privacy/index' }); },
+  showFeedbackGroup: function () { wx.navigateTo({ url: '/pages/feedback-group/index' }); },
 
   openFamilyManage: function () {
     const family = this.data.currentFamily;

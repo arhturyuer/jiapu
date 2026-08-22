@@ -2335,6 +2335,20 @@ async function examplesGet(event) {
   return { example: publicExampleContent(result.data[0]) };
 }
 
+async function feedbackGroupGet() {
+  const openid = getOpenid();
+  await ensureUser(openid);
+  const setting = await maybeGet(db, 'feedback_group_settings', 'active');
+  if (!setting || !setting.fileId) return { available: false, qrCodeUrl: '' };
+  try {
+    const result = await cloud.getTempFileURL({ fileList: [setting.fileId] });
+    const item = (result.fileList || [])[0] || {};
+    return { available: Boolean(item.tempFileURL), qrCodeUrl: item.tempFileURL || '' };
+  } catch (error) {
+    return { available: false, qrCodeUrl: '' };
+  }
+}
+
 const handlers = {
   'auth.login': authLogin,
   'auth.updateProfile': authUpdateProfile,
@@ -2378,6 +2392,7 @@ const handlers = {
   'media.getUrls': mediaGetUrls,
   'media.getStates': mediaGetStates,
   'media.getPresentation': mediaGetPresentation,
+  'feedbackGroup.get': feedbackGroupGet,
   'examples.list': examplesList,
   'examples.get': examplesGet
 };

@@ -39,6 +39,7 @@ const collections = [
   'profile_sync_tasks',
   'rate_limits',
   'export_tasks',
+  'feedback_group_settings',
   'example_templates',
   'example_template_versions'
 ];

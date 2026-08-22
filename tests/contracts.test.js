@@ -179,6 +179,35 @@ test('缓存清理入口位于隐私与账户页的权限与保存模块', funct
   assert.match(privacy, /clearCache\s*:\s*function[\s\S]*app\.clearLocalData\(\)/);
 });
 
+test('用户反馈群二维码由运营后台受控替换并在小程序双入口展示', function () {
+  const app = JSON.parse(fs.readFileSync(path.join(root, 'miniprogram/app.json'), 'utf8'));
+  const profile = fs.readFileSync(path.join(root, 'miniprogram/pages/profile/index.wxml'), 'utf8');
+  const privacy = fs.readFileSync(path.join(root, 'miniprogram/pages/privacy/index.wxml'), 'utf8');
+  const feedbackPage = fs.readFileSync(path.join(root, 'miniprogram/pages/feedback-group/index.wxml'), 'utf8');
+  const feedbackSource = fs.readFileSync(path.join(root, 'miniprogram/pages/feedback-group/index.js'), 'utf8');
+  const userApi = fs.readFileSync(path.join(root, 'cloudfunctions/youpuUserApi/index.js'), 'utf8');
+  const opsApi = fs.readFileSync(path.join(root, 'cloudfunctions/youpuOpsApi/index.js'), 'utf8');
+  const admin = fs.readFileSync(path.join(root, 'admin/src/components/FeedbackGroupManager.vue'), 'utf8');
+  const jobs = fs.readFileSync(path.join(root, 'cloudfunctions/youpuJobs/index.js'), 'utf8');
+  assert.ok(app.pages.includes('pages/feedback-group/index'));
+  [profile, privacy].forEach(function (template) { assert.match(template, /showFeedbackGroup[\s\S]*用户反馈群/); });
+  assert.match(feedbackPage, /长按识别二维码加入微信群/);
+  assert.match(feedbackPage, /反馈群暂未开放/);
+  assert.match(feedbackSource, /api\.call\('feedbackGroup\.get'/);
+  assert.match(feedbackSource, /wx\.previewImage/);
+  assert.match(userApi, /async function feedbackGroupGet/);
+  assert.match(userApi, /'feedbackGroup\.get': feedbackGroupGet/);
+  assert.match(opsApi, /async function feedbackGroupUpdate/);
+  assert.match(opsApi, /feedback_group_settings/);
+  assert.match(opsApi, /FEEDBACK_QR_MAX_BYTES/);
+  assert.match(opsApi, /cloud\.uploadFile/);
+  assert.match(opsApi, /ops\.feedback_group\.update/);
+  assert.match(opsApi, /'feedbackGroup\.update': feedbackGroupUpdate/);
+  assert.match(admin, /确认替换二维码/);
+  assert.match(admin, /feedbackGroup\.update/);
+  assert.match(jobs, /'feedback_group_settings'/);
+});
+
 test('小程序按官方运行时版本路由环境，体验版只能连接 staging', function () {
   const environment = require(path.join(root, 'miniprogram/config/env.js'));
   const legal = require(path.join(root, 'miniprogram/config/legal.js'));

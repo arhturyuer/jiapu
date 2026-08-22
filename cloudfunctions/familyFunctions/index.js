@@ -20,6 +20,7 @@ const REQUIRED_COLLECTIONS = [
   'change_requests',
   'audit_logs',
   'media_assets',
+  'feedback_group_settings',
   'reports',
   'notifications'
 ];

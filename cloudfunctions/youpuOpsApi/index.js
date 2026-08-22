@@ -6,6 +6,8 @@ cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
 const db = cloud.database();
 const _ = db.command;
+const FEEDBACK_GROUP_SETTINGS_ID = 'active';
+const FEEDBACK_QR_MAX_BYTES = 1024 * 1024;
 class OpsError extends Error {
   constructor(code, message) {
     super(message);
@@ -656,6 +658,82 @@ async function sessionMe(event, context) {
       role: operator.role
     }
   };
+}
+
+function feedbackQrUpload(event) {
+  const match = /^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/=]+)$/.exec(String(event.imageData || ''));
+  assert(match, 'INVALID_FEEDBACK_QR', '请上传 PNG、JPEG 或 WebP 格式的二维码图片');
+  const encoded = match[2];
+  const content = Buffer.from(encoded, 'base64');
+  assert(content.length > 0 && content.length <= FEEDBACK_QR_MAX_BYTES, 'FEEDBACK_QR_TOO_LARGE', '二维码图片不能超过 1MB');
+  assert(content.toString('base64').replace(/=+$/, '') === encoded.replace(/=+$/, ''), 'INVALID_FEEDBACK_QR', '二维码图片数据无效');
+  const isPng = content.length >= 8 && content.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+  const isJpeg = content.length >= 3 && content[0] === 0xff && content[1] === 0xd8 && content[2] === 0xff;
+  const isWebp = content.length >= 12 && content.subarray(0, 4).toString('ascii') === 'RIFF' && content.subarray(8, 12).toString('ascii') === 'WEBP';
+  const kind = match[1];
+  assert((kind === 'png' && isPng) || (kind === 'jpeg' && isJpeg) || (kind === 'webp' && isWebp), 'INVALID_FEEDBACK_QR', '二维码图片格式与文件内容不匹配');
+  return { content: content, extension: kind === 'jpeg' ? 'jpg' : kind, contentType: 'image/' + kind };
+}
+
+async function feedbackGroupPayload(setting) {
+  if (!setting || !setting.fileId) return { available: false, qrCodeUrl: '', updatedAt: null };
+  try {
+    const result = await cloud.getTempFileURL({ fileList: [setting.fileId] });
+    const item = (result.fileList || [])[0] || {};
+    return { available: Boolean(item.tempFileURL), qrCodeUrl: item.tempFileURL || '', updatedAt: setting.updatedAt || null };
+  } catch (error) {
+    return { available: false, qrCodeUrl: '', updatedAt: setting.updatedAt || null };
+  }
+}
+
+async function feedbackGroupGet(event, context) {
+  await requireOperator(context, ['super_admin', 'operator']);
+  return feedbackGroupPayload(await maybeGet('feedback_group_settings', FEEDBACK_GROUP_SETTINGS_ID));
+}
+
+async function feedbackGroupUpdate(event, context) {
+  const operator = await requireOperator(context, ['super_admin', 'operator']);
+  const requestId = cleanText(event.requestId, 80);
+  assert(requestId, 'REQUEST_ID_REQUIRED', '请求缺少幂等标识');
+  const image = feedbackQrUpload(event);
+  const cloudPath = ['ops', 'feedback-groups', hash([operator._id, requestId].join(':'), 48) + '.' + image.extension].join('/');
+  let upload;
+  try {
+    upload = await cloud.uploadFile({ cloudPath: cloudPath, fileContent: image.content });
+  } catch (error) {
+    throw new OpsError('FEEDBACK_QR_UPLOAD_FAILED', '二维码上传失败，请稍后重试');
+  }
+  const fileId = cleanText(upload && upload.fileID, 500);
+  assert(fileId, 'FEEDBACK_QR_UPLOAD_FAILED', '二维码上传失败，请稍后重试');
+  let mutation;
+  try {
+    mutation = await opsMutate(operator, 'feedbackGroup.update', event, async function (transaction) {
+      const previous = await maybeGet('feedback_group_settings', FEEDBACK_GROUP_SETTINGS_ID, transaction);
+      await transaction.collection('feedback_group_settings').doc(FEEDBACK_GROUP_SETTINGS_ID).set({
+        data: {
+          fileId: fileId,
+          cloudPath: cloudPath,
+          contentType: image.contentType,
+          size: image.content.length,
+          version: Math.max(0, Number(previous && previous.version) || 0) + 1,
+          updatedBy: operator._id,
+          updatedAt: db.serverDate()
+        }
+      });
+      await writeOpsAudit(transaction, operator, 'ops.feedback_group.update', 'feedback_group_settings', FEEDBACK_GROUP_SETTINGS_ID, '运营后台替换反馈群二维码', '替换用户反馈群二维码', event.requestId);
+      return { replacedFileId: cleanText(previous && previous.fileId, 500) };
+    });
+  } catch (error) {
+    await cloud.deleteFile({ fileList: [fileId] }).catch(function () {});
+    throw error;
+  }
+  const replacedFileId = cleanText(mutation && mutation.replacedFileId, 500);
+  if (replacedFileId && replacedFileId !== fileId) {
+    cloud.deleteFile({ fileList: [replacedFileId] }).catch(function (error) {
+      console.warn(JSON.stringify({ type: 'feedback_qr_previous_delete_failed', error: errorDigest(error) }));
+    });
+  }
+  return feedbackGroupPayload(await maybeGet('feedback_group_settings', FEEDBACK_GROUP_SETTINGS_ID));
 }
 
 async function dashboardSummary(event, context) {
@@ -1554,6 +1632,8 @@ const handlers = {
   'operators.list': operatorsList,
   'operators.create': operatorsCreate,
   'operators.disable': operatorsDisable,
+  'feedbackGroup.get': feedbackGroupGet,
+  'feedbackGroup.update': feedbackGroupUpdate,
   'examples.health': examplesHealth,
   'examples.list': examplesList,
   'examples.detail': examplesDetail,
