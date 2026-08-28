@@ -94,6 +94,10 @@ td small { max-width: 300px; margin-top: 5px; overflow: hidden; color: #849089; 
 .empty-state h3 { margin: 18px 0 4px; color: #28362f; }
 .empty-state p { margin: 0; }
 .load-more { width: 100%; padding: 14px; color: #245c4a; background: #fafbf9; border: 0; border-top: 1px solid #edf0ed; font-weight: 700; }
+.pagination { padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; gap: 16px; color: #718079; background: #fafbf9; border-top: 1px solid #edf0ed; font-size: 12px; }
+.pagination > div { display: flex; align-items: center; gap: 10px; }
+.pagination button { min-width: 68px; padding: 7px 10px; color: #245c4a; background: white; border: 1px solid #c8d6cf; border-radius: 8px; font-size: 12px; font-weight: 700; }
+.pagination strong { min-width: 56px; color: #405149; text-align: center; }
 .modal-mask { position: fixed; z-index: 50; inset: 0; display: grid; place-items: center; background: rgba(10,25,19,.52); backdrop-filter: blur(4px); }
 .modal { width: 480px; padding: 30px; display: grid; gap: 20px; background: white; border-radius: 24px; box-shadow: 0 32px 90px rgba(0,0,0,.24); }
 .modal > p:not(.eyebrow) { margin: 0; color: #65706a; line-height: 1.6; }

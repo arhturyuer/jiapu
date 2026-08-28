@@ -305,7 +305,63 @@ async function opsMutate(operator, action, event, handler) {
   });
 }
 
-async function page(collectionName, where, event) {
+function encodeTimeCursor(item, sortField) {
+  const value = item && item[sortField];
+  const timestamp = value instanceof Date ? value : new Date(value);
+  if (!item || !item._id || Number.isNaN(timestamp.getTime())) return '';
+  return Buffer.from(JSON.stringify({ v: 1, t: timestamp.toISOString(), id: String(item._id) }), 'utf8')
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
+}
+
+function decodeTimeCursor(value) {
+  const cursor = cleanText(value, 512);
+  if (!cursor) return null;
+  try {
+    const normalized = cursor.replace(/-/g, '+').replace(/_/g, '/');
+    const padding = normalized.length % 4 ? '='.repeat(4 - normalized.length % 4) : '';
+    const parsed = JSON.parse(Buffer.from(normalized + padding, 'base64').toString('utf8'));
+    const timestamp = new Date(parsed && parsed.t);
+    const id = cleanText(parsed && parsed.id, 80);
+    assert(parsed && parsed.v === 1 && id && !Number.isNaN(timestamp.getTime()), 'INVALID_CURSOR', '分页游标无效，请刷新后重试');
+    return { timestamp: timestamp, id: id };
+  } catch (error) {
+    if (error instanceof OpsError) throw error;
+    throw new OpsError('INVALID_CURSOR', '分页游标无效，请刷新后重试');
+  }
+}
+
+async function page(collectionName, where, event, sortField) {
+  const pageSize = Math.max(1, Math.min(Number(event.pageSize) || 20, 50));
+  const cursor = decodeTimeCursor(event.cursor);
+  const sort = cleanText(sortField, 40);
+  assert(sort, 'INVALID_SORT', '列表排序字段无效');
+  let query = db.collection(collectionName).where(where || {});
+  if (cursor) {
+    query = query.where(_.or([
+      { [sort]: _.lt(cursor.timestamp) },
+      { [sort]: cursor.timestamp, _id: _.lt(cursor.id) }
+    ]));
+  }
+  const result = await query
+    .orderBy(sort, 'desc')
+    .orderBy('_id', 'desc')
+    .limit(pageSize + 1)
+    .get();
+  let items = result.data || [];
+  const hasMore = items.length > pageSize;
+  items = items.slice(0, pageSize);
+  const lastCursor = items.length ? encodeTimeCursor(items[items.length - 1], sort) : '';
+  return {
+    items: items,
+    nextCursor: hasMore ? lastCursor : '',
+    hasMore: hasMore
+  };
+}
+
+async function pageById(collectionName, where, event) {
   const pageSize = Math.max(1, Math.min(Number(event.pageSize) || 20, 50));
   const cursor = cleanText(event.cursor, 80);
   const condition = Object.assign({}, where || {});
@@ -774,7 +830,7 @@ async function usersPageWithParticipation(where, event, filter) {
   const users = [];
   while (users.length < pageSize && hasMore) {
     const remaining = pageSize - users.length;
-    const sourcePage = await page('users', where, { pageSize: remaining, cursor: cursor });
+    const sourcePage = await page('users', where, { pageSize: remaining, cursor: cursor }, 'createdAt');
     if (!sourcePage.items.length) {
       hasMore = false;
       break;
@@ -786,7 +842,7 @@ async function usersPageWithParticipation(where, event, filter) {
         users.push(publicUser(user, stats));
       }
     });
-    cursor = sourcePage.items[sourcePage.items.length - 1]._id;
+    cursor = encodeTimeCursor(sourcePage.items[sourcePage.items.length - 1], 'createdAt');
     hasMore = sourcePage.hasMore;
   }
   return {
@@ -869,7 +925,7 @@ async function usersFreeze(event, context) {
 async function familiesList(event, context) {
   await requireOperator(context, ['super_admin', 'operator']);
   const where = event.status ? { status: cleanText(event.status, 30) } : {};
-  const result = await page('families', where, event);
+  const result = await page('families', where, event, 'createdAt');
   const familyCounts = await Promise.all(result.items.map(async function (family) {
     const counts = await Promise.all([
       db.collection('family_memberships').where({ familyId: family._id, status: 'active' }).count(),
@@ -946,7 +1002,7 @@ async function familiesPersons(event, context) {
     hasMore = persons.length > pageSize;
     persons = persons.slice(0, pageSize);
   } else {
-    const result = await page('persons', { familyId: family._id, status: 'active' }, { pageSize: pageSize, cursor: cursor });
+    const result = await pageById('persons', { familyId: family._id, status: 'active' }, { pageSize: pageSize, cursor: cursor });
     persons = result.items;
     hasMore = result.hasMore;
   }
@@ -1046,7 +1102,7 @@ async function reportsList(event, context) {
   const where = scope === 'backlog'
     ? { status: _.in(['open', 'processing']) }
     : event.status ? { status: cleanText(event.status, 30) } : {};
-  const result = await page('reports', where, event);
+  const result = await page('reports', where, event, 'createdAt');
   result.items = result.items.map(function (item) {
     return {
       _id: item._id,
@@ -1124,7 +1180,7 @@ async function moderationList(event, context) {
   const scope = event.scope === 'reviewed' ? 'reviewed' : 'pending';
   const statuses = scope === 'reviewed' ? ['approved', 'rejected'] : ['review', 'pending'];
   const where = { status: _.in(statuses) };
-  const result = await page('moderation_tasks', where, event);
+  const result = await page('moderation_tasks', where, event, scope === 'reviewed' ? 'updatedAt' : 'createdAt');
   const reviewerIds = Array.from(new Set(result.items.map(function (item) {
     return item.reviewedBy;
   }).filter(Boolean)));
@@ -1256,7 +1312,7 @@ async function deletionsList(event, context) {
   const where = scope === 'backlog'
     ? { status: _.in(['pending', 'failed']) }
     : event.status ? { status: cleanText(event.status, 30) } : {};
-  const result = await page('account_deletion_requests', where, event);
+  const result = await page('account_deletion_requests', where, event, 'requestedAt');
   result.scope = scope === 'backlog' ? 'backlog' : 'all';
   return result;
 }
@@ -1278,7 +1334,7 @@ async function deletionsRetry(event, context) {
 async function auditsList(event, context) {
   await requireOperator(context, ['super_admin']);
   const where = event.operatorOnly ? { operatorAudit: true } : {};
-  const result = await page('audit_logs', where, event);
+  const result = await page('audit_logs', where, event, 'createdAt');
   result.items = result.items.map(function (item) {
     return {
       _id: item._id,
@@ -1297,7 +1353,7 @@ async function auditsList(event, context) {
 
 async function operatorsList(event, context) {
   await requireOperator(context, ['super_admin']);
-  const result = await page('operators', {}, event);
+  const result = await page('operators', {}, event, 'createdAt');
   result.items = result.items.map(function (item) {
     return {
       _id: item._id,

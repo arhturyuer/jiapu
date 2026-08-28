@@ -70,6 +70,8 @@ const notice = ref('');
 const rows = ref<Row[]>([]);
 const nextCursor = ref('');
 const hasMore = ref(false);
+const pageNumber = ref(1);
+const pageCursors = ref<string[]>(['']);
 const totals = reactive({ activeUsers: 0, currentParticipatingUsers: 0, visitorUsers: 0, activeFamilies: 0, reportBacklog: 0, moderationBacklog: 0, deletionBacklog: 0 });
 const dialog = reactive({
   open: false,
@@ -101,6 +103,28 @@ function formatDate(value: unknown): string {
   if (!value) return '—';
   const date = new Date(value as string);
   return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString('zh-CN', { hour12: false });
+}
+
+function resetListPagination(): void {
+  pageNumber.value = 1;
+  pageCursors.value = [''];
+  nextCursor.value = '';
+  hasMore.value = false;
+}
+
+function timeColumnLabel(): string {
+  if (activeModule.value === 'users') return '注册时间';
+  if (activeModule.value === 'reports') return '提交时间';
+  if (activeModule.value === 'moderation') return moderationScope.value === 'reviewed' ? '复核时间' : '提交时间';
+  if (activeModule.value === 'deletions') return '申请时间';
+  if (activeModule.value === 'audits') return '操作时间';
+  return '创建时间';
+}
+
+function rowTime(row: Row): unknown {
+  if (activeModule.value === 'moderation') return moderationScope.value === 'reviewed' ? row.decidedAt : row.createdAt;
+  if (activeModule.value === 'deletions') return row.requestedAt || row.createdAt || row.updatedAt;
+  return row.createdAt || row.updatedAt;
 }
 
 function statusLabel(value: string): string {
@@ -227,10 +251,26 @@ async function logout(): Promise<void> {
   rows.value = [];
 }
 
-async function loadModule(module: ModuleKey, append = false): Promise<void> {
+async function loadModule(module: ModuleKey, direction: 'reset' | 'next' | 'previous' = 'reset'): Promise<void> {
+  const previousPageNumber = pageNumber.value;
+  const previousCursors = pageCursors.value.slice();
+  const previousNextCursor = nextCursor.value;
+  const previousHasMore = hasMore.value;
   if (module === 'moderation' && activeModule.value !== 'moderation') moderationScope.value = 'pending';
   activeModule.value = module;
   if (module !== 'moderation') notice.value = '';
+  if (direction === 'reset') {
+    resetListPagination();
+  } else if (direction === 'next') {
+    if (!hasMore.value || !nextCursor.value) return;
+    pageCursors.value = pageCursors.value.slice(0, pageNumber.value);
+    pageCursors.value.push(nextCursor.value);
+    pageNumber.value += 1;
+  } else {
+    if (pageNumber.value <= 1) return;
+    pageNumber.value -= 1;
+    pageCursors.value = pageCursors.value.slice(0, pageNumber.value);
+  }
   loading.value = true;
   error.value = '';
   detail.value = null;
@@ -240,29 +280,33 @@ async function loadModule(module: ModuleKey, append = false): Promise<void> {
       const data = await callOps<{ totals: typeof totals }>('dashboard.summary');
       Object.assign(totals, data.totals);
       rows.value = [];
-      nextCursor.value = '';
-      hasMore.value = false;
+      resetListPagination();
       return;
     }
     if (module === 'examples' || module === 'feedbackGroup') {
       rows.value = [];
-      nextCursor.value = '';
-      hasMore.value = false;
+      resetListPagination();
       return;
     }
     const params: Record<string, unknown> = {
       pageSize: 25,
-      cursor: append ? nextCursor.value : ''
+      cursor: pageCursors.value[pageNumber.value - 1] || ''
     };
     if (module === 'moderation') params.scope = moderationScope.value;
     if (['users', 'families'].includes(module) && listStatus.value) params.status = listStatus.value;
     if (['reports', 'deletions'].includes(module) && listScope.value) params.scope = listScope.value;
     if (module === 'users' && userParticipationFilter.value !== 'all') params.participationType = userParticipationFilter.value;
     const data = await callOps<PageResult>(actionByModule[module], params);
-    rows.value = append ? rows.value.concat(data.items) : data.items;
+    rows.value = data.items;
     nextCursor.value = data.nextCursor;
     hasMore.value = data.hasMore;
   } catch (err) {
+    if (direction !== 'reset') {
+      pageNumber.value = previousPageNumber;
+      pageCursors.value = previousCursors;
+      nextCursor.value = previousNextCursor;
+      hasMore.value = previousHasMore;
+    }
     error.value = err instanceof Error ? err.message : '数据加载失败';
   } finally {
     loading.value = false;
@@ -525,7 +569,7 @@ onMounted(bootstrap);
         <div v-else-if="!rows.length" class="empty-state"><div>空</div><h3>{{ activeModule === 'moderation' && moderationScope === 'pending' ? '当前没有待复核内容' : '当前没有记录' }}</h3><p>{{ activeModule === 'moderation' && moderationScope === 'reviewed' ? '人工复核和机器审核完成后会显示在这里。' : '新的数据会自动显示在这里。' }}</p></div>
         <div v-else class="table-wrap">
           <table>
-            <thead><tr><th>标识 / 名称</th><th>类型 / 角色</th><th v-if="activeModule === 'families'">用户数</th><th v-if="activeModule === 'families'">成员数</th><th v-if="activeModule === 'users'">家谱参与</th><th>状态</th><th>时间</th><th>操作</th></tr></thead>
+            <thead><tr><th>标识 / 名称</th><th>类型 / 角色</th><th v-if="activeModule === 'families'">用户数</th><th v-if="activeModule === 'families'">成员数</th><th v-if="activeModule === 'users'">家谱参与</th><th>状态</th><th>{{ timeColumnLabel() }}</th><th>操作</th></tr></thead>
             <tbody>
               <tr v-for="row in rows" :key="row._id">
                 <td><strong>{{ row.name || row.nickName || row.displayName || row.actorName || row.identity || row.targetType || row.action || row._id }}</strong><small>{{ row.email || row.actorId || row.reason || row.summary || row.familyId || row._id }}</small></td>
@@ -534,7 +578,7 @@ onMounted(bootstrap);
                 <td v-if="activeModule === 'families'"><strong>{{ row.memberCount || 0 }}</strong><small>谱内成员</small></td>
                 <td v-if="activeModule === 'users'"><strong>{{ participationLabel(row.participationType) }}</strong><small>{{ participationSummary(row) }}</small></td>
                 <td><span class="status" :class="row.status || row.moderationStatus">{{ activeModule === 'moderation' ? moderationStatusLabel(row.moderationStatus) : statusLabel(row.status || row.moderationStatus) }}</span></td>
-                <td>{{ formatDate(activeModule === 'moderation' && moderationScope === 'reviewed' ? row.decidedAt : row.createdAt || row.requestedAt || row.updatedAt) }}</td>
+                <td>{{ formatDate(rowTime(row)) }}</td>
                 <td class="row-actions">
                   <button v-if="activeModule === 'users'" @click="viewUser(row)">查看</button>
                   <button v-if="activeModule === 'users' && operator?.role === 'super_admin' && ['active','frozen'].includes(row.status)" :class="{ danger: row.status !== 'frozen' }" @click="openAction(row.status === 'frozen' ? '解除用户冻结' : '冻结用户', '该操作会立即影响用户访问。', 'users.freeze', { userId: row._id, freeze: row.status !== 'frozen' }, row.status !== 'frozen')">{{ row.status === 'frozen' ? '解冻' : '冻结' }}</button>
@@ -554,7 +598,14 @@ onMounted(bootstrap);
             </tbody>
           </table>
         </div>
-        <button v-if="hasMore" class="load-more" :disabled="loading" @click="loadModule(activeModule, true)">{{ loading ? '加载中...' : '加载更多' }}</button>
+        <div v-if="rows.length" class="pagination" aria-label="列表分页">
+          <span>本页 {{ rows.length }} 条</span>
+          <div>
+            <button :disabled="loading || pageNumber === 1" @click="loadModule(activeModule, 'previous')">上一页</button>
+            <strong>第 {{ pageNumber }} 页</strong>
+            <button :disabled="loading || !hasMore" @click="loadModule(activeModule, 'next')">下一页</button>
+          </div>
+        </div>
       </section>
 
       <section v-if="detail" class="detail-drawer">
