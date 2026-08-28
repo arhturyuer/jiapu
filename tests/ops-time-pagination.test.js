@@ -64,6 +64,11 @@ test('各运营列表按其业务时间字段排序', function () {
 
 test('用户参与度筛选以最后扫描的时间游标续页', function () {
   assert.match(ops, /usersPageWithParticipation[\s\S]*?encodeTimeCursor\(sourcePage\.items\[sourcePage\.items\.length - 1\], 'createdAt'\)/);
+  const usersPage = ops.slice(ops.indexOf('async function usersPageWithParticipation'), ops.indexOf('async function usersList'));
+  assert.match(usersPage, /let cursor = cleanText\(event\.cursor, 512\)/);
+  const helpers = cursorHelpers();
+  const cursor = helpers.encodeTimeCursor({ _id: 'a'.repeat(64), createdAt: new Date('2026-08-28T08:00:00.000Z') }, 'createdAt');
+  assert.ok(cursor.length > 80, '长用户 ID 生成的有效游标应超过旧的 80 字符限制');
 });
 
 test('运营后台展示前后翻页和业务时间列', function () {

@@ -825,7 +825,9 @@ function participationFilter(value) {
 
 async function usersPageWithParticipation(where, event, filter) {
   const pageSize = Math.max(1, Math.min(Number(event.pageSize) || 20, 50));
-  let cursor = cleanText(event.cursor, 80);
+  // Time cursors include both an ISO timestamp and the full user ID.  Keep the
+  // same limit as page() so a valid cursor is never truncated before decoding.
+  let cursor = cleanText(event.cursor, 512);
   let hasMore = true;
   const users = [];
   while (users.length < pageSize && hasMore) {
