@@ -323,6 +323,22 @@
   white-space: nowrap;
 }
 
+.person-node.node-vertical {
+  width: 88rpx;
+  padding: 12rpx 8rpx;
+  justify-content: center;
+}
+
+.node-name-vertical {
+  max-width: 56rpx;
+  max-height: 140rpx;
+  overflow: hidden;
+  text-align: center;
+  line-height: 1.14;
+  white-space: pre-line;
+  word-break: break-all;
+}
+
 .branch-count {
   position: absolute;
   right: -18rpx;
@@ -380,6 +396,10 @@
 
 .graph-movable.zoom-overview .node-name {
   font-size: 32rpx;
+}
+
+.graph-movable.zoom-overview .node-name-vertical {
+  font-size: 28rpx;
 }
 
 .graph-movable.zoom-overview .relation-line:not(.relation-flow) {

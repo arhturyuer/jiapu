@@ -65,6 +65,21 @@ test('重绘图谱一次提交完整节点和关系，不先清空再分批追�
   assert.equal(instance.setDataCalls[0].renderedCount, 2);
 });
 
+test('切换竖排会重绘窄节点并保存当前家谱偏好', function () {
+  const instance = createPage();
+  instance.page.data.currentFamily = { _id: 'family-1' };
+  instance.page.data.nameLayout = 'horizontal';
+  instance.page.data.viewMode = 'full';
+  instance.page.data.viewpointId = '';
+  instance.page.fitGraph = function () {};
+  let saved = null;
+  instance.page.saveGraphPreference = function () { saved = Array.from(arguments); };
+  instance.page.toggleNameLayout();
+  assert.equal(instance.page.data.nameLayout, 'vertical');
+  assert.equal(instance.page._lastLayout.nodeWidth, 88);
+  assert.deepEqual(saved, [{ _id: 'family-1' }, 'vertical', 'full', '']);
+});
+
 test('方向流光只使用 transform 和 opacity，不触发布局属性动画', function () {
   const pageRoot = path.join(__dirname, '../miniprogram/pages/tree');
   const wxss = fs.readFileSync(path.join(pageRoot, 'index.wxss'), 'utf8');

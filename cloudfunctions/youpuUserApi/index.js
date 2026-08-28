@@ -1105,6 +1105,7 @@ async function familySetPreference(event) {
         userId: userId(openid),
         viewMode: event.viewMode === 'perspective' ? 'perspective' : 'full',
         lastViewPersonId: cleanText(event.personId, 80),
+        nameLayout: event.nameLayout === 'vertical' ? 'vertical' : 'horizontal',
         updatedAt: db.serverDate()
       }
     });
@@ -1117,6 +1118,7 @@ async function graphGet(event) {
   await requireActiveUser(openid);
   const access = await requireMembership(event.familyId, ACTIVE_ROLES, db, openid);
   const family = access.family;
+  const preference = await maybeGet(db, 'user_family_preferences', preferenceId(event.familyId, openid));
   const persons = await listAll('persons', { familyId: event.familyId, status: 'active' }, GRAPH_PERSON_LIMIT);
   const relations = await listAll('relations', { familyId: event.familyId, status: 'active' }, GRAPH_RELATION_LIMIT);
   const personIds = new Set(persons.map(function (person) { return person._id; }));
@@ -1145,6 +1147,9 @@ async function graphGet(event) {
         toPersonId: relation.toPersonId
       };
     }),
+    preference: {
+      nameLayout: preference && preference.nameLayout === 'vertical' ? 'vertical' : 'horizontal'
+    },
     currentRole: access.membership.role
   };
 }

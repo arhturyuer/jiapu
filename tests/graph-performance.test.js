@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const graph = require('../miniprogram/utils/graph-layout');
+const viewport = require('../miniprogram/utils/graph-viewport');
 
 test('500 人家谱可以完整布局、切换视角并折叠分支', function () {
   const persons = [];
@@ -90,4 +91,22 @@ test('多子女家庭最多为 12 条子女路径播放流光，其余保持静�
   assert.equal(drops.length, 15);
   assert.equal(drops.filter(function (line) { return line.isAnimatedFlow; }).length, 12);
   assert.equal(drops.filter(function (line) { return !line.isAnimatedFlow; }).length, 3);
+});
+
+test('竖排节点定位使用布局返回的节点宽度', function () {
+  const layout = graph.layoutGraph([
+    { _id: 'person', name: '竖排成员', status: 'active' }
+  ], [], { mode: 'full', nameLayout: 'vertical' });
+  const person = layout.nodes[0];
+  const viewportSize = { width: 375, height: 500, rpxToPx: 0.5 };
+  const transform = viewport.fitTransform(layout, viewportSize, {
+    fitAll: false,
+    focusPersonId: 'person',
+    currentScale: 1
+  });
+  assert.equal(
+    transform.x,
+    viewportSize.width / 2 - (person.x + layout.nodeWidth / 2) * viewportSize.rpxToPx,
+    '焦点 X 坐标必须以竖排节点的实际中心计算'
+  );
 });

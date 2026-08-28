@@ -262,4 +262,33 @@ assert.ok(selectedMultipleSpouse.lines.some(function (line) {
   return line.isFlow && line.flowRole === 'child-drop' && line.familyKey.indexOf('pair:multi-parent|multi-wife-a@') === 0;
 }), '高亮动画应沿子女所属的配偶组合轨道运行');
 
+const verticalMultipleSpouse = graph.layoutGraph(multipleSpousePersons, multipleSpouseRelations, {
+  mode: 'full',
+  nameLayout: 'vertical'
+});
+assert.strictEqual(verticalMultipleSpouse.nameLayout, 'vertical');
+assert.strictEqual(verticalMultipleSpouse.nodeWidth, 88);
+assert.strictEqual(verticalMultipleSpouse.nodeHeight, 164);
+assert.ok(verticalMultipleSpouse.width < multipleSpouseLayout.width, '竖排应缩窄较宽家谱的画布');
+assert.strictEqual(
+  verticalMultipleSpouse.nodes.find(function (node) { return node._id === 'multi-wife-a'; }).verticalName,
+  '配\n偶\n甲',
+  '竖排节点应逐字展示姓名'
+);
+verticalMultipleSpouse.lines.filter(function (line) { return !line.isFlow; }).forEach(function (line) {
+  const lineSegment = readSegment(line);
+  verticalMultipleSpouse.nodes.forEach(function (node) {
+    assert.strictEqual(
+      crossesNodeInterior(lineSegment, node, verticalMultipleSpouse.nodeWidth, verticalMultipleSpouse.nodeHeight),
+      false,
+      '竖排关系线不得进入人物节点：' + line._id + ' -> ' + node._id
+    );
+  });
+});
+
+const verticalLongName = graph.layoutGraph([
+  { _id: 'long-name', name: '欧阳娜娜测试', status: 'active' }
+], [], { mode: 'full', nameLayout: 'vertical' });
+assert.strictEqual(verticalLongName.nodes[0].verticalName, '欧\n阳\n娜\n娜\n…', '超过四个字符的竖排姓名应省略');
+
 console.log('graph layout tests passed');

@@ -1,19 +1,41 @@
-const NODE_WIDTH = 168;
-// This is the outer card height, including its avatar, name and status line.
-// Keep connection geometry aligned with the actual fixed-height mini-program card.
-const NODE_HEIGHT = 164;
-const COUPLE_GAP = 76;
-const UNIT_GAP = 72;
-const ROOT_GAP = 144;
-const GAP_Y = 280;
-const MARGIN_X = 80;
-const MARGIN_Y = 80;
+const HORIZONTAL_METRICS = {
+  nodeWidth: 168,
+  // This is the outer card height, including its avatar, name and status line.
+  // Keep connection geometry aligned with the actual fixed-height mini-program card.
+  nodeHeight: 164,
+  coupleGap: 76,
+  unitGap: 72,
+  rootGap: 144,
+  gapY: 280,
+  marginX: 80,
+  marginY: 80
+};
+const VERTICAL_METRICS = {
+  nodeWidth: 88,
+  nodeHeight: 164,
+  coupleGap: 48,
+  unitGap: 52,
+  rootGap: 104,
+  gapY: 280,
+  marginX: 80,
+  marginY: 80
+};
 const MAX_KINSHIP_DEPTH = 8;
 const JUNCTION_RADIUS = 7;
 const LINE_OVERLAP = 2;
 const MAX_ANIMATED_CHILDREN = 12;
 const FAMILY_RAIL_CLEARANCE = 24;
 const kinship = require('./kinship');
+
+function metricsForNameLayout(nameLayout) {
+  return nameLayout === 'vertical' ? VERTICAL_METRICS : HORIZONTAL_METRICS;
+}
+
+function verticalDisplayName(name) {
+  const characters = Array.from(String(name || '未命名'));
+  const visible = characters.slice(0, 4).join('\n');
+  return characters.length > 4 ? visible + '\n…' : visible;
+}
 
 function personGender(person) {
   return person && person.gender ? person.gender : 'unknown';
@@ -648,7 +670,7 @@ function sortPersonsByName(persons) {
   return (persons || []).slice().sort(comparePeopleByName);
 }
 
-function buildUnits(persons, relations, components, generations) {
+function buildUnits(persons, relations, components, generations, metrics) {
   const units = [];
   const unitsById = {};
   Object.keys(components.membersByRoot).forEach(function (root) {
@@ -657,7 +679,7 @@ function buildUnits(persons, relations, components, generations) {
       _id: root,
       generation: generations[members[0]._id] || 0,
       members: members,
-      width: members.length * NODE_WIDTH + Math.max(0, members.length - 1) * COUPLE_GAP,
+      width: members.length * metrics.nodeWidth + Math.max(0, members.length - 1) * metrics.coupleGap,
       sortPerson: members.slice().sort(comparePeople)[0]
     };
     units.push(unit);
@@ -774,7 +796,7 @@ function buildUnits(persons, relations, components, generations) {
   };
 }
 
-function positionFamilySubtrees(unitGraph) {
+function positionFamilySubtrees(unitGraph, metrics) {
   const widths = {};
 
   function measure(root, visiting) {
@@ -784,7 +806,7 @@ function positionFamilySubtrees(unitGraph) {
     const children = unitGraph.primaryChildrenByRoot[root] || [];
     const childrenWidth = children.reduce(function (sum, childRoot) {
       return sum + measure(childRoot, visiting);
-    }, 0) + Math.max(0, children.length - 1) * UNIT_GAP;
+    }, 0) + Math.max(0, children.length - 1) * metrics.unitGap;
     delete visiting[root];
     widths[root] = Math.max(unitGraph.unitsById[root].width, childrenWidth);
     return widths[root];
@@ -806,20 +828,20 @@ function positionFamilySubtrees(unitGraph) {
     if (!children.length) return;
     const childrenWidth = children.reduce(function (sum, childRoot) {
       return sum + widths[childRoot];
-    }, 0) + Math.max(0, children.length - 1) * UNIT_GAP;
+    }, 0) + Math.max(0, children.length - 1) * metrics.unitGap;
     let childLeft = left + (blockWidth - childrenWidth) / 2;
     children.forEach(function (childRoot) {
       place(childRoot, childLeft);
-      childLeft += widths[childRoot] + UNIT_GAP;
+      childLeft += widths[childRoot] + metrics.unitGap;
     });
   }
 
-  let rootLeft = MARGIN_X;
+  let rootLeft = metrics.marginX;
   roots.forEach(function (unit) {
     place(unit._id, rootLeft);
-    rootLeft += widths[unit._id] + ROOT_GAP;
+    rootLeft += widths[unit._id] + metrics.rootGap;
   });
-  return Math.max(750, rootLeft - ROOT_GAP + MARGIN_X);
+  return Math.max(750, rootLeft - metrics.rootGap + metrics.marginX);
 }
 
 function createSegment(id, type, lineRole, x1, y1, x2, y2, options) {
@@ -850,7 +872,7 @@ function pairKey(firstId, secondId) {
   return firstId < secondId ? firstId + '|' + secondId : secondId + '|' + firstId;
 }
 
-function assignFamilyRailLanes(sourceGroups, nodesById, relations) {
+function assignFamilyRailLanes(sourceGroups, nodesById, relations, metrics) {
   const spouseCounts = {};
   relations.forEach(function (relation) {
     if (relation.type !== 'spouse') return;
@@ -861,9 +883,9 @@ function assignFamilyRailLanes(sourceGroups, nodesById, relations) {
     const group = sourceGroups[groupKey];
     const childTop = group.children[0].y;
     const parentBottom = Math.max.apply(null, group.parentIds.map(function (parentId) {
-      return nodesById[parentId].y + NODE_HEIGHT;
+      return nodesById[parentId].y + metrics.nodeHeight;
     }));
-    const childCenters = group.children.map(function (child) { return child.x + NODE_WIDTH / 2; });
+    const childCenters = group.children.map(function (child) { return child.x + metrics.nodeWidth / 2; });
     group.childTop = childTop;
     group.parentBottom = parentBottom;
     group.minX = Math.min.apply(null, childCenters.concat(group.source.x));
@@ -919,7 +941,7 @@ function assignFamilyRailLanes(sourceGroups, nodesById, relations) {
   return groups;
 }
 
-function createFamilyConnections(nodesById, relations, selectedPersonId) {
+function createFamilyConnections(nodesById, relations, selectedPersonId, metrics) {
   const lines = [];
   const junctions = [];
   const spouseJunctions = {};
@@ -931,9 +953,9 @@ function createFamilyConnections(nodesById, relations, selectedPersonId) {
     if (!first || !second) return;
     const left = first.x <= second.x ? first : second;
     const right = left === first ? second : first;
-    const startX = left.x + NODE_WIDTH;
+    const startX = left.x + metrics.nodeWidth;
     const endX = right.x;
-    const y = left.y + NODE_HEIGHT / 2;
+    const y = left.y + metrics.nodeHeight / 2;
     const key = pairKey(first._id, second._id);
     const junction = {
       _id: 'junction-' + relation._id,
@@ -992,13 +1014,13 @@ function createFamilyConnections(nodesById, relations, selectedPersonId) {
       if (pairedParents.indexOf(parentId) >= 0) return;
       const parentNode = nodesById[parentId];
       addToGroup('single:' + parentId, {
-        x: parentNode.x + NODE_WIDTH / 2,
-        y: parentNode.y + NODE_HEIGHT
+        x: parentNode.x + metrics.nodeWidth / 2,
+        y: parentNode.y + metrics.nodeHeight
       }, [parentId]);
     });
   });
 
-  const familyGroups = assignFamilyRailLanes(sourceGroups, nodesById, relations);
+  const familyGroups = assignFamilyRailLanes(sourceGroups, nodesById, relations, metrics);
   familyGroups.forEach(function (group) {
     const groupKey = group._id;
     const source = group.source;
@@ -1014,7 +1036,7 @@ function createFamilyConnections(nodesById, relations, selectedPersonId) {
     });
     if (segment) lines.push(segment);
     group.children.forEach(function (child) {
-      const childX = child.x + NODE_WIDTH / 2;
+      const childX = child.x + metrics.nodeWidth / 2;
       const drop = createSegment('drop-' + groupKey + '-' + child._id, 'parent', 'drop', childX, railY, childX, child.y, {
         familyKey: groupKey,
         railLane: group.railLane
@@ -1077,7 +1099,7 @@ function createFamilyConnections(nodesById, relations, selectedPersonId) {
     if (trunkFlow) lines.push(trunkFlow);
 
     activeChildren.forEach(function (child) {
-      const childX = child.x + NODE_WIDTH / 2;
+      const childX = child.x + metrics.nodeWidth / 2;
       const path = [
         [source.x, railY, childX, railY],
         [childX, railY, childX, child.y]
@@ -1114,6 +1136,8 @@ function createFamilyConnections(nodesById, relations, selectedPersonId) {
 
 function layoutGraph(personsInput, relationsInput, options) {
   const optionsValue = options || {};
+  const nameLayout = optionsValue.nameLayout === 'vertical' ? 'vertical' : 'horizontal';
+  const metrics = metricsForNameLayout(nameLayout);
   const activePersons = (personsInput || []).filter(function (person) { return person.status !== 'deleted'; });
   const active = activeRelations(relationsInput);
   const filtered = filterCollapsed(activePersons, active, optionsValue.collapsedIds || []);
@@ -1121,13 +1145,13 @@ function layoutGraph(personsInput, relationsInput, options) {
   const relations = filtered.relations;
   const components = createSpouseComponents(persons, relations);
   const generations = assignGenerations(persons, relations, components);
-  const unitGraph = buildUnits(persons, relations, components, generations);
+  const unitGraph = buildUnits(persons, relations, components, generations, metrics);
   const unitsByGeneration = unitGraph.unitsByGeneration;
   const generationKeys = Object.keys(unitsByGeneration).map(Number).sort(function (a, b) { return a - b; });
   const maxGeneration = generationKeys.length ? Math.max.apply(null, generationKeys) : 0;
 
-  let canvasWidth = positionFamilySubtrees(unitGraph);
-  let canvasHeight = Math.max(900, maxGeneration * GAP_Y + NODE_HEIGHT + MARGIN_Y * 2);
+  let canvasWidth = positionFamilySubtrees(unitGraph, metrics);
+  let canvasHeight = Math.max(900, maxGeneration * metrics.gapY + metrics.nodeHeight + metrics.marginY * 2);
   const nodesById = {};
   const nodes = [];
   const kinships = optionsValue.mode === 'perspective'
@@ -1137,12 +1161,13 @@ function layoutGraph(personsInput, relationsInput, options) {
   generationKeys.forEach(function (generation) {
     unitsByGeneration[generation].forEach(function (unit) {
       unit.members.forEach(function (person, memberIndex) {
-        const x = unit.x + memberIndex * (NODE_WIDTH + COUPLE_GAP);
-        const y = MARGIN_Y + generation * GAP_Y;
+        const x = unit.x + memberIndex * (metrics.nodeWidth + metrics.coupleGap);
+        const y = metrics.marginY + generation * metrics.gapY;
         const node = Object.assign({}, person, {
           x: x,
           y: y,
           style: 'left:' + x + 'rpx;top:' + y + 'rpx;',
+          verticalName: verticalDisplayName(person.name),
           relationLabel: kinships[person._id] || '',
           familySize: unit.members.length,
           hiddenDescendantCount: filtered.hiddenByCollapsed[person._id] || 0,
@@ -1155,13 +1180,14 @@ function layoutGraph(personsInput, relationsInput, options) {
     });
   });
 
-  const connections = createFamilyConnections(nodesById, relations, optionsValue.selectedPersonId || '');
+  const connections = createFamilyConnections(nodesById, relations, optionsValue.selectedPersonId || '', metrics);
   return {
     nodes: nodes,
     lines: connections.lines,
     junctions: connections.junctions,
-    nodeWidth: NODE_WIDTH,
-    nodeHeight: NODE_HEIGHT,
+    nameLayout: nameLayout,
+    nodeWidth: metrics.nodeWidth,
+    nodeHeight: metrics.nodeHeight,
     width: Math.ceil(canvasWidth),
     height: Math.ceil(canvasHeight),
     kinships: kinships,

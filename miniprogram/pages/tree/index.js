@@ -34,6 +34,7 @@ Page({
     graphY: 0,
     graphZoomClass: 'zoom-detail',
     graphScaleMin: 0.32,
+    nameLayout: 'horizontal',
     viewMode: 'full',
     viewpointId: '',
     viewpointName: '',
@@ -132,6 +133,7 @@ Page({
           });
           self._autoCollapseFamilyId = data.family._id;
         }
+        const nameLayout = data.preference && data.preference.nameLayout === 'vertical' ? 'vertical' : 'horizontal';
         self.setData({
           currentFamily: data.family,
           currentRole: data.currentRole,
@@ -140,13 +142,14 @@ Page({
           rawPersons: persons,
           rawRelations: data.relations || [],
           loading: false,
+          nameLayout: nameLayout,
           viewMode: mode,
           viewpointId: personId,
           collapsedPersonIds: collapsedPersonIds,
           selectedPersonId: ''
         });
         app.setCurrentFamily(data.family);
-        self.renderGraph(mode, personId);
+        self.renderGraph(mode, personId, { nameLayout: nameLayout });
         self._hasLoaded = true;
         const tourKey = 'youpu_new_family_tour_' + data.family._id;
         if (wx.getStorageSync(tourKey)) {
@@ -193,6 +196,7 @@ Page({
   renderGraph: function (mode, viewpointId, renderOptions) {
     const optionsValue = renderOptions || {};
     const collapsedIds = optionsValue.collapsedPersonIds || this.data.collapsedPersonIds;
+    const nameLayout = optionsValue.nameLayout === 'vertical' ? 'vertical' : optionsValue.nameLayout === 'horizontal' ? 'horizontal' : this.data.nameLayout;
     const selectedPersonId = Object.prototype.hasOwnProperty.call(optionsValue, 'selectedPersonId')
       ? optionsValue.selectedPersonId
       : this.data.selectedPersonId;
@@ -202,6 +206,7 @@ Page({
       {
         mode: mode,
         viewpointId: viewpointId,
+        nameLayout: nameLayout,
         collapsedIds: collapsedIds,
         selectedPersonId: selectedPersonId
       }
@@ -310,6 +315,26 @@ Page({
 
   zoomGraphOut: function () {
     this.changeGraphScale(-0.15);
+  },
+
+  toggleNameLayout: function () {
+    const family = this.data.currentFamily;
+    const nameLayout = this.data.nameLayout === 'vertical' ? 'horizontal' : 'vertical';
+    this.renderGraph(this.data.viewMode, this.data.viewpointId, {
+      nameLayout: nameLayout,
+      statePatch: { nameLayout: nameLayout }
+    });
+    if (family) this.saveGraphPreference(family, nameLayout, this.data.viewMode, this.data.viewpointId);
+  },
+
+  saveGraphPreference: function (family, nameLayout, viewMode, personId) {
+    if (!family) return;
+    api.call('family.setPreference', {
+      familyId: family._id,
+      viewMode: viewMode || this.data.viewMode,
+      personId: personId === undefined ? this.data.viewpointId : personId,
+      nameLayout: nameLayout || this.data.nameLayout
+    }).catch(function () {});
   },
 
   onGraphScale: function (event) {
@@ -509,11 +534,7 @@ Page({
         selectedPerson: null
       }
     });
-    api.call('family.setPreference', {
-      familyId: family._id,
-      viewMode: 'perspective',
-      personId: personId
-    }).catch(function () {});
+    this.saveGraphPreference(family, this.data.nameLayout, 'perspective', personId);
   },
 
   showFullGraph: function () {
@@ -528,13 +549,7 @@ Page({
         selectedPerson: null
       }
     });
-    if (family) {
-      api.call('family.setPreference', {
-        familyId: family._id,
-        viewMode: 'full',
-        personId: ''
-      }).catch(function () {});
-    }
+    if (family) this.saveGraphPreference(family, this.data.nameLayout, 'full', '');
   },
 
   openMemberDetail: function () {

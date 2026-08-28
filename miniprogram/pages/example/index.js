@@ -2,6 +2,15 @@ const api = require('../../utils/api');
 const graphLayout = require('../../utils/graph-layout');
 const graphViewport = require('../../utils/graph-viewport');
 const MAX_INTERACTIVE_NODES = 80;
+const EXAMPLE_NAME_LAYOUT_KEY_PREFIX = 'youpu_example_name_layout_';
+
+function exampleNameLayout(slug) {
+  try {
+    return wx.getStorageSync(EXAMPLE_NAME_LAYOUT_KEY_PREFIX + slug) === 'vertical' ? 'vertical' : 'horizontal';
+  } catch (error) {
+    return 'horizontal';
+  }
+}
 
 function exampleDetailUrl(slug, personId) {
   return '/pages/example-person-detail/index?slug=' + encodeURIComponent(slug) + '&id=' + encodeURIComponent(personId);
@@ -11,7 +20,7 @@ Page({
   data: {
     loading: true, error: '', slug: '', example: null, rawPersons: [], rawRelations: [], nodes: [], lines: [], junctions: [],
     canvasWidth: 750, canvasHeight: 900, graphScale: 1, graphX: 0, graphY: 0, graphScaleMin: 0.32, graphZoomClass: 'zoom-detail',
-    collapsedPersonIds: [], hiddenBranchCount: 0, canExpandAll: false, viewMode: 'full', viewpointId: '', viewpointName: '',
+    collapsedPersonIds: [], hiddenBranchCount: 0, canExpandAll: false, nameLayout: 'horizontal', viewMode: 'full', viewpointId: '', viewpointName: '',
     selectedPersonId: '', selectedPerson: null, showMemberSheet: false, showPerspectiveSheet: false, perspectiveKeyword: '', perspectiveResults: [],
     showTour: false, tourStep: 1
   },
@@ -36,13 +45,14 @@ Page({
       });
       const relations = example.relations || [];
       const collapsed = graphLayout.suggestCollapsedIds(persons, relations, { limit: 36 });
-      self.setData({ loading: false, example: example, rawPersons: persons, rawRelations: relations, perspectiveResults: persons, collapsedPersonIds: collapsed, selectedPersonId: '', selectedPerson: null }, function () {
+      const nameLayout = exampleNameLayout(example.slug || self.data.slug);
+      self.setData({ loading: false, example: example, rawPersons: persons, rawRelations: relations, perspectiveResults: persons, collapsedPersonIds: collapsed, nameLayout: nameLayout, selectedPersonId: '', selectedPerson: null }, function () {
         const initialPersonId = self._initialPersonId;
         self._initialPersonId = '';
         if (initialPersonId && persons.some(function (person) { return person._id === initialPersonId; })) {
           self.setPerspective(initialPersonId);
         } else {
-          self.renderGraph('full', '', { collapsedPersonIds: collapsed });
+          self.renderGraph('full', '', { collapsedPersonIds: collapsed, nameLayout: nameLayout });
         }
         if (!wx.getStorageSync('youpu_example_tour_' + example.slug)) self.setData({ showTour: true, tourStep: 1 });
       });
@@ -66,7 +76,8 @@ Page({
     const optionsValue = renderOptions || {};
     const collapsedIds = optionsValue.collapsedPersonIds || this.data.collapsedPersonIds;
     const selectedPersonId = Object.prototype.hasOwnProperty.call(optionsValue, 'selectedPersonId') ? optionsValue.selectedPersonId : this.data.selectedPersonId;
-    const result = graphLayout.layoutGraph(this.data.rawPersons, this.data.rawRelations, { mode: mode, viewpointId: viewpointId, collapsedIds: collapsedIds, selectedPersonId: selectedPersonId });
+    const nameLayout = optionsValue.nameLayout === 'vertical' ? 'vertical' : optionsValue.nameLayout === 'horizontal' ? 'horizontal' : this.data.nameLayout;
+    const result = graphLayout.layoutGraph(this.data.rawPersons, this.data.rawRelations, { mode: mode, viewpointId: viewpointId, nameLayout: nameLayout, collapsedIds: collapsedIds, selectedPersonId: selectedPersonId });
     const viewpoint = this.data.rawPersons.find(function (person) { return person._id === viewpointId; });
     const self = this;
     this._lastLayout = result;
@@ -85,6 +96,11 @@ Page({
   changeGraphScale: function (delta) { const current = this.getGraphTransform(); this.commitGraphTransform(graphViewport.zoomAroundCenter(current, Math.round((current.scale + delta) * 100) / 100, this.getGraphViewport(), { minimumScale: this.data.graphScaleMin })); },
   zoomGraphIn: function () { this.changeGraphScale(0.15); },
   zoomGraphOut: function () { this.changeGraphScale(-0.15); },
+  toggleNameLayout: function () {
+    const nameLayout = this.data.nameLayout === 'vertical' ? 'horizontal' : 'vertical';
+    try { wx.setStorageSync(EXAMPLE_NAME_LAYOUT_KEY_PREFIX + this.data.slug, nameLayout); } catch (error) {}
+    this.renderGraph(this.data.viewMode, this.data.viewpointId, { nameLayout: nameLayout, statePatch: { nameLayout: nameLayout } });
+  },
   onGraphScale: function (event) { if (event.detail.scale) { this._currentGraphScale = event.detail.scale; this.scheduleGraphSettle(); } },
   onGraphChange: function (event) { if (typeof event.detail.x === 'number') this._currentGraphX = event.detail.x; if (typeof event.detail.y === 'number') this._currentGraphY = event.detail.y; this.scheduleGraphSettle(); },
   scheduleGraphSettle: function () {

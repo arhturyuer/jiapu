@@ -402,3 +402,23 @@ test('冻结、注销重试、运营账号和完整审计只属于超级管理�
     assert.match(match[1], /requireOperator\(context, \['super_admin'\]\)/, functionName + ' 未限制为超级管理员');
   });
 });
+
+test('家谱图排版偏好受控保存，并由正式页和示例页提供竖排切换', function () {
+  const userApi = fs.readFileSync(path.join(root, 'cloudfunctions/youpuUserApi/index.js'), 'utf8');
+  const tree = fs.readFileSync(path.join(root, 'miniprogram/pages/tree/index.js'), 'utf8');
+  const treeTemplate = fs.readFileSync(path.join(root, 'miniprogram/pages/tree/index.wxml'), 'utf8');
+  const example = fs.readFileSync(path.join(root, 'miniprogram/pages/example/index.js'), 'utf8');
+  const exampleTemplate = fs.readFileSync(path.join(root, 'miniprogram/pages/example/index.wxml'), 'utf8');
+  assert.match(userApi, /nameLayout: event\.nameLayout === 'vertical' \? 'vertical' : 'horizontal'/);
+  assert.match(userApi, /preference: \{\s*nameLayout:/);
+  assert.match(tree, /toggleNameLayout/);
+  assert.match(tree, /saveGraphPreference/);
+  assert.match(tree, /nameLayout: nameLayout/);
+  assert.match(treeTemplate, /bindtap="toggleNameLayout"/);
+  assert.match(treeTemplate, /node-name-vertical/);
+  assert.match(treeTemplate, /wx:if="\{\{nameLayout === 'vertical'\}\}"/);
+  assert.match(example, /EXAMPLE_NAME_LAYOUT_KEY_PREFIX/);
+  assert.match(example, /wx\.setStorageSync\(EXAMPLE_NAME_LAYOUT_KEY_PREFIX/);
+  assert.match(exampleTemplate, /bindtap="toggleNameLayout"/);
+  assert.match(exampleTemplate, /node-name-vertical/);
+});

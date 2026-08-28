@@ -43,8 +43,10 @@ function fitTransform(layout, viewport, options) {
   let x = (viewport.width - canvasWidth * scale) / 2;
   let y = (viewport.height - canvasHeight * scale) / 2;
   if (focusNode) {
-    x = viewport.width / 2 - (focusNode.x + 84) * viewport.rpxToPx * scale;
-    y = viewport.height * 0.38 - (focusNode.y + 58) * viewport.rpxToPx * scale;
+    const nodeWidth = layout.nodeWidth || 168;
+    const nodeHeight = layout.nodeHeight || 164;
+    x = viewport.width / 2 - (focusNode.x + nodeWidth / 2) * viewport.rpxToPx * scale;
+    y = viewport.height * 0.38 - (focusNode.y + nodeHeight * 58 / 164) * viewport.rpxToPx * scale;
   }
   return { x: x, y: y, scale: scale };
 }

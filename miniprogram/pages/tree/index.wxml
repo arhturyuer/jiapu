@@ -90,16 +90,21 @@
         <view
           wx:for="{{nodes}}"
           wx:key="_id"
-          class="person-node {{item.isViewpoint ? 'is-viewpoint' : ''}} {{item.isSelected ? 'is-selected' : ''}}"
+          class="person-node {{nameLayout === 'vertical' ? 'node-vertical' : ''}} {{item.isViewpoint ? 'is-viewpoint' : ''}} {{item.isSelected ? 'is-selected' : ''}}"
           style="{{item.style}}"
           data-id="{{item._id}}"
           catchtap="showPerson"
         >
-          <image class="node-avatar" wx:if="{{item.avatar}}" src="{{item.avatar}}" mode="aspectFill"></image>
-          <view class="node-avatar node-placeholder" wx:else>{{item.initial}}</view>
-          <text class="node-name">{{item.name}}</text>
-          <text class="node-meta" wx:if="{{viewMode === 'perspective' && item.relationLabel}}">{{item.relationLabel}}</text>
-          <text class="node-meta" wx:elif="{{item.metaText}}">{{item.metaText}}</text>
+          <block wx:if="{{nameLayout === 'vertical'}}">
+            <text class="node-name node-name-vertical">{{item.verticalName}}</text>
+          </block>
+          <block wx:else>
+            <image class="node-avatar" wx:if="{{item.avatar}}" src="{{item.avatar}}" mode="aspectFill"></image>
+            <view class="node-avatar node-placeholder" wx:else>{{item.initial}}</view>
+            <text class="node-name">{{item.name}}</text>
+            <text class="node-meta" wx:if="{{viewMode === 'perspective' && item.relationLabel}}">{{item.relationLabel}}</text>
+            <text class="node-meta" wx:elif="{{item.metaText}}">{{item.metaText}}</text>
+          </block>
           <view class="node-action-trigger" wx:if="{{item.isSelected}}" data-id="{{item._id}}" catchtap="openMemberActions">•••</view>
           <view class="branch-count" wx:if="{{item.hiddenDescendantCount > 0}}" data-id="{{item._id}}" catchtap="expandBranch">+{{item.hiddenDescendantCount}} 人</view>
         </view>
@@ -110,6 +115,7 @@
     <view class="graph-controls" wx:if="{{nodes.length > 0}}">
       <view class="graph-control" bindtap="zoomGraphIn">＋</view>
       <view class="graph-control" bindtap="zoomGraphOut">－</view>
+      <view class="graph-control graph-control-text" bindtap="toggleNameLayout">{{nameLayout === 'vertical' ? '横排' : '竖排'}}</view>
       <view class="graph-control graph-control-text" bindtap="fitWholeGraph">全谱</view>
       <view class="graph-control graph-control-text" bindtap="locateGraphFocus">定位</view>
       <view class="graph-control graph-control-text" wx:if="{{canExpandAll}}" bindtap="expandAllBranches">展开</view>
