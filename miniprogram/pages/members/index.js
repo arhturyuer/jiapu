@@ -2,6 +2,7 @@ const app = getApp();
 const api = require('../../utils/api');
 const format = require('../../utils/format');
 const shareInvite = require('../../utils/share-invite');
+const shareCard = require('../../utils/share-card');
 
 Page({
   data: {
@@ -18,7 +19,8 @@ Page({
     shareRole: 'member',
     shareReady: false,
     shareCreating: false,
-    shareCard: null
+    shareCard: null,
+    systemShareCard: shareCard.create({ kind: 'discovery' })
   },
 
   onShow: function () {
@@ -67,6 +69,9 @@ Page({
         recentActivities: (data.recentActivities || []).map(function (item) {
           return Object.assign({}, item, { timeText: format.relativeTime(item.createdAt) });
         })
+      });
+      shareCard.createAndRender(self, 'members-share-card', { kind: 'discovery' }).then(function (card) {
+        self.setData({ systemShareCard: card });
       });
       app.setCurrentFamily(data.family);
       self._hasLoaded = true;
@@ -167,7 +172,13 @@ Page({
       familyId: family._id,
       role: this.data.shareRole,
       viewMode: 'full',
-      viewPersonId: ''
+      viewPersonId: '',
+      fingerprint: shareCard.fingerprint({
+        kind: 'family_full', familyName: family.name,
+        personCount: this.data.stats.personCount || family.personCount,
+        role: this.data.shareRole,
+        inviterName: ((app.globalData.user || {}).nickName || '一位家人')
+      })
     };
     const cachedCard = shareInvite.get(shareContext);
     const sequence = (this._sharePreparationSequence || 0) + 1;
@@ -183,17 +194,19 @@ Page({
       viewMode: 'full'
     }).then(function (data) {
       if (sequence !== self._sharePreparationSequence || !self.data.showShareSheet) return;
-      const card = {
-        title: data.familyName + '｜一起把家谱补完整',
-        path: '/pages/invite/index?token=' + data.token,
-        invitationId: data.invitationId
-      };
-      shareInvite.set(shareContext, card, data.expiresAt);
-      app.invalidateCache({ dashboard: family._id });
-      self.setData({
-        shareReady: true,
-        shareCreating: false,
-        shareCard: card
+      return shareCard.createAndRender(self, 'members-share-card', {
+        kind: 'family_full', familyName: data.familyName,
+        personCount: self.data.stats.personCount || family.personCount,
+        inviterName: ((app.globalData.user || {}).nickName || '一位家人'),
+        role: data.role,
+        path: '/pages/invite/index?token=' + data.token
+      }).then(function (card) {
+        if (sequence !== self._sharePreparationSequence || !self.data.showShareSheet) return;
+        card.invitationId = data.invitationId;
+        shareInvite.set(shareContext, card, data.expiresAt);
+        api.call('share.record', { stage: 'prepared', invitationId: data.invitationId }).catch(function () {});
+        app.invalidateCache({ dashboard: family._id });
+        self.setData({ shareReady: true, shareCreating: false, shareCard: card });
       });
     }).catch(function (error) {
       if (sequence !== self._sharePreparationSequence || !self.data.showShareSheet) return;
@@ -202,12 +215,14 @@ Page({
     });
   },
 
-  onShareAppMessage: function () {
+  onShareAppMessage: function (event) {
     const self = this;
-    if (this.data.shareCard) return {
+    if (event && event.from === 'button' && this.data.shareCard) return {
       title: this.data.shareCard.title,
       path: this.data.shareCard.path,
+      imageUrl: this.data.shareCard.imageUrl,
       success: function () {
+        api.call('share.record', { stage: 'sent', invitationId: self.data.shareCard.invitationId }).catch(function () {});
         api.call('family.markOnboardingShared', {
           familyId: self.data.currentFamily._id,
           invitationId: self.data.shareCard.invitationId
@@ -222,7 +237,14 @@ Page({
         }).catch(function () {});
       }
     };
-    return { title: '有谱｜一家人，共修一份家谱', path: '/pages/tree/index' };
+    const discovery = this.data.systemShareCard || shareCard.create({ kind: 'discovery' });
+    api.call('share.record', { stage: 'prepared', kind: 'discovery' }).catch(function () {});
+    return {
+      title: discovery.title,
+      path: discovery.path,
+      imageUrl: discovery.imageUrl,
+      success: function () { api.call('share.record', { stage: 'sent', kind: 'discovery' }).catch(function () {}); }
+    };
   },
 
   continueOnboardingAdd: function () {

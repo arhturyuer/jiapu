@@ -794,13 +794,14 @@ async function feedbackGroupUpdate(event, context) {
 
 async function dashboardSummary(event, context) {
   await requireOperator(context, ['super_admin', 'operator']);
-  const [users, families, reports, moderation, deletions, participatingUsers] = await Promise.all([
+  const [users, families, reports, moderation, deletions, participatingUsers, shareFunnel] = await Promise.all([
     db.collection('users').where({ status: 'active' }).count(),
     db.collection('families').where({ status: 'active' }).count(),
     db.collection('reports').where({ status: _.in(['open', 'processing']) }).count(),
     db.collection('media_assets').where({ moderationStatus: _.in(['review', 'pending']) }).count(),
     db.collection('account_deletion_requests').where({ status: _.in(['pending', 'failed']) }).count(),
-    currentParticipatingUserCount()
+    currentParticipatingUserCount(),
+    shareFunnelSummary(30)
   ]);
   const activeUsers = users.total || 0;
   const currentParticipatingUsers = participatingUsers || 0;
@@ -814,7 +815,60 @@ async function dashboardSummary(event, context) {
       moderationBacklog: moderation.total || 0,
       deletionBacklog: deletions.total || 0
     },
+    shareFunnel: shareFunnel,
     generatedAt: new Date().toISOString()
+  };
+}
+
+function shareMetricDay(offset) {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() - (Number(offset) || 0));
+  return date.toISOString().slice(0, 10);
+}
+
+function shareMetricId(day, kind) {
+  return 'share_' + day.replace(/-/g, '') + '_' + kind;
+}
+
+function shareRate(numerator, denominator) {
+  if (!denominator) return 0;
+  return Math.round((Number(numerator || 0) / denominator) * 1000) / 10;
+}
+
+async function shareFunnelSummary(days) {
+  const kinds = [
+    ['family_full', '全谱邀请', '加入'],
+    ['family_perspective', '成员视角邀请', '加入'],
+    ['example', '官方示例', '示例打开'],
+    ['discovery', '系统菜单发现卡', '建谱']
+  ];
+  const keys = [];
+  for (let offset = 0; offset < days; offset += 1) {
+    const day = shareMetricDay(offset);
+    kinds.forEach(function (entry) { keys.push([entry[0], day]); });
+  }
+  const rows = await Promise.all(keys.map(function (entry) {
+    return maybeGet('share_metrics_daily', shareMetricId(entry[1], entry[0]));
+  }));
+  const totals = {};
+  kinds.forEach(function (entry) { totals[entry[0]] = { prepared: 0, sent: 0, opened: 0, converted: 0 }; });
+  rows.forEach(function (row) {
+    if (!row || !totals[row.kind]) return;
+    ['prepared', 'sent', 'opened', 'converted'].forEach(function (field) {
+      totals[row.kind][field] += Number(row[field] || 0);
+    });
+  });
+  return {
+    days: days,
+    items: kinds.map(function (entry) {
+      const value = totals[entry[0]];
+      return {
+        kind: entry[0], label: entry[1], conversionLabel: entry[2],
+        prepared: value.prepared, sent: value.sent, opened: value.opened, converted: value.converted,
+        openRate: shareRate(value.opened, value.sent),
+        conversionRate: shareRate(value.converted, value.opened)
+      };
+    })
   };
 }
 

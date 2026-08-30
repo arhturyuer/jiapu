@@ -13,12 +13,10 @@
     <view class="invite-card surface-card">
       <text class="eyebrow">{{preview.inviterName}} 邀请你</text>
       <text class="family-name">{{preview.family.name}}</text>
-      <text class="family-description">{{preview.family.description || '一家人，共修一份家谱'}}</text>
       <view class="family-stats"><text>{{preview.personCount}} 位家人</text><text class="dot">·</text><text>{{roleText}}</text></view>
-      <view class="view-note">{{viewText}}</view>
+      <view class="view-note" wx:if="{{isPerspective}}">{{viewText}}</view>
     </view>
-    <view class="privacy-note"><text class="privacy-title">家谱默认私密</text><text class="privacy-copy">只有通过邀请加入的家人才能访问。切换成员视角不会改变你的权限。</text></view>
-    <button class="primary-button accept-button" loading="{{accepting}}" bindtap="acceptInvite">{{preview.role === 'member' ? '加入并共同补全' : '加入并查看家谱'}}</button>
-    <button class="secondary-button" bindtap="reportInvite">举报这条邀请</button>
+    <button class="primary-button accept-button" loading="{{accepting}}" bindtap="acceptInvite">{{actionText}}</button>
+    <text class="privacy-note">仅受邀家人可访问</text>
   </view>
 </view>

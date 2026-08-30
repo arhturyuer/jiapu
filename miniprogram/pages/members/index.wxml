@@ -67,3 +67,4 @@
     </view>
   </view>
 </view>
+<canvas type="2d" id="members-share-card" class="share-card-canvas"></canvas>

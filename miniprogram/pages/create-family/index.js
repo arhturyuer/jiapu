@@ -16,7 +16,9 @@ Page({
   },
 
   onLoad: function (options) {
-    this.setData({ source: options.source || '' });
+    const source = options.source === 'share_menu' ? 'share_menu' : (options.source || '');
+    this.setData({ source: source });
+    if (source === 'share_menu') api.call('share.record', { stage: 'opened', kind: 'discovery' }).catch(function () {});
   },
 
   inputField: function (event) {
@@ -67,7 +69,8 @@ Page({
         fatherName: this.data.fatherName.trim(),
         motherName: this.data.motherName.trim(),
         spouseName: this.data.spouseName.trim()
-      }
+      },
+      source: this.data.source === 'share_menu' ? 'share_menu' : ''
     }).then(function (data) {
       app.setCurrentFamily(data.family);
       app.invalidateCache({ families: true, profile: true, graph: data.family._id, dashboard: data.family._id });

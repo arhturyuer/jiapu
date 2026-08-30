@@ -1,6 +1,7 @@
 const api = require('../../utils/api');
 const graphLayout = require('../../utils/graph-layout');
 const graphViewport = require('../../utils/graph-viewport');
+const shareCard = require('../../utils/share-card');
 const MAX_INTERACTIVE_NODES = 80;
 const EXAMPLE_NAME_LAYOUT_KEY_PREFIX = 'youpu_example_name_layout_';
 
@@ -22,12 +23,14 @@ Page({
     canvasWidth: 750, canvasHeight: 900, graphScale: 1, graphX: 0, graphY: 0, graphScaleMin: 0.32, graphZoomClass: 'zoom-detail',
     collapsedPersonIds: [], hiddenBranchCount: 0, canExpandAll: false, nameLayout: 'horizontal', viewMode: 'full', viewpointId: '', viewpointName: '',
     selectedPersonId: '', selectedPerson: null, showMemberSheet: false, showPerspectiveSheet: false, perspectiveKeyword: '', perspectiveResults: [],
-    showTour: false, tourStep: 1
+    showTour: false, tourStep: 1,
+    shareCard: shareCard.create({ kind: 'example' })
   },
 
   onLoad: function (options) {
     const slug = options.slug || '';
     this._initialPersonId = options.personId || '';
+    this._shareSource = options.source || '';
     this.setData({ slug: slug });
     if (!slug) this.setData({ loading: false, error: '缺少示例家谱信息' }); else this.loadExample();
   },
@@ -55,6 +58,11 @@ Page({
           self.renderGraph('full', '', { collapsedPersonIds: collapsed, nameLayout: nameLayout });
         }
         if (!wx.getStorageSync('youpu_example_tour_' + example.slug)) self.setData({ showTour: true, tourStep: 1 });
+        self.prepareExampleShare();
+        if (self._shareSource === 'example_share' && !self._shareOpenRecorded) {
+          self._shareOpenRecorded = true;
+          api.call('share.record', { stage: 'opened', kind: 'example', slug: example.slug }).catch(function () {});
+        }
       });
     }).catch(function (error) { self.setData({ loading: false, error: error.message || '示例家谱暂时不可用' }); });
   },
@@ -138,7 +146,25 @@ Page({
   openMemberDetail: function () { if (this.data.selectedPerson) wx.navigateTo({ url: exampleDetailUrl(this.data.slug, this.data.selectedPerson._id) }); },
   explainCreate: function () { const self = this; wx.showModal({ title: '在自己的家谱中继续', content: '创建自己的家谱后，你可以添加亲属、编辑资料、管理关系并邀请家人共同维护。', confirmText: '去创建', success: function (result) { if (result.confirm) self.createFamily(); } }); },
   createFamily: function () { wx.navigateTo({ url: '/pages/create-family/index?source=example&example=' + encodeURIComponent(this.data.slug) }); },
+  prepareExampleShare: function () {
+    const example = this.data.example || {};
+    const self = this;
+    return shareCard.createAndRender(this, 'example-share-card', {
+      kind: 'example', exampleName: example.title, customTitle: example.shareTitle,
+      path: '/pages/example/index?slug=' + encodeURIComponent(this.data.slug) + '&source=example_share'
+    }).then(function (card) { self.setData({ shareCard: card }); });
+  },
   nextTour: function () { if (this.data.tourStep < 3) this.setData({ tourStep: this.data.tourStep + 1 }); else this.dismissTour(); },
   dismissTour: function () { wx.setStorageSync('youpu_example_tour_' + this.data.slug, true); this.setData({ showTour: false }); },
-  onShareAppMessage: function () { const example = this.data.example || {}; return { title: example.shareTitle || ('看看“' + (example.title || '有谱示例') + '”'), path: '/pages/example/index?slug=' + encodeURIComponent(this.data.slug) }; }
+  onShareAppMessage: function () {
+    const card = this.data.shareCard || shareCard.create({ kind: 'example' });
+    const slug = this.data.slug;
+    api.call('share.record', { stage: 'prepared', kind: 'example', slug: slug }).catch(function () {});
+    return {
+      title: card.title,
+      path: card.path,
+      imageUrl: card.imageUrl,
+      success: function () { api.call('share.record', { stage: 'sent', kind: 'example', slug: slug }).catch(function () {}); }
+    };
+  }
 });

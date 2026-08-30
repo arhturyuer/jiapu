@@ -1,3 +1,4 @@
+.share-card-canvas { position: fixed; left: -1600rpx; top: -1600rpx; width: 750px; height: 600px; opacity: 0; pointer-events: none; }
 .tree-page {
   height: calc(100vh - 0px);
   overflow: hidden;

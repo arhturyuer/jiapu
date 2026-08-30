@@ -32,6 +32,18 @@ interface PageResult {
   hasMore: boolean;
 }
 
+interface ShareFunnelItem {
+  kind: string;
+  label: string;
+  conversionLabel: string;
+  prepared: number;
+  sent: number;
+  opened: number;
+  converted: number;
+  openRate: number;
+  conversionRate: number;
+}
+
 const navItems: Array<{ key: ModuleKey; label: string; caption: string }> = [
   { key: 'dashboard', label: '概览', caption: '运行状态' },
   { key: 'users', label: '用户', caption: '账号处置' },
@@ -73,6 +85,7 @@ const hasMore = ref(false);
 const pageNumber = ref(1);
 const pageCursors = ref<string[]>(['']);
 const totals = reactive({ activeUsers: 0, currentParticipatingUsers: 0, visitorUsers: 0, activeFamilies: 0, reportBacklog: 0, moderationBacklog: 0, deletionBacklog: 0 });
+const shareFunnel = ref<{ days: number; items: ShareFunnelItem[] }>({ days: 30, items: [] });
 const dialog = reactive({
   open: false,
   title: '',
@@ -277,8 +290,9 @@ async function loadModule(module: ModuleKey, direction: 'reset' | 'next' | 'prev
   personDetail.value = null;
   try {
     if (module === 'dashboard') {
-      const data = await callOps<{ totals: typeof totals }>('dashboard.summary');
+      const data = await callOps<{ totals: typeof totals; shareFunnel?: { days: number; items: ShareFunnelItem[] } }>('dashboard.summary');
       Object.assign(totals, data.totals);
+      shareFunnel.value = data.shareFunnel || { days: 30, items: [] };
       rows.value = [];
       resetListPagination();
       return;
@@ -551,6 +565,11 @@ onMounted(bootstrap);
         <button class="dashboard-card" :disabled="loading" :class="{ attention: totals.moderationBacklog > 0 }" @click="openDashboardList('moderation')"><span>内容复核</span><strong>{{ totals.moderationBacklog }}</strong><small>机器疑似与审核中</small><em>查看列表 →</em></button>
         <button class="dashboard-card" :disabled="loading" :class="{ attention: totals.deletionBacklog > 0 }" @click="openDashboardList('deletions', { scope: 'backlog' })"><span>注销任务</span><strong>{{ totals.deletionBacklog }}</strong><small>待执行或失败</small><em>查看列表 →</em></button>
         <article class="principle-card"><span>今日原则</span><strong>访问可追溯</strong><small>查看家庭资料时自动记录运营账号与访问对象。</small></article>
+      </section>
+      <section v-if="activeModule === 'dashboard'" class="share-funnel-card">
+        <div class="share-funnel-heading"><div><p class="eyebrow">SHARE FUNNEL</p><h2>近 {{ shareFunnel.days }} 天分享回流</h2></div><small>仅统计聚合计数，不保存分享内容或个人身份。</small></div>
+        <div v-if="shareFunnel.items.length" class="table-wrap"><table><thead><tr><th>分享卡</th><th>已准备</th><th>已发送</th><th>已打开</th><th>打开率</th><th>转化</th><th>转化率</th></tr></thead><tbody><tr v-for="item in shareFunnel.items" :key="item.kind"><td><strong>{{ item.label }}</strong><small>{{ item.conversionLabel }}转化</small></td><td>{{ item.prepared }}</td><td>{{ item.sent }}</td><td>{{ item.opened }}</td><td>{{ item.openRate }}%</td><td>{{ item.converted }}</td><td>{{ item.conversionRate }}%</td></tr></tbody></table></div>
+        <p v-else class="share-funnel-empty">分享卡产生数据后，会在这里显示近 30 天的回流漏斗。</p>
       </section>
 
       <ExampleManager v-else-if="activeModule === 'examples'" :is-super-admin="operator?.role === 'super_admin'" />

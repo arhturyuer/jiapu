@@ -41,7 +41,8 @@ const collections = [
   'export_tasks',
   'feedback_group_settings',
   'example_templates',
-  'example_template_versions'
+  'example_template_versions',
+  'share_metrics_daily'
 ];
 
 function readRule(file) {

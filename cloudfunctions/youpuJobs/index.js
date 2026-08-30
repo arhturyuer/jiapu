@@ -29,7 +29,8 @@ const COLLECTIONS = [
   'export_tasks',
   'feedback_group_settings',
   'example_templates',
-  'example_template_versions'
+  'example_template_versions',
+  'share_metrics_daily'
 ];
 
 function hash(value, length) {
@@ -96,7 +97,7 @@ async function ensureCollections(event) {
   }
   await db.collection('system_config').doc('schema').set({
     data: {
-      version: 4,
+      version: 5,
       graphPersonLimit: 500,
       archiveRetentionDays: 30,
       deletionCoolingDays: 7,

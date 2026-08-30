@@ -8,7 +8,8 @@ function cacheKey(options) {
     config.familyId || '',
     config.role || '',
     config.viewMode || 'full',
-    config.viewPersonId || ''
+    config.viewPersonId || '',
+    config.fingerprint || ''
   ].join('|');
 }
 

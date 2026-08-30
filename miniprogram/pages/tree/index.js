@@ -4,6 +4,7 @@ const graphLayout = require('../../utils/graph-layout');
 const graphViewport = require('../../utils/graph-viewport');
 const kinship = require('../../utils/kinship');
 const shareInvite = require('../../utils/share-invite');
+const shareCard = require('../../utils/share-card');
 
 const MAX_INTERACTIVE_NODES = 80;
 
@@ -54,6 +55,7 @@ Page({
     shareReady: false,
     shareCreating: false,
     shareCard: null,
+    systemShareCard: shareCard.create({ kind: 'discovery' }),
     showShareReminder: false,
     relationOptions: [
       { key: 'father', label: '父亲' },
@@ -147,6 +149,9 @@ Page({
           viewpointId: personId,
           collapsedPersonIds: collapsedPersonIds,
           selectedPersonId: ''
+        });
+        shareCard.createAndRender(self, 'tree-share-card', { kind: 'discovery' }).then(function (card) {
+          self.setData({ systemShareCard: card });
         });
         app.setCurrentFamily(data.family);
         self.renderGraph(mode, personId, { nameLayout: nameLayout });
@@ -679,7 +684,15 @@ Page({
       familyId: family._id,
       role: this.data.shareRole,
       viewMode: this.data.shareMode,
-      viewPersonId: this.data.sharePersonId
+      viewPersonId: this.data.sharePersonId,
+      fingerprint: shareCard.fingerprint({
+        kind: this.data.shareMode === 'perspective' ? 'family_perspective' : 'family_full',
+        familyName: family.name,
+        personCount: family.personCount,
+        role: this.data.shareRole,
+        personName: this.data.sharePersonName,
+        inviterName: ((app.globalData.user || {}).nickName || '一位家人')
+      })
     };
     const cachedCard = shareInvite.get(shareContext);
     const sequence = (this._sharePreparationSequence || 0) + 1;
@@ -696,20 +709,21 @@ Page({
       viewPersonId: this.data.sharePersonId
     }).then(function (data) {
       if (sequence !== self._sharePreparationSequence || !self.data.showShareSheet) return;
-      const title = data.viewMode === 'perspective'
-        ? '从' + data.viewPersonName + '看' + data.familyName
-        : data.familyName + '｜一起把家谱补完整';
-      const card = {
-        title: title,
-        path: '/pages/invite/index?token=' + data.token,
-        invitationId: data.invitationId
-      };
-      shareInvite.set(shareContext, card, data.expiresAt);
-      app.invalidateCache({ dashboard: family._id });
-      self.setData({
-        shareReady: true,
-        shareCreating: false,
-        shareCard: card
+      return shareCard.createAndRender(self, 'tree-share-card', {
+        kind: data.viewMode === 'perspective' ? 'family_perspective' : 'family_full',
+        familyName: data.familyName,
+        personCount: family.personCount,
+        personName: data.viewPersonName,
+        inviterName: ((app.globalData.user || {}).nickName || '一位家人'),
+        role: data.role,
+        path: '/pages/invite/index?token=' + data.token
+      }).then(function (card) {
+        if (sequence !== self._sharePreparationSequence || !self.data.showShareSheet) return;
+        card.invitationId = data.invitationId;
+        shareInvite.set(shareContext, card, data.expiresAt);
+        api.call('share.record', { stage: 'prepared', invitationId: data.invitationId }).catch(function () {});
+        app.invalidateCache({ dashboard: family._id });
+        self.setData({ shareReady: true, shareCreating: false, shareCard: card });
       });
     }).catch(function (error) {
       if (sequence !== self._sharePreparationSequence || !self.data.showShareSheet) return;
@@ -718,13 +732,15 @@ Page({
     });
   },
 
-  onShareAppMessage: function () {
+  onShareAppMessage: function (event) {
     const card = this.data.shareCard;
     const self = this;
-    if (card) return {
+    if (event && event.from === 'button' && card) return {
       title: card.title,
       path: card.path,
+      imageUrl: card.imageUrl,
       success: function () {
+        api.call('share.record', { stage: 'sent', invitationId: card.invitationId }).catch(function () {});
         api.call('family.markOnboardingShared', {
           familyId: self.data.currentFamily._id,
           invitationId: card.invitationId
@@ -741,10 +757,13 @@ Page({
         }).catch(function () {});
       }
     };
-    const family = this.data.currentFamily;
+    const discovery = this.data.systemShareCard || shareCard.create({ kind: 'discovery' });
+    api.call('share.record', { stage: 'prepared', kind: 'discovery' }).catch(function () {});
     return {
-      title: family ? family.name + '｜有谱' : '有谱｜一家人，共修一份家谱',
-      path: '/pages/tree/index'
+      title: discovery.title,
+      path: discovery.path,
+      imageUrl: discovery.imageUrl,
+      success: function () { api.call('share.record', { stage: 'sent', kind: 'discovery' }).catch(function () {}); }
     };
   },
 

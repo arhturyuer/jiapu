@@ -18,6 +18,7 @@ const RATE_LIMITS = {
   'invite.create': { max: 60, windowMs: 60 * 60 * 1000 },
   'invite.preview': { max: 60, windowMs: 60 * 1000 },
   'invite.accept': { max: 30, windowMs: 60 * 1000 },
+  'share.record': { max: 120, windowMs: 60 * 60 * 1000 },
   'report.create': { max: 20, windowMs: 24 * 60 * 60 * 1000 },
   'media.prepare': { max: 100, windowMs: 24 * 60 * 60 * 1000 }
 };
@@ -47,6 +48,7 @@ const MUTATION_TYPES = new Set([
   'invite.create',
   'invite.revoke',
   'invite.accept',
+  'share.record',
   'report.create',
   'media.prepare',
   'media.complete'
@@ -109,6 +111,40 @@ function documentData(value) {
 
 function randomToken(bytes) {
   return crypto.randomBytes(bytes || 24).toString('base64url');
+}
+
+const SHARE_KINDS = ['family_full', 'family_perspective', 'example', 'discovery'];
+const SHARE_STAGES = ['prepared', 'sent', 'opened', 'converted'];
+
+function shareMetricDay(date) {
+  return (date || new Date()).toISOString().slice(0, 10);
+}
+
+function shareMetricId(day, kind) {
+  return 'share_' + day.replace(/-/g, '') + '_' + kind;
+}
+
+function invitationShareKind(invitation) {
+  return invitation && invitation.viewMode === 'perspective' ? 'family_perspective' : 'family_full';
+}
+
+async function incrementShareMetric(scope, kind, stage) {
+  if (!SHARE_KINDS.includes(kind) || !SHARE_STAGES.includes(stage)) return;
+  if (scope === db) return db.runTransaction(function (transaction) {
+    return incrementShareMetric(transaction, kind, stage);
+  });
+  const day = shareMetricDay();
+  const id = shareMetricId(day, kind);
+  const current = await maybeGet(scope, 'share_metrics_daily', id);
+  if (current) {
+    await scope.collection('share_metrics_daily').doc(id).update({
+      data: { [stage]: _.inc(1), updatedAt: db.serverDate() }
+    });
+    return;
+  }
+  const base = { day: day, kind: kind, prepared: 0, sent: 0, opened: 0, converted: 0, createdAt: db.serverDate(), updatedAt: db.serverDate() };
+  base[stage] = 1;
+  await scope.collection('share_metrics_daily').doc(id).set({ data: base });
 }
 
 async function deleteFilesStrict(fileIds) {
@@ -912,6 +948,7 @@ async function familyCreate(event) {
   const user = await requireActiveUser(openid);
   const name = cleanText(event.name, 40);
   const description = cleanText(event.description, 200);
+  const shareSource = event.source === 'share_menu' ? 'share_menu' : '';
   const firstPerson = normalizePerson(event.startPerson || {});
   assert(name, 'FAMILY_NAME_REQUIRED', '请填写家谱名称');
   await requireOwnedMedia(firstPerson.avatarAssetId, openid, '', 'person_avatar');
@@ -994,6 +1031,7 @@ async function familyCreate(event) {
       summary: '创建家谱',
       requestId: event.requestId
     });
+    if (shareSource === 'share_menu') await incrementShareMetric(transaction, 'discovery', 'converted');
     return {
       family: { _id: familyId, name: name, description: description, status: 'active', currentRole: 'admin' },
       startPersonId: startPerson._id
@@ -1801,11 +1839,11 @@ function assertInvitationActive(invitation) {
   return invitation;
 }
 
-async function findInvitation(token) {
+async function findInvitationByToken(token) {
   const tokenHash = hash(cleanText(token, 200), 64);
   const result = await db.collection('invitations').where({ tokenHash: tokenHash }).limit(1).get();
   assert(result.data && result.data.length, 'INVITE_INVALID', '邀请不存在或已经失效');
-  return assertInvitationActive(result.data[0]);
+  return result.data[0];
 }
 
 async function inviteCreate(event) {
@@ -1922,9 +1960,23 @@ async function inviteRevoke(event) {
 async function invitePreview(event) {
   const openid = getOpenid();
   await requireActiveUser(openid);
-  const invitation = await findInvitation(event.token);
+  const invitation = await findInvitationByToken(event.token);
   const family = await getFamily(db, invitation.familyId);
+  const membership = await getMembership(db, family._id, openid);
+  if (membership) {
+    return {
+      alreadyJoined: true,
+      family: publicFamily(family, membership.role),
+      role: membership.role,
+      viewMode: invitation.viewMode,
+      viewPersonId: invitation.viewPersonId || '',
+      viewPersonName: invitation.viewPersonName || ''
+    };
+  }
+  assertInvitationActive(invitation);
+  await incrementShareMetric(db, invitationShareKind(invitation), 'opened');
   return {
+    alreadyJoined: false,
     invitationId: invitation._id,
     family: { _id: family._id, name: family.name, description: family.description || '' },
     personCount: family.personCount || 0,
@@ -1939,11 +1991,10 @@ async function invitePreview(event) {
 async function inviteAccept(event) {
   const openid = getOpenid();
   const user = await requireActiveUser(openid);
-  const invitationSnapshot = await findInvitation(event.token);
+  const invitationSnapshot = await findInvitationByToken(event.token);
   return mutate('invite.accept', event, openid, async function (transaction) {
     const invitation = await mustGet(transaction, 'invitations', invitationSnapshot._id, 'INVITE_INVALID', '邀请不存在或已经失效');
     assert(invitation.tokenHash === invitationSnapshot.tokenHash, 'INVITE_INVALID', '邀请不存在或已经失效');
-    assertInvitationActive(invitation);
     const family = await getFamily(transaction, invitation.familyId);
     const id = membershipId(family._id, openid);
     const existing = await maybeGet(transaction, 'family_memberships', id);
@@ -1956,6 +2007,7 @@ async function inviteAccept(event) {
         alreadyJoined: true
       };
     }
+    assertInvitationActive(invitation);
     const role = existing && ['admin', 'member'].includes(existing.role) ? existing.role : invitation.role;
     await transaction.collection('family_memberships').doc(id).set({
       data: {
@@ -1972,6 +2024,7 @@ async function inviteAccept(event) {
     await transaction.collection('invitations').doc(invitation._id).update({
       data: { useCount: _.inc(1), lastUsedAt: db.serverDate(), updatedAt: db.serverDate() }
     });
+    await incrementShareMetric(transaction, invitationShareKind(invitation), 'converted');
     await audit(transaction, {
       familyId: family._id,
       openid: openid,
@@ -1989,6 +2042,34 @@ async function inviteAccept(event) {
       viewPersonId: invitation.viewPersonId || '',
       alreadyJoined: false
     };
+  });
+}
+
+async function shareRecord(event) {
+  const openid = getOpenid();
+  const user = await requireActiveUser(openid);
+  const stage = cleanText(event.stage, 20);
+  assert(['prepared', 'sent', 'opened'].includes(stage), 'SHARE_STAGE_INVALID', '分享统计状态不合法');
+  const invitationId = cleanText(event.invitationId, 80);
+  const requestedKind = cleanText(event.kind, 30);
+  if (!invitationId && requestedKind === 'example') {
+    const slug = cleanText(event.slug, 80);
+    assert(slug, 'EXAMPLE_SLUG_REQUIRED', '缺少示例家谱信息');
+    const result = await db.collection('example_templates').where({ slug: slug, status: 'published' }).limit(1).get();
+    assert(result.data && result.data.length, 'EXAMPLE_NOT_FOUND', '示例家谱已下架或暂不可用');
+  }
+  return mutate('share.record', event, openid, async function (transaction) {
+    let kind = requestedKind;
+    if (invitationId) {
+      const invitation = await mustGet(transaction, 'invitations', invitationId, 'INVITE_NOT_FOUND', '邀请不存在');
+      assert(['prepared', 'sent'].includes(stage), 'SHARE_STAGE_INVALID', '邀请卡只允许记录准备或发送');
+      assert(invitation.createdBy === user._id, 'INVALID_INVITATION', '邀请不属于当前用户');
+      kind = invitationShareKind(invitation);
+    } else {
+      assert(['example', 'discovery'].includes(kind), 'SHARE_KIND_INVALID', '分享卡类型不合法');
+    }
+    await incrementShareMetric(transaction, kind, stage);
+    return { recorded: true, kind: kind, stage: stage };
   });
 }
 
@@ -2390,6 +2471,7 @@ const handlers = {
   'invite.revoke': inviteRevoke,
   'invite.preview': invitePreview,
   'invite.accept': inviteAccept,
+  'share.record': shareRecord,
   'report.create': reportCreate,
   'report.listMine': reportListMine,
   'media.prepare': mediaPrepare,

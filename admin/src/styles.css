@@ -67,6 +67,12 @@ header h1 { margin: 0; font: 650 40px/1.1 Georgia, "Noto Serif SC", serif; }
 .dashboard-grid .principle-card { color: white; background: #245c4a; border-color: #245c4a; }
 .dashboard-grid .principle-card span, .dashboard-grid .principle-card small { color: #c8ddd5; }
 .dashboard-grid .principle-card strong { font-size: 27px; letter-spacing: 0; }
+.share-funnel-card { margin-top: 18px; padding: 26px; overflow: hidden; background: white; border: 1px solid #dfe5e1; border-radius: 22px; box-shadow: 0 12px 35px rgba(29,51,42,.05); }
+.share-funnel-heading { margin-bottom: 18px; display: flex; align-items: end; justify-content: space-between; gap: 24px; }
+.share-funnel-heading .eyebrow { margin-bottom: 7px; }
+.share-funnel-heading h2 { margin: 0; color: #24362f; font-size: 22px; }
+.share-funnel-heading small, .share-funnel-empty { color: #7c8882; font-size: 12px; line-height: 1.6; }
+.share-funnel-empty { margin: 0; padding: 20px 0 4px; }
 .table-card { min-height: 440px; overflow: hidden; background: white; border: 1px solid #dfe5e1; border-radius: 22px; box-shadow: 0 12px 35px rgba(29,51,42,.05); }
 .active-filter { padding: 13px 18px; display: flex; align-items: center; justify-content: space-between; gap: 16px; color: #3d5d50; background: #edf5f1; border-bottom: 1px solid #dbe9e1; font-size: 13px; font-weight: 700; }
 .active-filter button { padding: 6px 10px; color: #245c4a; background: white; border: 1px solid #b8cfc4; border-radius: 8px; font-size: 12px; font-weight: 700; }
