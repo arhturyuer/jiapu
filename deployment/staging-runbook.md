@@ -47,6 +47,6 @@ cp deployment/staging.local.env.example deployment/staging.local.env
 - `deploy-staging.sh`、`uploadCloudFunction.sh`、索引/安全规则/云端验证脚本都要求 `DEPLOYMENT_TARGET=staging` 和 `STAGING_ENV_ID` 一致；目标是生产 ID、占位 ID 或不一致 ID 时立即失败。
 - `deploy-staging.sh hosting` 会以 `VITE_CLOUDBASE_ENV=STAGING_ENV_ID` 构建运营后台并部署到该 staging 的静态托管；不要把 staging `dist` 上传至生产静态托管。
 - 生产变更必须另行显式使用 `DEPLOYMENT_TARGET=production`、生产 ID 和 `ALLOW_PRODUCTION_CHANGE=1`；staging 命令不能借此写入生产。
-- 小程序使用微信官方 `miniProgram.envVersion` 自动路由：开发者工具/体验版（`develop` / `trial`）使用 staging，正式版（`release`）使用 production，未知值降级 staging。`./deployment/upload-miniprogram.sh {staging|production} <版本号> <描述>` 只验证预期的运行时路由，不生成两套代码包。不得删除配置后依赖默认 production，也不要通过修改受版本控制的 `env.js` 切换环境。
+- 小程序使用微信官方 `miniProgram.envVersion` 自动路由：开发者工具/体验版（`develop` / `trial`）使用 staging，正式版（`release`）使用 production，未知值降级 staging。`./deployment/upload-miniprogram.sh {staging|production} <版本号>` 会验证最新版本记录与上传版本一致，并使用其更新摘要作为上传描述。不得删除配置后依赖默认 production，也不要通过修改受版本控制的 `env.js` 切换环境。
 
 长期测试仅使用虚构姓名、测试图片和 staging 测试账号；不得从生产导出并导入个人资料或家谱数据。需要验证恢复流程时，先在 staging 自己创建的测试数据上演练。

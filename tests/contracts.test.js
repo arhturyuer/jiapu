@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const vm = require('node:vm');
 
 const root = path.resolve(__dirname, '..');
 
@@ -39,6 +40,106 @@ test('小程序只通过用户 API 访问数据且调用动作都有服务端路
   actions.forEach(function (action) {
     assert.ok(apiSource.includes("'" + action + "':"), '服务端缺少动作 ' + action);
   });
+});
+
+test('归档与注销入口遵守弹窗限制并保留可处理的失败信息', function () {
+  const clientApi = fs.readFileSync(path.join(root, 'miniprogram/utils/api.js'), 'utf8');
+  const familyManage = fs.readFileSync(path.join(root, 'miniprogram/pages/family-manage/index.js'), 'utf8');
+  const familyTemplate = fs.readFileSync(path.join(root, 'miniprogram/pages/family-manage/index.wxml'), 'utf8');
+  const privacy = fs.readFileSync(path.join(root, 'miniprogram/pages/privacy/index.js'), 'utf8');
+  const privacyTemplate = fs.readFileSync(path.join(root, 'miniprogram/pages/privacy/index.wxml'), 'utf8');
+  const userApi = fs.readFileSync(path.join(root, 'cloudfunctions/youpuUserApi/index.js'), 'utf8');
+  const miniFiles = [];
+  function walk(directory) {
+    fs.readdirSync(directory, { withFileTypes: true }).forEach(function (entry) {
+      const target = path.join(directory, entry.name);
+      if (entry.isDirectory()) walk(target);
+      else if (entry.name.endsWith('.js')) miniFiles.push(target);
+    });
+  }
+  walk(path.join(root, 'miniprogram'));
+  miniFiles.forEach(function (file) {
+    const source = fs.readFileSync(file, 'utf8');
+    Array.from(source.matchAll(/confirmText:\s*'([^']+)'/g)).forEach(function (match) {
+      assert.ok(Array.from(match[1]).length <= 4, path.relative(root, file) + ' 的 confirmText 超过 4 个字符');
+    });
+  });
+  assert.match(clientApi, /function normalizeCloudError/);
+  assert.match(clientApi, /source\.errMsg/);
+  assert.match(familyManage, /confirmText:\s*'确认移入'/);
+  assert.match(familyManage, /archiving: false/);
+  assert.match(familyManage, /if \(this\.data\.archiving\) return/);
+  assert.match(familyTemplate, /正在移入回收站，请稍候/);
+  assert.match(privacy, /showLastAdminGuidance/);
+  assert.match(privacy, /error\.code === 'LAST_ADMIN'/);
+  assert.match(privacy, /deletionExecuteText/);
+  assert.match(privacyTemplate, /预计于/);
+  assert.match(userApi, /remediation:\s*'transfer_or_archive'/);
+  assert.match(userApi, /familyId:\s*family\._id/);
+});
+
+test('云函数调用保留微信 errMsg 以便页面展示', async function () {
+  const source = fs.readFileSync(path.join(root, 'miniprogram/utils/api.js'), 'utf8');
+  let attempts = 0;
+  const context = {
+    module: { exports: {} },
+    require: function () {
+      return { resolveRuntimeEnvironment: function () { return { environment: { userApi: 'youpuUserApi' } }; } };
+    },
+    setTimeout: function (callback, delay) {
+      if (delay === 250) Promise.resolve().then(callback);
+      return 1;
+    },
+    clearTimeout: function () {},
+    Promise: Promise,
+    wx: {
+      cloud: {
+        callFunction: function () {
+          attempts += 1;
+          return Promise.reject({ errMsg: 'request:fail network disconnected' });
+        }
+      }
+    }
+  };
+  vm.runInNewContext(source, context, { filename: 'api.js' });
+  await assert.rejects(context.module.exports.call('family.archive'), function (error) {
+    assert.equal(error.message, 'request:fail network disconnected');
+    assert.equal(error.code, 'CLOUD_CALL_FAILED');
+    return true;
+  });
+  assert.equal(attempts, 2, '非业务错误应保留一次网络重试');
+});
+
+test('关于页使用正式版实际版本并按最新在前展示受控更新记录', function () {
+  const releaseInfo = require(path.join(root, 'miniprogram/utils/release-info.js'));
+  const releaseNotes = require(path.join(root, 'miniprogram/config/release-notes.js'));
+  const profile = fs.readFileSync(path.join(root, 'miniprogram/pages/profile/index.js'), 'utf8');
+  const profileTemplate = fs.readFileSync(path.join(root, 'miniprogram/pages/profile/index.wxml'), 'utf8');
+  const aboutTemplate = fs.readFileSync(path.join(root, 'miniprogram/pages/about/index.wxml'), 'utf8');
+  const uploadScript = fs.readFileSync(path.join(root, 'deployment/upload-miniprogram.sh'), 'utf8');
+  const verifier = fs.readFileSync(path.join(root, 'deployment/verify-release-note.mjs'), 'utf8');
+  assert.deepEqual(releaseInfo.validateReleaseNotes(releaseNotes), [{
+    version: '1.2.1',
+    summary: '修复家谱归档、优化注销引导、增加关于页与版本更新记录'
+  }]);
+  assert.throws(function () {
+    releaseInfo.validateReleaseNotes([{ version: '1.0.0', summary: '旧版本' }, { version: '1.1.0', summary: '新版本' }]);
+  }, /最新版本在前/);
+  assert.throws(function () {
+    releaseInfo.validateReleaseNotes([{ version: '1.1.0', summary: '新版本' }, { version: '1.1.0', summary: '重复版本' }]);
+  }, /重复版本号/);
+  assert.equal(releaseInfo.getCurrentReleaseVersion({ getAccountInfoSync: function () {
+    return { miniProgram: { envVersion: 'release', version: '1.2.3' } };
+  } }), '1.2.3');
+  assert.equal(releaseInfo.getCurrentReleaseVersion({ getAccountInfoSync: function () {
+    return { miniProgram: { envVersion: 'trial', version: '1.2.3' } };
+  } }), '');
+  assert.match(profile, /navigateTo\(\{ url: '\/pages\/about\/index' \}\)/);
+  assert.doesNotMatch(profileTemplate, /有谱 v1\.0\.0/);
+  assert.match(aboutTemplate, /版本更新/);
+  assert.match(aboutTemplate, /更新记录将在下一版本发布后显示/);
+  assert.match(uploadScript, /verify-release-note\.mjs/);
+  assert.match(verifier, /上传版本.*最新版本记录/);
 });
 
 test('添加亲属支持关联已有成员并由用户确认伴侣的共同子女', function () {

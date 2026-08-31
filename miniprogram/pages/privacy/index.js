@@ -14,11 +14,15 @@ function decorateExportTask(task) {
   return Object.assign({}, task, { expiresText: task && task.expiresAt ? format.dateText(task.expiresAt) : '' });
 }
 
+function deletionExecuteText(deletion) {
+  return deletion && deletion.executeAt ? format.dateText(deletion.executeAt) : '';
+}
+
 Page({
   data: {
     loading: true, error: '', legal: legal, accountState: 'active', deletion: null,
     reports: [], reportCursor: '', hasMoreReports: false, exporting: false, exportTask: null,
-    deleting: false, cancelling: false
+    deleting: false, cancelling: false, deletionExecuteText: ''
   },
 
   onShow: function () {
@@ -45,7 +49,12 @@ Page({
     return api.call('auth.login').then(function (data) {
       app.globalData.accountState = data.accountState;
       app.globalData.deletion = data.deletion || null;
-      self.setData({ loading: false, accountState: data.accountState || 'active', deletion: data.deletion || null });
+      self.setData({
+        loading: false,
+        accountState: data.accountState || 'active',
+        deletion: data.deletion || null,
+        deletionExecuteText: deletionExecuteText(data.deletion)
+      });
       const taskId = wx.getStorageSync(EXPORT_TASK_STORAGE_KEY);
       const accountTasks = taskId ? self.refreshExportTask(taskId, false) : Promise.resolve();
       if (data.accountState !== 'active') return accountTasks;
@@ -121,16 +130,36 @@ Page({
 
   requestDeletion: function () {
     const self = this;
+    if (this.data.deleting) return;
     wx.showModal({ title: '申请注销账户？', content: '申请后进入 7 天冷静期并暂停使用。你的账户资料将被匿名化，共享家谱仍由家庭管理员维护。', confirmText: '申请注销', confirmColor: '#B43D3D' }).then(function (result) {
       if (!result.confirm) return null;
+      if (self.data.deleting) return null;
       self.setData({ deleting: true });
       return api.call('account.requestDeletion');
     }).then(function (data) {
       if (!data) return;
       app.globalData.accountState = 'pending_delete'; app.globalData.loggedIn = false;
-      self.setData({ accountState: 'pending_delete', deletion: data });
+      self.setData({ accountState: 'pending_delete', deletion: data, deletionExecuteText: deletionExecuteText(data) });
       wx.showToast({ title: '已进入注销冷静期', icon: 'none' });
-    }).catch(function (error) { wx.showToast({ title: error.message || '注销申请失败', icon: 'none' }); }).then(function () { self.setData({ deleting: false }); });
+    }).catch(function (error) {
+      if (error.code === 'LAST_ADMIN' && error.details && error.details.familyId) return self.showLastAdminGuidance(error);
+      wx.showToast({ title: error.message || '注销申请失败', icon: 'none' });
+    }).then(function () { self.setData({ deleting: false }); });
+  },
+
+  showLastAdminGuidance: function (error) {
+    const details = error.details || {};
+    const familyName = details.familyName ? '“' + details.familyName + '”' : '这份家谱';
+    return wx.showModal({
+      title: '请先处理家谱',
+      content: '你是' + familyName + '的最后一名管理员。请先转让管理员，或将家谱移入回收站后再申请注销。',
+      confirmText: '去处理'
+    }).then(function (result) {
+      if (!result.confirm) return;
+      return wx.navigateTo({ url: '/pages/family-manage/index?familyId=' + details.familyId + '&section=collaborators' });
+    }).catch(function (modalError) {
+      wx.showToast({ title: modalError.message || modalError.errMsg || error.message || '注销申请失败', icon: 'none' });
+    });
   },
 
   cancelDeletion: function () {
@@ -139,7 +168,7 @@ Page({
     this.setData({ cancelling: true });
     api.call('account.cancelDeletion').then(function () {
       app.globalData.accountState = 'active'; app.globalData.loggedIn = true;
-      self.setData({ accountState: 'active', deletion: null });
+      self.setData({ accountState: 'active', deletion: null, deletionExecuteText: '' });
       wx.showToast({ title: '注销已撤销', icon: 'success' });
     }).catch(function (error) { wx.showToast({ title: error.message || '撤销失败', icon: 'none' }); }).then(function () { self.setData({ cancelling: false }); });
   },

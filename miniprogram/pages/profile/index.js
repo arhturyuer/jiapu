@@ -254,6 +254,6 @@ Page({
 
   openArchivedFamily: function (event) { wx.navigateTo({ url: '/pages/family-manage/index?familyId=' + event.currentTarget.dataset.id }); },
 
-  showAbout: function () { wx.showModal({ title: '关于有谱', content: '有谱由独立开发者打造，尝试用小程序与云端能力，让家谱记录更轻松、更便于协作。\n\n我们关注清晰的亲属关系、多人共同维护，以及家庭资料的隐私保护。\n\n愿每份家庭记忆，都能被好好保存。', showCancel: false, confirmText: '知道了' }); },
+  showAbout: function () { wx.navigateTo({ url: '/pages/about/index' }); },
   stopEvent: function () {}
 });

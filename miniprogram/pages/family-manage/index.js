@@ -27,7 +27,8 @@ Page({
     inviteCursor: '',
     hasMoreInvites: false,
     loadingMoreInvites: false,
-    saving: false
+    saving: false,
+    archiving: false
   },
 
   onLoad: function (options) {
@@ -245,13 +246,16 @@ Page({
 
   archiveFamily: function () {
     const self = this;
+    if (this.data.archiving) return;
     wx.showModal({
       title: '将家谱移入回收站？',
       content: '归档后暂停访问，30 天内可以恢复，之后将永久删除。',
-      confirmText: '移入回收站',
+      confirmText: '确认移入',
       confirmColor: '#B43D3D'
     }).then(function (result) {
       if (!result.confirm) return null;
+      if (self.data.archiving) return null;
+      self.setData({ archiving: true });
       return api.call('family.archive', { familyId: self.data.familyId });
     }).then(function (data) {
       if (!data) return;
@@ -261,6 +265,8 @@ Page({
       wx.showToast({ title: '已移入回收站', icon: 'none' });
     }).catch(function (error) {
       wx.showToast({ title: error.message || '归档失败', icon: 'none' });
+    }).then(function () {
+      self.setData({ archiving: false });
     });
   },
 

@@ -1,0 +1,18 @@
+.about-page { padding-bottom: calc(64rpx + env(safe-area-inset-bottom)); }
+.about-hero, .version-card, .release-empty { padding: 32rpx; }
+.about-eyebrow { display: block; color: #245C4A; font-size: 28rpx; font-weight: 650; }
+.about-title { display: block; margin-top: 12rpx; font-size: 42rpx; font-weight: 650; line-height: 1.35; }
+.about-copy { display: block; margin-top: 18rpx; color: #65706A; font-size: 29rpx; line-height: 1.7; }
+.about-section { margin-top: 38rpx; }
+.about-section > .section-title { display: block; margin-bottom: 16rpx; }
+.version-number, .version-copy, .release-version, .release-summary { display: block; }
+.version-number { color: #245C4A; font-size: 38rpx; font-weight: 650; }
+.version-copy, .release-summary, .release-empty { color: #65706A; font-size: 28rpx; line-height: 1.6; }
+.version-copy { margin-top: 8rpx; }
+.release-list { padding: 0 28rpx; }
+.release-item { padding: 28rpx 0; border-bottom: 2rpx solid #EEF0ED; }
+.release-item:last-child { border-bottom: none; }
+.release-heading { display: flex; align-items: center; gap: 12rpx; }
+.release-version { font-size: 32rpx; font-weight: 650; }
+.current-tag { padding: 3rpx 12rpx; color: #245C4A; background: #E4EFEA; border-radius: 999rpx; font-size: 23rpx; }
+.release-summary { margin-top: 10rpx; white-space: pre-wrap; }

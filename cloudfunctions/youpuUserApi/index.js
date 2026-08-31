@@ -875,7 +875,11 @@ async function accountRequestDeletion(event) {
   for (const membership of adminMemberships) {
     const family = await maybeGet(db, 'families', membership.familyId);
     if (family && family.status === 'active' && Number(family.adminCount || 1) <= 1) {
-      throw new BusinessError('LAST_ADMIN', '请先转让“' + cleanText(family.name, 30) + '”的管理员或归档家谱，再申请注销');
+      throw new BusinessError('LAST_ADMIN', '请先转让“' + cleanText(family.name, 30) + '”的管理员或归档家谱，再申请注销', {
+        familyId: family._id,
+        familyName: cleanText(family.name, 30),
+        remediation: 'transfer_or_archive'
+      });
     }
   }
   return mutate('account.requestDeletion', event, openid, async function (transaction) {
@@ -884,7 +888,11 @@ async function accountRequestDeletion(event) {
       const membership = await mustGet(transaction, 'family_memberships', membershipSnapshot._id, 'MEMBERSHIP_NOT_FOUND', '家庭身份发生变化，请重试');
       if (membership.status !== 'active' || membership.role !== 'admin') continue;
       const family = await mustGet(transaction, 'families', membership.familyId, 'FAMILY_NOT_FOUND', '家谱状态发生变化，请重试');
-      assert(family.status !== 'active' || Number(family.adminCount || 1) > 1, 'LAST_ADMIN', '请先转让“' + cleanText(family.name, 30) + '”的管理员或归档家谱，再申请注销');
+      assert(family.status !== 'active' || Number(family.adminCount || 1) > 1, 'LAST_ADMIN', '请先转让“' + cleanText(family.name, 30) + '”的管理员或归档家谱，再申请注销', {
+        familyId: family._id,
+        familyName: cleanText(family.name, 30),
+        remediation: 'transfer_or_archive'
+      });
     }
     const executeAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
     const id = 'del_' + user._id;

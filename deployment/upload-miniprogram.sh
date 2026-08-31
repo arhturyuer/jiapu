@@ -4,12 +4,11 @@ set -euo pipefail
 PROJECT_PATH="$(cd "$(dirname "$0")/.." && pwd)"
 TARGET="${1:-}"
 VERSION="${2:-}"
-DESCRIPTION="${3:-}"
 WECHAT_CLI="${WECHAT_CLI:-/Applications/wechatwebdevtools.app/Contents/MacOS/cli}"
 NODE_BIN="${NODE_BIN:-node}"
 
-if [[ -z "${VERSION}" || -z "${DESCRIPTION}" ]]; then
-  echo "用法: ./deployment/upload-miniprogram.sh {staging|production} <版本号> <描述>"
+if [[ -z "${VERSION}" || -n "${3:-}" ]]; then
+  echo "用法: ./deployment/upload-miniprogram.sh {staging|production} <版本号>"
   exit 2
 fi
 if [[ ! -x "${WECHAT_CLI}" ]]; then
@@ -34,6 +33,7 @@ if [[ "${RESOLVED_ENV}" != "${TARGET}" ]]; then
   exit 3
 fi
 
+DESCRIPTION="$("${NODE_BIN}" "${PROJECT_PATH}/deployment/verify-release-note.mjs" "${VERSION}")"
 "${WECHAT_CLI}" upload --project "${PROJECT_PATH}" --version "${VERSION}" --desc "${DESCRIPTION}"
 
 echo "已上传同一运行时路由包：开发版/体验版连接 staging，正式发布后连接 production。"

@@ -47,14 +47,16 @@ staging 命令要求独立环境 ID，且对生产 ID、占位 ID 和不一致�
 
 小程序包根据微信官方 `wx.getAccountInfoSync().miniProgram.envVersion` 在运行时选择环境：开发版 `develop` 与体验版 `trial` 连接 staging，正式版 `release` 连接 production；未知值安全降级到 staging。因此同一上传包可用于体验和正式发布，但必须先完成 staging 验收。
 
+每次上传前，先在 `miniprogram/config/release-notes.js` 的首项新增 `{ version, summary }` 版本记录；上传脚本会校验版本号并自动使用该摘要作为微信后台上传描述。
+
 ```bash
-bash deployment/upload-miniprogram.sh staging <版本号> <描述>
+bash deployment/upload-miniprogram.sh staging <版本号>
 ```
 
 仅在明确获准正式发布后，才上传待发布版本并提交审核：
 
 ```bash
-bash deployment/upload-miniprogram.sh production <版本号> <描述>
+bash deployment/upload-miniprogram.sh production <版本号>
 ```
 
 `staging` / `production` 参数用于上传前验证预期运行版本，不再生成不同环境的代码包。禁止删除 `miniprogram/config/env.local.js` 或修改受版本控制的 `miniprogram/config/env.js` 来切换环境。

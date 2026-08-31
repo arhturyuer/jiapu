@@ -42,7 +42,7 @@
       <view class="section-heading"><text class="section-title">数据与退出</text></view>
       <view class="danger-zone surface-card">
         <view class="danger-row" bindtap="reportFamily"><view><text class="danger-title">举报家谱描述</text><text class="danger-desc">向运营人员反馈不当内容</text></view><text class="danger-arrow">›</text></view>
-        <view class="danger-row" wx:if="{{isAdmin}}" bindtap="archiveFamily"><view><text class="danger-title">移入回收站</text><text class="danger-desc">30 天内可以恢复</text></view><text class="danger-arrow">›</text></view>
+        <view class="danger-row" wx:if="{{isAdmin}}" bindtap="archiveFamily"><view><text class="danger-title">移入回收站</text><text class="danger-desc">{{archiving ? '正在移入回收站，请稍候' : '30 天内可以恢复'}}</text></view><text class="danger-arrow">›</text></view>
         <view class="danger-row" bindtap="leaveFamily"><view><text class="danger-title">退出家谱</text><text class="danger-desc">退出后需要重新接受邀请</text></view><text class="danger-arrow">›</text></view>
       </view>
     </view>

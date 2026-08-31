@@ -9,6 +9,18 @@ function requestId() {
   return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12);
 }
 
+function normalizeCloudError(error) {
+  if (error instanceof Error) return error;
+  const source = error || {};
+  const message = source.message || source.errMsg || (typeof error === 'string' ? error : '') || '服务请求失败，请检查网络后重试';
+  const normalized = new Error(message);
+  normalized.code = source.code || 'CLOUD_CALL_FAILED';
+  normalized.details = source.details || null;
+  normalized.errMsg = source.errMsg || '';
+  normalized.isBusinessError = Boolean(source.isBusinessError);
+  return normalized;
+}
+
 function call(type, data) {
   const payload = Object.assign({}, data || {});
   if (type === 'change.review' && payload.requestId && !payload.changeRequestId) {
@@ -43,7 +55,7 @@ function call(type, data) {
           data: payload
         });
       } catch (error) {
-        finish(reject, error);
+        finish(reject, normalizeCloudError(error));
         return;
       }
       Promise.resolve(cloudRequest).then(function (response) {
@@ -59,7 +71,7 @@ function call(type, data) {
         error.isBusinessError = true;
         finish(reject, error);
       }).catch(function (error) {
-        finish(reject, error);
+        finish(reject, normalizeCloudError(error));
       });
     }).catch(function (error) {
       if (!error.isBusinessError && retriesLeft > 0) {
