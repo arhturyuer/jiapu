@@ -1,0 +1,14 @@
+<template name="kinship-card">
+  <view class="kinship-card" wx:if="{{card}}">
+    <text class="kinship-card-heading">从{{card.viewpointName}}看</text>
+    <scroll-view class="kinship-card-list" scroll-y style="height:{{card.entries.length > 1 ? 260 : 180}}rpx;">
+      <view class="kinship-card-entry" wx:for="{{card.entries}}" wx:key="key">
+        <text class="kinship-card-label">{{index === 0 ? '' : '同时也是：'}}{{item.label}}</text>
+        <text class="kinship-card-description">{{item.description}}</text>
+        <text class="kinship-card-path" wx:if="{{item.pathText}}">{{item.pathText}}</text>
+        <text class="kinship-card-reason" wx:if="{{item.reason}}">{{item.reason}}</text>
+      </view>
+    </scroll-view>
+    <text class="kinship-card-reason" wx:if="{{card.truncated}}">关系路径较多，其他路径尚未完整展开；以上仅展示已确认关系。</text>
+  </view>
+</template>

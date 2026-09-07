@@ -1,28 +1,30 @@
-const MAX_KINSHIP_DEPTH = 8;
-const MAX_PATH_CANDIDATES = 12;
+const dictionary = require('./kinship-dictionary');
+const MAX_PATH_CANDIDATES = 64;
+const MAX_SEARCH_STATES = 100000;
 
 function personGender(person) {
-  return person && person.gender ? person.gender : 'unknown';
+  return person && (person.gender === 'male' || person.gender === 'female') ? person.gender : 'unknown';
 }
 
-function birthParts(value) {
+// Compare the entire possible interval of a partial date, not a guessed day.
+function birthInterval(value) {
   const match = /^(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?$/.exec(value || '');
   if (!match) return null;
-  return { year: Number(match[1]), month: match[2] ? Number(match[2]) : 0, day: match[3] ? Number(match[3]) : 0 };
+  const year = Number(match[1]);
+  const month = match[2] ? Number(match[2]) : 0;
+  const day = match[3] ? Number(match[3]) : 0;
+  if (!year || (match[2] && (month < 1 || month > 12))) return null;
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  if (match[3] && (day < 1 || day > days[month - 1])) return null;
+  return [year * 10000 + (month || 1) * 100 + (day || 1), year * 10000 + (month || 12) * 100 + (day || days[(month || 12) - 1])];
 }
 
-// Only distinguish older and younger when the saved dates prove it. A partial
-// date in the same year must not turn a guess into a relationship label.
 function ageOrder(reference, target) {
-  const referenceDate = birthParts(reference && reference.birthDate);
-  const targetDate = birthParts(target && target.birthDate);
-  if (!referenceDate || !targetDate) return '';
-  if (referenceDate.year !== targetDate.year) return targetDate.year < referenceDate.year ? 'older' : 'younger';
-  if (!referenceDate.month || !referenceDate.day || !targetDate.month || !targetDate.day) return '';
-  const referenceValue = referenceDate.month * 100 + referenceDate.day;
-  const targetValue = targetDate.month * 100 + targetDate.day;
-  if (referenceValue === targetValue) return '';
-  return targetValue < referenceValue ? 'older' : 'younger';
+  const first = birthInterval(reference && reference.birthDate);
+  const second = birthInterval(target && target.birthDate);
+  if (!first || !second) return '';
+  return second[1] < first[0] ? 'older' : second[0] > first[1] ? 'younger' : '';
 }
 
 function spouseLabel(reference, target) {
@@ -40,242 +42,276 @@ function directRelationshipLabel(reference, target, role) {
 }
 
 function relationTypeLabel(anchor, relationType) {
-  if (relationType === 'spouse') {
-    const gender = personGender(anchor);
-    return gender === 'male' ? '妻子' : gender === 'female' ? '丈夫' : '配偶';
-  }
-  return {
-    father: '父亲', mother: '母亲', son: '儿子', daughter: '女儿'
-  }[relationType] || '亲属';
+  if (relationType === 'spouse') return personGender(anchor) === 'male' ? '妻子' : personGender(anchor) === 'female' ? '丈夫' : '配偶';
+  return { father: '父亲', mother: '母亲', son: '儿子', daughter: '女儿' }[relationType] || '亲属';
 }
 
-function directStep(current, next, relation) {
-  if (relation.type === 'spouse') return { kind: 'spouse', label: spouseLabel(current, next) };
-  if (relation.toPersonId === current._id) return { kind: 'up', label: directRelationshipLabel(current, next, 'parent') };
-  return { kind: 'down', label: directRelationshipLabel(current, next, 'child') };
+function siblingToken(reference, target) {
+  const gender = personGender(target);
+  if (gender === 'unknown') return 'sibling';
+  const order = ageOrder(reference, target);
+  return (order === 'older' ? 'o' : order === 'younger' ? 'l' : 'x') + (gender === 'male' ? 'b' : 's');
 }
+
+const TOKEN_LABELS = { f: '父亲', m: '母亲', s: '儿子', d: '女儿', h: '丈夫', w: '妻子', ob: '哥哥', lb: '弟弟', xb: '兄弟', os: '姐姐', ls: '妹妹', xs: '姐妹', parent: '家长', child: '子女', partner: '配偶', sibling: '手足' };
+const DEFAULT_LABELS = {
+  ob: '哥哥', lb: '弟弟', os: '姐姐', ls: '妹妹', xb: '兄弟', xs: '姐妹',
+  'f,f': '爷爷', 'f,m': '奶奶', 'm,f': '外公', 'm,m': '外婆',
+  'f,xb': '伯叔', 'f,ob': '伯父', 'f,lb': '叔叔', 'f,xs': '姑妈', 'm,xb': '舅舅', 'm,xs': '姨妈',
+  'f,ob,w': '伯母', 'f,lb,w': '婶婶', 'f,xb,w': '伯叔母', 'f,xs,h': '姑父', 'm,xb,w': '舅妈', 'm,xs,h': '姨父',
+  'ob,w': '嫂子', 'lb,w': '弟媳', 'xb,w': '兄弟的妻子', 'os,h': '姐夫', 'ls,h': '妹夫', 'xs,h': '姐妹的丈夫',
+  's,s': '孙子', 's,d': '孙女', 'd,s': '外孙', 'd,d': '外孙女',
+  's,s,w': '孙媳', 's,d,h': '孙女婿', 'd,s,w': '外孙媳', 'd,d,h': '外孙女婿',
+  'm,f,xs': '姑姥', 'm,f,xs,s': '表舅', 'm,f,xs,d': '表姨',
+  'w,f': '岳父', 'w,m': '岳母', 'h,f': '公公', 'h,m': '婆婆',
+  'xb,s': '侄子', 'xb,d': '侄女', 'xs,s': '外甥', 'xs,d': '外甥女',
+  'xb,s,s': '侄孙', 'xb,s,d': '侄孙女', 'xs,s,s': '甥孙', 'xs,s,d': '甥孙女'
+};
+
+function compareText(a, b) { return a < b ? -1 : a > b ? 1 : 0; }
 
 function buildGraph(persons, relations) {
-  const peopleById = {};
-  const adjacency = {};
+  const people = Object.create(null);
+  const adjacency = Object.create(null);
   (persons || []).forEach(function (person) {
-    if (!person || person.status === 'deleted') return;
-    peopleById[person._id] = person;
+    if (!person || !person._id || person.status === 'deleted') return;
+    people[person._id] = person;
     adjacency[person._id] = [];
   });
   (relations || []).forEach(function (relation) {
-    if (!relation || relation.status === 'deleted' || !adjacency[relation.fromPersonId] || !adjacency[relation.toPersonId]) return;
-    adjacency[relation.fromPersonId].push({ id: relation.toPersonId, relation: relation });
-    adjacency[relation.toPersonId].push({ id: relation.fromPersonId, relation: relation });
+    if (!relation || relation.status === 'deleted' || !['parent_child', 'spouse'].includes(relation.type)) return;
+    const from = relation.fromPersonId;
+    const to = relation.toPersonId;
+    if (from === to || !people[from] || !people[to]) return;
+    function add(a, b, kind) {
+      const gender = personGender(people[b]);
+      const token = kind === 'up' ? (gender === 'male' ? 'f' : gender === 'female' ? 'm' : 'parent')
+        : kind === 'down' ? (gender === 'male' ? 's' : gender === 'female' ? 'd' : 'child')
+          : spouseLabel(people[a], people[b]) === '丈夫' ? 'h' : spouseLabel(people[a], people[b]) === '妻子' ? 'w' : 'partner';
+      adjacency[a].push({ id: b, kind: kind, token: token, relationId: relation._id || relation.type + ':' + from + ':' + to });
+    }
+    add(from, to, relation.type === 'spouse' ? 'spouse' : 'down');
+    add(to, from, relation.type === 'spouse' ? 'spouse' : 'up');
   });
   Object.keys(adjacency).forEach(function (id) {
-    adjacency[id].sort(function (first, second) {
-      return first.id.localeCompare(second.id) || first.relation.type.localeCompare(second.relation.type) || (first.relation._id || '').localeCompare(second.relation._id || '');
-    });
+    adjacency[id].sort(function (a, b) { return compareText(a.id, b.id) || compareText(a.kind, b.kind) || compareText(a.relationId, b.relationId); });
   });
-  return { peopleById: peopleById, adjacency: adjacency };
+  return { people: people, adjacency: adjacency };
 }
 
-function siblingLabel(reference, target, prefix) {
-  const order = ageOrder(reference, target);
-  const gender = personGender(target);
-  const stem = prefix || '';
-  if (gender === 'male') {
-    if (order === 'older') return stem ? stem + '哥' : '哥哥';
-    if (order === 'younger') return stem ? stem + '弟' : '弟弟';
-    return stem ? stem + '兄弟' : '兄弟';
+function rootPath(id) { return { id: id, ids: [id], steps: [], tokens: [], tokenIds: [], code: '' }; }
+function extendPath(path, edge, graph) {
+  const steps = path.steps.concat(edge);
+  const tokens = path.tokens.slice();
+  const tokenIds = path.tokenIds.slice();
+  const previous = path.steps[path.steps.length - 1];
+  // Both steps refer to this very same saved parent. Distinct IDs ensure this
+  // is another child, never a text-only cancellation or a guessed co-parent.
+  if (previous && previous.kind === 'up' && edge.kind === 'down') {
+    tokens[tokens.length - 1] = siblingToken(graph.people[path.ids[path.ids.length - 2]], graph.people[edge.id]);
+    tokenIds[tokenIds.length - 1] = edge.id;
+  } else {
+    tokens.push(edge.token);
+    tokenIds.push(edge.id);
   }
-  if (gender === 'female') {
-    if (order === 'older') return stem ? stem + '姐' : '姐姐';
-    if (order === 'younger') return stem ? stem + '妹' : '妹妹';
-    return stem ? stem + '姐妹' : '姐妹';
-  }
-  return stem ? stem + '亲' : '手足';
+  return { id: edge.id, ids: path.ids.concat(edge.id), steps: steps, tokens: tokens, tokenIds: tokenIds, code: tokens.join(',') };
 }
 
-function parentSiblingLabel(parent, target) {
-  const targetGender = personGender(target);
-  if (personGender(parent) === 'male') {
-    if (targetGender === 'female') return '姑妈';
-    if (targetGender === 'male') {
-      const order = ageOrder(parent, target);
-      if (order === 'older') return '伯父';
-      if (order === 'younger') return '叔叔';
-      return '伯叔';
-    }
-  }
-  if (personGender(parent) === 'female') {
-    if (targetGender === 'male') return '舅舅';
-    if (targetGender === 'female') return '姨妈';
-  }
-  return targetGender === 'male' ? '父母的兄弟' : targetGender === 'female' ? '父母的姐妹' : '父母的手足';
+function isBlood(path) {
+  let descending = false;
+  return path.steps.every(function (step) {
+    if (step.kind === 'spouse') return false;
+    if (step.kind === 'down') descending = true;
+    return !(descending && step.kind === 'up');
+  });
 }
 
-function parentSiblingSpouseLabel(parent, parentSibling) {
-  if (personGender(parent) === 'male') {
-    if (personGender(parentSibling) === 'female') return '姑父';
-    if (personGender(parentSibling) === 'male') {
-      const order = ageOrder(parent, parentSibling);
-      if (order === 'older') return '伯母';
-      if (order === 'younger') return '婶婶';
-      return '伯叔母';
-    }
+function pathClass(path) { return path.steps.length === 1 ? 'direct' : isBlood(path) ? 'blood' : path.steps.some(function (s) { return s.kind === 'spouse'; }) ? 'affinal' : 'related'; }
+function description(path) { return path.tokens.map(function (token) { return TOKEN_LABELS[token]; }).join('的'); }
+
+function namedLabel(path, graph) {
+  const tokens = path.tokens;
+  const viewpoint = graph.people[path.ids[0]];
+  const target = graph.people[path.id];
+  if (path.steps.length === 1) return directRelationshipLabel(viewpoint, target, path.steps[0].kind === 'up' ? 'parent' : path.steps[0].kind === 'down' ? 'child' : 'spouse');
+  const code = path.code;
+  const neutral = tokens.map(dictionary.neutralToken).join(',');
+  if (DEFAULT_LABELS[code]) return DEFAULT_LABELS[code];
+  if (DEFAULT_LABELS[neutral]) return DEFAULT_LABELS[neutral];
+  // Keep the established broad 堂/表 convention for first cousins.
+  if (/^[fm],[olx][bs],[sd]$/.test(code)) {
+    const prefix = tokens[0] === 'f' && /b$/.test(tokens[1]) ? '堂' : '表';
+    const gender = personGender(target);
+    const order = ageOrder(viewpoint, target);
+    return prefix + (gender === 'male' ? order === 'older' ? '哥' : order === 'younger' ? '弟' : '兄弟' : order === 'older' ? '姐' : order === 'younger' ? '妹' : '姐妹');
   }
-  if (personGender(parent) === 'female') {
-    if (personGender(parentSibling) === 'male') return '舅妈';
-    if (personGender(parentSibling) === 'female') return '姨父';
+  let generation = 0;
+  let relativeIndex = tokens.length - 1;
+  if (tokens[relativeIndex] === 'h' || tokens[relativeIndex] === 'w') relativeIndex -= 1;
+  tokens.slice(0, relativeIndex + 1).forEach(function (token) { generation += token === 'f' || token === 'm' ? 1 : token === 's' || token === 'd' ? -1 : 0; });
+  const relative = graph.people[path.tokenIds[relativeIndex]];
+  let reference = viewpoint;
+  let referenceGeneration = 0;
+  // A father's cousin is compared with the father, a spouse's cousin with
+  // the spouse. Never compare an older generation with the viewpoint's age.
+  for (let index = 0; index < relativeIndex; index += 1) {
+    const token = tokens[index];
+    if (index === 0 && (token === 'h' || token === 'w')) reference = graph.people[path.tokenIds[index]];
+    else if ((token === 'f' || token === 'm') && referenceGeneration < generation) {
+      referenceGeneration += 1;
+      reference = graph.people[path.tokenIds[index]];
+    } else break;
   }
-  return '父母手足的配偶';
+  const order = referenceGeneration === generation ? ageOrder(reference, relative) : '';
+  if (order && /^(s|d)$/.test(tokens[relativeIndex])) {
+    const aged = tokens.slice();
+    aged[relativeIndex] += order === 'older' ? '&o' : '&l';
+    const label = dictionary.lookup(aged, personGender(viewpoint));
+    if (label) return label;
+  }
+  return dictionary.lookup(tokens, personGender(viewpoint));
 }
 
-function siblingSpouseLabel(viewpoint, sibling) {
-  const order = ageOrder(viewpoint, sibling);
-  if (personGender(sibling) === 'male') return order === 'older' ? '嫂子' : order === 'younger' ? '弟媳' : '兄弟的妻子';
-  if (personGender(sibling) === 'female') return order === 'older' ? '姐夫' : order === 'younger' ? '妹夫' : '姐妹的丈夫';
-  return '手足的配偶';
+function fallbackLabel(path, graph) {
+  const gender = personGender(graph.people[path.id]);
+  if (path.steps.every(function (s) { return s.kind === 'up'; }) && path.steps.length > 3) return '第' + path.steps.length + '代祖先';
+  if (path.steps.every(function (s) { return s.kind === 'down'; }) && path.steps.length > 3) return '第' + path.steps.length + '代后裔';
+  if (path.steps.length === 2 && path.steps[0].kind === 'down' && path.steps[1].kind === 'up') return gender === 'male' ? '子女的另一位父亲' : gender === 'female' ? '子女的另一位母亲' : '子女的另一位家长';
+  return description(path);
 }
 
-function specializedKinship(path, peopleById) {
-  const ids = path.ids;
-  const kinds = path.steps.map(function (step) { return step.kind; }).join('-');
-  const viewpoint = peopleById[ids[0]];
-  const target = peopleById[ids[ids.length - 1]];
-  const targetGender = personGender(target);
-  if (path.steps.length === 1) return path.steps[0].label;
-  if (kinds === 'up-spouse') return directRelationshipLabel(viewpoint, target, 'parent');
-  if (kinds === 'up-up') {
-    const parent = peopleById[ids[1]];
-    if (personGender(parent) === 'female') return targetGender === 'male' ? '外公' : targetGender === 'female' ? '外婆' : '外祖父母';
-    return targetGender === 'male' ? '爷爷' : targetGender === 'female' ? '奶奶' : '祖父母';
-  }
-  if (kinds === 'up-down') return siblingLabel(viewpoint, target, '');
-  if (kinds === 'down-up') return targetGender === 'male' ? '子女的另一位父亲' : targetGender === 'female' ? '子女的另一位母亲' : '子女的另一位家长';
-  if (kinds === 'down-down') {
-    const child = peopleById[ids[1]];
-    const outside = personGender(child) === 'female' ? '外' : '';
-    return targetGender === 'male' ? outside + '孙' : targetGender === 'female' ? outside + '孙女' : outside + '孙辈';
-  }
-  if (kinds === 'down-spouse') {
-    const child = peopleById[ids[1]];
-    return personGender(child) === 'male' ? '儿媳' : personGender(child) === 'female' ? '女婿' : '子女配偶';
-  }
-  if (kinds === 'spouse-up') {
-    const spouse = peopleById[ids[1]];
-    if (personGender(spouse) === 'female') return targetGender === 'male' ? '岳父' : targetGender === 'female' ? '岳母' : '岳父母';
-    if (personGender(spouse) === 'male') return targetGender === 'male' ? '公公' : targetGender === 'female' ? '婆婆' : '公婆';
-    return '配偶的父母';
-  }
-  if (kinds === 'up-up-down') return parentSiblingLabel(peopleById[ids[1]], target);
-  if (kinds === 'up-down-down') {
-    const sibling = peopleById[ids[2]];
-    return personGender(sibling) === 'male'
-      ? targetGender === 'male' ? '侄子' : targetGender === 'female' ? '侄女' : '侄辈'
-      : targetGender === 'male' ? '外甥' : targetGender === 'female' ? '外甥女' : '外甥辈';
-  }
-  if (kinds === 'up-down-spouse') return siblingSpouseLabel(viewpoint, peopleById[ids[2]]);
-  if (kinds === 'down-spouse-up') return targetGender === 'male' ? '亲家公' : targetGender === 'female' ? '亲家母' : '亲家';
-  if (kinds === 'down-down-spouse') {
-    const outside = personGender(peopleById[ids[1]]) === 'female' ? '外' : '';
-    return targetGender === 'male' ? outside + '孙媳' : targetGender === 'female' ? outside + '孙女婿' : outside + '孙辈配偶';
-  }
-  if (kinds === 'down-down-down') {
-    const outside = personGender(peopleById[ids[1]]) === 'female' ? '外' : '';
-    return targetGender === 'male' ? outside + '曾孙' : targetGender === 'female' ? outside + '曾孙女' : outside + '曾孙辈';
-  }
-  if (kinds === 'up-up-up') {
-    const outside = personGender(peopleById[ids[1]]) === 'female' || personGender(peopleById[ids[2]]) === 'female';
-    return targetGender === 'male' ? (outside ? '外曾祖父' : '曾祖父') : targetGender === 'female' ? (outside ? '外曾祖母' : '曾祖母') : '曾祖辈';
-  }
-  if (kinds === 'up-up-down-down') {
-    const parent = peopleById[ids[1]];
-    const parentSibling = peopleById[ids[3]];
-    return siblingLabel(viewpoint, target, personGender(parent) === 'male' && personGender(parentSibling) === 'male' ? '堂' : '表');
-  }
-  if (kinds === 'up-up-down-spouse') return parentSiblingSpouseLabel(peopleById[ids[1]], peopleById[ids[3]]);
-  return '亲属';
+function candidate(path, graph) {
+  const label = namedLabel(path, graph);
+  const unknown = path.tokens.some(function (t) { return ['parent', 'child', 'partner', 'sibling'].includes(t); });
+  const ageUnknown = path.tokens.some(function (t) { return t === 'xb' || t === 'xs'; });
+  return { label: label || fallbackLabel(path, graph), category: pathClass(path), named: !!label, code: path.code, distance: path.steps.length,
+    description: description(path), paths: [{ personIds: path.ids, relationIds: path.steps.map(function (s) { return s.relationId; }) }],
+    reason: unknown ? '部分成员性别未明确，按已录入关系展示' : !label ? '暂无可确定的专门称谓，展示已录入的关系路径' : ageUnknown ? '部分长幼信息不足，未推定年龄顺序' : '' };
 }
 
-function pathScore(path) {
-  const spouseCount = path.steps.filter(function (step) { return step.kind === 'spouse'; }).length;
-  const genericCount = path.steps.filter(function (step) { return step.label === '配偶' || step.label === '父母' || step.label === '子女'; }).length;
-  return [spouseCount, genericCount, path.ids.join('>')];
+function rank(a, b) {
+  const classes = { direct: 0, blood: 1, affinal: 2, related: 3 };
+  return classes[a.category] - classes[b.category] || a.distance - b.distance || Number(b.named) - Number(a.named) || compareText(a.code, b.code) || compareText(a.label, b.label);
 }
 
-function comparePathScore(first, second) {
-  const firstScore = pathScore(first);
-  const secondScore = pathScore(second);
-  if (firstScore[0] !== secondScore[0]) return firstScore[0] - secondScore[0];
-  if (firstScore[1] !== secondScore[1]) return firstScore[1] - secondScore[1];
-  return firstScore[2].localeCompare(secondScore[2]);
-}
-
-function sharedFallback(paths, labels, peopleById) {
-  const kinds = paths.map(function (path) { return path.steps.map(function (step) { return step.kind; }).join('-'); });
-  const target = peopleById[paths[0].ids[paths[0].ids.length - 1]];
-  const gender = personGender(target);
-  if (kinds.every(function (kind) { return kind === 'up-down'; })) return siblingLabel(null, target, '');
-  if (kinds.every(function (kind) { return kind === 'up-up-down-down'; })) return gender === 'male' ? '堂表兄弟' : gender === 'female' ? '堂表姐妹' : '堂表亲';
-  if (kinds.every(function (kind) { return kind === 'up-up'; })) return gender === 'male' ? '祖父' : gender === 'female' ? '祖母' : '祖父母';
-  if (kinds.every(function (kind) { return kind === 'up-up-down'; })) return gender === 'male' ? '父母的兄弟' : gender === 'female' ? '父母的姐妹' : '父母的手足';
-  if (labels.every(function (label) { return label === labels[0]; })) return labels[0];
-  return '亲属';
-}
-
-function calculateKinships(persons, relations, viewpointId) {
-  const result = {};
-  if (!viewpointId) return result;
-  const graph = buildGraph(persons, relations);
-  if (!graph.peopleById[viewpointId]) return result;
-  const queue = [{ id: viewpointId, ids: [viewpointId], steps: [] }];
-  const distances = {};
-  const candidates = {};
-  distances[viewpointId] = 0;
-  candidates[viewpointId] = [[]];
-  result[viewpointId] = '当前成员';
+// Full connectivity has no depth cap. Keep one deterministic real path even
+// when the finite dictionary cannot name it or specialized search is capped.
+function connectedPaths(graph, viewpointId, bloodOnly) {
+  const paths = Object.create(null);
+  const queue = [rootPath(viewpointId)];
+  paths[viewpointId] = queue[0];
+  const seen = new Set([viewpointId + ':up']);
   for (let index = 0; index < queue.length; index += 1) {
     const current = queue[index];
-    if (current.steps.length >= MAX_KINSHIP_DEPTH) continue;
-    (graph.adjacency[current.id] || []).forEach(function (edge) {
-      if (current.ids.indexOf(edge.id) >= 0) return;
-      const nextDepth = current.steps.length + 1;
-      if (distances[edge.id] !== undefined && distances[edge.id] < nextDepth) return;
-      const next = graph.peopleById[edge.id];
-      const path = { id: edge.id, ids: current.ids.concat(edge.id), steps: current.steps.concat(directStep(graph.peopleById[current.id], next, edge.relation)) };
-      if (distances[edge.id] === undefined) {
-        distances[edge.id] = nextDepth;
-        candidates[edge.id] = [];
-      }
-      const signature = path.ids.join('>');
-      if (candidates[edge.id].some(function (candidate) { return candidate.signature === signature; })) return;
-      if (candidates[edge.id].length >= MAX_PATH_CANDIDATES) return;
-      candidates[edge.id].push({ signature: signature, path: path });
-      queue.push(path);
+    graph.adjacency[current.id].forEach(function (edge) {
+      if (current.ids.includes(edge.id)) return;
+      if (bloodOnly && (edge.kind === 'spouse' || (current.steps.some(function (s) { return s.kind === 'down'; }) && edge.kind === 'up'))) return;
+      const phase = bloodOnly && (edge.kind === 'down' || current.steps.some(function (s) { return s.kind === 'down'; })) ? 'down' : 'up';
+      const signature = edge.id + ':' + phase;
+      if (seen.has(signature)) return;
+      seen.add(signature);
+      const next = extendPath(current, edge, graph);
+      if (!paths[edge.id]) paths[edge.id] = next;
+      queue.push(next);
     });
   }
-  Object.keys(candidates).forEach(function (personId) {
-    if (personId === viewpointId) return;
-    const paths = candidates[personId].map(function (candidate) { return candidate.path; });
-    const labels = paths.map(function (path) { return specializedKinship(path, graph.peopleById); });
-    const distinctLabels = labels.filter(function (label, index) { return labels.indexOf(label) === index; });
-    if (distinctLabels.length === 1) {
-      result[personId] = distinctLabels[0];
-      return;
+  return paths;
+}
+
+function calculateKinshipDetails(persons, relations, viewpointId, limits) {
+  const graph = buildGraph(persons, relations);
+  const result = {};
+  if (!graph.people[viewpointId]) return result;
+  const maxCandidates = limits && limits.maxCandidates || MAX_PATH_CANDIDATES;
+  const maxStates = limits && limits.maxStates || MAX_SEARCH_STATES;
+  const connected = connectedPaths(graph, viewpointId, false);
+  const blood = connectedPaths(graph, viewpointId, true);
+  const candidates = Object.create(null);
+  const signatures = Object.create(null);
+  let truncated = false;
+  function collect(path) {
+    const id = path.id;
+    if (id === viewpointId) return;
+    const item = candidate(path, graph);
+    if (!candidates[id]) { candidates[id] = []; signatures[id] = new Set(); }
+    const signature = JSON.stringify(item.paths[0]);
+    if (signatures[id].has(signature)) return;
+    if (signatures[id].size >= maxCandidates) { truncated = true; return; }
+    signatures[id].add(signature);
+    const existing = candidates[id].find(function (entry) { return entry.code === item.code && entry.label === item.label && entry.category === item.category; });
+    if (existing) existing.paths.push(item.paths[0]); else candidates[id].push(item);
+  }
+  Object.keys(connected).sort(compareText).forEach(function (id) { collect(connected[id]); if (blood[id]) collect(blood[id]); });
+  const queue = [rootPath(viewpointId)];
+  const queued = Object.create(null);
+  queued[viewpointId] = 1;
+  for (let index = 0; index < queue.length; index += 1) {
+    const current = queue[index];
+    const edges = graph.adjacency[current.id];
+    for (let e = 0; e < edges.length; e += 1) {
+      const edge = edges[e];
+      if (current.ids.includes(edge.id)) continue;
+      const next = extendPath(current, edge, graph);
+      // An up step may become a sibling token on the next saved down step.
+      const siblingPrefix = edge.kind === 'up' && ['xb', 'xs'].some(function (token) {
+        return dictionary.hasPrefix(next.tokens.slice(0, -1).concat(token));
+      });
+      if (!dictionary.hasPrefix(next.tokens) && !siblingPrefix) continue;
+      if (queue.length >= maxStates || (queued[next.id] || 0) >= maxCandidates) { truncated = true; continue; }
+      queued[next.id] = (queued[next.id] || 0) + 1;
+      queue.push(next);
+      collect(next);
     }
-    const rankedPaths = paths.slice().sort(comparePathScore);
-    const bestScore = pathScore(rankedPaths[0]);
-    const nextScore = pathScore(rankedPaths[1]);
-    if (bestScore[0] < nextScore[0] || (bestScore[0] === nextScore[0] && bestScore[1] < nextScore[1])) {
-      result[personId] = specializedKinship(rankedPaths[0], graph.peopleById);
-      return;
-    }
-    result[personId] = sharedFallback(paths, labels, graph.peopleById);
+  }
+  Object.keys(graph.people).sort(compareText).forEach(function (id) {
+    if (id === viewpointId) { result[id] = { label: '当前成员', category: 'self', alternatives: [], paths: [], description: '当前查看视角', reason: '', multiple: false, truncated: truncated }; return; }
+    const items = (candidates[id] || []).sort(rank);
+    if (!items.length) { result[id] = { label: '暂未建立关系', category: 'unconnected', alternatives: [], paths: [], description: '已录入资料中没有连接到当前视角的关系路径', reason: '', multiple: false, truncated: false }; return; }
+    // Merge same labels, including both parents' evidence for one sibling.
+    const distinct = [];
+    items.forEach(function (item) {
+      const existing = distinct.find(function (other) { return other.label === item.label && other.category === item.category; });
+      if (existing) existing.paths = existing.paths.concat(item.paths); else distinct.push(Object.assign({}, item));
+    });
+    const main = distinct[0];
+    const alternatives = distinct.slice(1).filter(function (item) { return item.named; });
+    result[id] = Object.assign({}, main, { alternatives: alternatives, multiple: alternatives.length > 0, truncated: truncated });
   });
   return result;
 }
 
-module.exports = {
-  ageOrder: ageOrder,
-  directRelationshipLabel: directRelationshipLabel,
-  relationTypeLabel: relationTypeLabel,
-  calculateKinships: calculateKinships
-};
+function calculateKinships(persons, relations, viewpointId) {
+  const details = calculateKinshipDetails(persons, relations, viewpointId);
+  const result = {};
+  Object.keys(details).forEach(function (id) { result[id] = details[id].label; });
+  return result;
+}
+
+// Caller-owned cache; its content signature also catches in-place date, gender,
+// relation and deletion edits. UI-only choices never enter this signature.
+function createKinshipCache() {
+  let previousKey;
+  let previous;
+  return function (persons, relations, viewpointId) {
+    const key = JSON.stringify([viewpointId, (persons || []).map(function (p) { return p && [p._id, p.gender, p.birthDate, p.status]; }),
+      (relations || []).map(function (r) { return r && [r._id, r.type, r.fromPersonId, r.toPersonId, r.status]; })]);
+    if (key !== previousKey) { previous = calculateKinshipDetails(persons, relations, viewpointId); previousKey = key; }
+    return previous;
+  };
+}
+
+function memberKinshipCard(details, personId, viewpointName, persons) {
+  const detail = details && details[personId];
+  if (!detail) return null;
+  const names = Object.create(null);
+  (persons || []).forEach(function (p) { names[p._id] = p.name || '未命名成员'; });
+  const entries = [detail].concat(detail.alternatives).map(function (item, index) {
+    const proof = item.paths[0];
+    return { key: String(index), label: item.label, description: item.description,
+      pathText: proof ? proof.personIds.map(function (id) { return names[id] || '未命名成员'; }).join(' → ') : '', reason: item.reason };
+  });
+  return { viewpointName: viewpointName, entries: entries, truncated: detail.truncated, multiple: detail.multiple };
+}
+
+module.exports = { ageOrder: ageOrder, directRelationshipLabel: directRelationshipLabel, relationTypeLabel: relationTypeLabel,
+  calculateKinships: calculateKinships, calculateKinshipDetails: calculateKinshipDetails, createKinshipCache: createKinshipCache, memberKinshipCard: memberKinshipCard };

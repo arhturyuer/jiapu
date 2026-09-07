@@ -65,7 +65,9 @@ const multiRelations = [
   parent('m1', 'father', 'child'), parent('m2', 'mother', 'child'),
   parent('m3', 'shared-grandparent', 'father'), parent('m4', 'shared-grandparent', 'mother')
 ];
-assert.strictEqual(kinship.calculateKinships(multiPeople, multiRelations, 'child')['shared-grandparent'], '祖父');
+// Distinct, established relationships now keep a primary name and alternatives.
+assert.strictEqual(kinship.calculateKinships(multiPeople, multiRelations, 'child')['shared-grandparent'], '爷爷');
+assert.ok(kinship.calculateKinshipDetails(multiPeople, multiRelations, 'child')['shared-grandparent'].alternatives.some(function (item) { return item.label === '外公'; }));
 
 const preferredPeople = [person('me', 'male', '1990'), person('father', 'male', '1960'), person('wife', 'female', '1991'), person('shared-elder', 'male', '1930')];
 const preferredRelations = [

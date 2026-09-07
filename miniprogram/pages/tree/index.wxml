@@ -1,3 +1,4 @@
+<import src="../../templates/kinship-card.wxml" />
 <view class="tree-page">
   <view class="loading-panel" wx:if="{{loading}}">
     <view class="loading-dot"></view>
@@ -97,6 +98,7 @@
         >
           <block wx:if="{{nameLayout === 'vertical'}}">
             <text class="node-name node-name-vertical">{{item.verticalName}}</text>
+            <text class="node-meta node-kinship" wx:if="{{viewMode === 'perspective' && item.relationLabel}}">{{item.relationLabel}}</text>
           </block>
           <block wx:else>
             <image class="node-avatar" wx:if="{{item.avatar}}" src="{{item.avatar}}" mode="aspectFill"></image>
@@ -105,6 +107,7 @@
             <text class="node-meta" wx:if="{{viewMode === 'perspective' && item.relationLabel}}">{{item.relationLabel}}</text>
             <text class="node-meta" wx:elif="{{item.metaText}}">{{item.metaText}}</text>
           </block>
+          <text class="node-kinship-multiple" wx:if="{{viewMode === 'perspective' && item.hasMultipleKinships}}">多重关系</text>
           <view class="node-action-trigger" wx:if="{{item.isSelected}}" data-id="{{item._id}}" catchtap="openMemberActions">•••</view>
           <view class="branch-count" wx:if="{{item.hiddenDescendantCount > 0}}" data-id="{{item._id}}" catchtap="expandBranch">+{{item.hiddenDescendantCount}} 人</view>
         </view>
@@ -155,6 +158,7 @@
           <text class="muted-text">{{selectedPerson.birthDate || '家庭成员'}}</text>
         </view>
       </view>
+      <template is="kinship-card" data="{{card: selectedKinship}}" />
       <view class="action-grid">
         <view class="action-cell" bindtap="useSelectedPerspective">
           <text class="action-title">从他/她看</text>

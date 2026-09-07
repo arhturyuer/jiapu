@@ -10,6 +10,7 @@ const MAX_INTERACTIVE_NODES = 80;
 
 Page({
   data: {
+    selectedKinship: null,
     loading: true,
     loadError: '',
     accountPending: false,
@@ -205,6 +206,8 @@ Page({
     const selectedPersonId = Object.prototype.hasOwnProperty.call(optionsValue, 'selectedPersonId')
       ? optionsValue.selectedPersonId
       : this.data.selectedPersonId;
+    if (!this._kinshipCache) this._kinshipCache = kinship.createKinshipCache();
+    const kinshipDetails = mode === 'perspective' ? this._kinshipCache(this.data.rawPersons, this.data.rawRelations, viewpointId) : {};
     const result = graphLayout.layoutGraph(
       this.data.rawPersons,
       this.data.rawRelations,
@@ -213,7 +216,8 @@ Page({
         viewpointId: viewpointId,
         nameLayout: nameLayout,
         collapsedIds: collapsedIds,
-        selectedPersonId: selectedPersonId
+        selectedPersonId: selectedPersonId,
+        kinshipDetails: kinshipDetails
       }
     );
     const viewpoint = this.data.rawPersons.find(function (person) {
@@ -222,6 +226,7 @@ Page({
     const self = this;
     this._lastLayout = result;
     const patch = Object.assign({
+      selectedKinship: this.data.showMemberSheet ? kinship.memberKinshipCard(kinshipDetails, selectedPersonId, viewpoint ? viewpoint.name : '', this.data.rawPersons) : null,
       nodes: result.nodes,
       lines: result.lines,
       junctions: result.junctions || [],
@@ -466,6 +471,7 @@ Page({
     const person = this.data.rawPersons.find(function (item) { return item._id === personId; });
     if (!person) return;
     this.setData({
+      selectedKinship: this.data.viewMode === 'perspective' ? kinship.memberKinshipCard(this._lastLayout && this._lastLayout.kinshipDetails, personId, this.data.viewpointName, this.data.rawPersons) : null,
       selectedPersonId: personId,
       selectedPerson: Object.assign({}, person, {
         isCollapsed: this.data.collapsedPersonIds.indexOf(personId) >= 0
@@ -484,7 +490,7 @@ Page({
   },
 
   closeMemberSheet: function () {
-    this.setData({ showMemberSheet: false });
+    this.setData({ showMemberSheet: false, selectedKinship: null });
   },
 
   useSelectedPerspective: function () {

@@ -20,7 +20,6 @@ const VERTICAL_METRICS = {
   marginX: 80,
   marginY: 80
 };
-const MAX_KINSHIP_DEPTH = 8;
 const JUNCTION_RADIUS = 7;
 const LINE_OVERLAP = 2;
 const MAX_ANIMATED_CHILDREN = 12;
@@ -202,259 +201,6 @@ function assignGenerations(persons, relations, components) {
   const result = {};
   persons.forEach(function (person) {
     result[person._id] = generationsByRoot[components.componentByPerson[person._id]] || 0;
-  });
-  return result;
-}
-
-function directStep(currentId, nextId, relation, peopleById) {
-  const nextPerson = peopleById[nextId];
-  if (relation.type === 'spouse') {
-    const gender = personGender(nextPerson);
-    return {
-      kind: 'spouse',
-      label: gender === 'male' ? '丈夫' : gender === 'female' ? '妻子' : '配偶'
-    };
-  }
-
-  if (relation.type === 'parent_child' && relation.toPersonId === currentId) {
-    const gender = personGender(nextPerson);
-    return {
-      kind: 'up',
-      label: gender === 'male' ? '父亲' : gender === 'female' ? '母亲' : '父母'
-    };
-  }
-
-  const gender = personGender(nextPerson);
-  return {
-    kind: 'down',
-    label: gender === 'male' ? '儿子' : gender === 'female' ? '女儿' : '子女'
-  };
-}
-
-function buildAdjacency(persons, relations) {
-  const peopleById = {};
-  const adjacency = {};
-  persons.forEach(function (person) {
-    peopleById[person._id] = person;
-    adjacency[person._id] = [];
-  });
-
-  relations.forEach(function (relation) {
-    if (!adjacency[relation.fromPersonId] || !adjacency[relation.toPersonId]) return;
-    adjacency[relation.fromPersonId].push({ id: relation.toPersonId, relation: relation });
-    adjacency[relation.toPersonId].push({ id: relation.fromPersonId, relation: relation });
-  });
-  return { adjacency: adjacency, peopleById: peopleById };
-}
-
-function ageOrder(reference, target) {
-  if (!reference || !target || !reference.birthDate || !target.birthDate) return '';
-  if (reference.birthDate === target.birthDate) return '';
-  return target.birthDate < reference.birthDate ? 'older' : 'younger';
-}
-
-function siblingLabel(reference, target, prefix) {
-  const order = ageOrder(reference, target);
-  const gender = personGender(target);
-  const stem = prefix || '';
-  if (gender === 'male') {
-    if (order === 'older') return stem ? stem + '哥' : '哥哥';
-    if (order === 'younger') return stem ? stem + '弟' : '弟弟';
-    return stem + '兄弟';
-  }
-  if (gender === 'female') {
-    if (order === 'older') return stem ? stem + '姐' : '姐姐';
-    if (order === 'younger') return stem ? stem + '妹' : '妹妹';
-    return stem + '姐妹';
-  }
-  return stem ? stem + '亲' : '手足';
-}
-
-function parentSiblingLabel(parent, target) {
-  const targetGender = personGender(target);
-  if (personGender(parent) === 'male') {
-    if (targetGender === 'female') return '姑妈';
-    const order = ageOrder(parent, target);
-    if (order === 'older') return '伯父';
-    if (order === 'younger') return '叔叔';
-    return '伯叔';
-  }
-  if (personGender(parent) === 'female') {
-    if (targetGender === 'male') return '舅舅';
-    if (targetGender === 'female') return '姨妈';
-  }
-  return targetGender === 'male' ? '父母的兄弟' : targetGender === 'female' ? '父母的姐妹' : '父母的手足';
-}
-
-function parentSiblingSpouseLabel(parent, parentSibling) {
-  if (personGender(parent) === 'male') {
-    if (personGender(parentSibling) === 'female') return '姑父';
-    const order = ageOrder(parent, parentSibling);
-    if (order === 'older') return '伯母';
-    if (order === 'younger') return '婶婶';
-    return '伯叔母';
-  }
-  if (personGender(parent) === 'female') {
-    if (personGender(parentSibling) === 'male') return '舅妈';
-    if (personGender(parentSibling) === 'female') return '姨父';
-  }
-  return '父母手足的配偶';
-}
-
-function siblingSpouseLabel(viewpoint, sibling) {
-  const order = ageOrder(viewpoint, sibling);
-  if (personGender(sibling) === 'male') {
-    if (order === 'older') return '嫂子';
-    if (order === 'younger') return '弟媳';
-    return '兄弟的妻子';
-  }
-  if (personGender(sibling) === 'female') {
-    if (order === 'older') return '姐夫';
-    if (order === 'younger') return '妹夫';
-    return '姐妹的丈夫';
-  }
-  return '手足的配偶';
-}
-
-function specializedKinship(path, peopleById) {
-  const steps = path.steps;
-  const ids = path.ids;
-  const kinds = steps.map(function (step) { return step.kind; }).join('-');
-  const viewpoint = peopleById[ids[0]];
-  const target = peopleById[ids[ids.length - 1]];
-  const targetGender = personGender(target);
-  if (steps.length === 1) return steps[0].label;
-
-  if (kinds === 'up-up') {
-    const parent = peopleById[ids[1]];
-    if (personGender(parent) === 'female') {
-      return targetGender === 'male' ? '外公' : targetGender === 'female' ? '外婆' : '外祖父母';
-    }
-    return targetGender === 'male' ? '爷爷' : targetGender === 'female' ? '奶奶' : '祖父母';
-  }
-  if (kinds === 'up-down') return siblingLabel(viewpoint, target, '');
-  if (kinds === 'down-down') {
-    const child = peopleById[ids[1]];
-    if (personGender(child) === 'female') {
-      return targetGender === 'male' ? '外孙' : targetGender === 'female' ? '外孙女' : '外孙辈';
-    }
-    return targetGender === 'male' ? '孙子' : targetGender === 'female' ? '孙女' : '孙辈';
-  }
-  if (kinds === 'down-spouse') {
-    const child = peopleById[ids[1]];
-    return personGender(child) === 'male' ? '儿媳' : personGender(child) === 'female' ? '女婿' : '子女配偶';
-  }
-  if (kinds === 'spouse-up') {
-    const spouse = peopleById[ids[1]];
-    if (personGender(spouse) === 'female') {
-      return targetGender === 'male' ? '岳父' : targetGender === 'female' ? '岳母' : '岳父母';
-    }
-    if (personGender(spouse) === 'male') {
-      return targetGender === 'male' ? '公公' : targetGender === 'female' ? '婆婆' : '公婆';
-    }
-  }
-  if (kinds === 'up-up-down') return parentSiblingLabel(peopleById[ids[1]], target);
-  if (kinds === 'up-down-down') {
-    const sibling = peopleById[ids[2]];
-    if (personGender(sibling) === 'male') {
-      return targetGender === 'male' ? '侄子' : targetGender === 'female' ? '侄女' : '侄辈';
-    }
-    return targetGender === 'male' ? '外甥' : targetGender === 'female' ? '外甥女' : '外甥辈';
-  }
-  if (kinds === 'up-down-spouse') return siblingSpouseLabel(viewpoint, peopleById[ids[2]]);
-  if (kinds === 'down-spouse-up') {
-    return targetGender === 'male' ? '亲家公' : targetGender === 'female' ? '亲家母' : '亲家';
-  }
-  if (kinds === 'down-down-spouse') {
-    const child = peopleById[ids[1]];
-    const grandchild = peopleById[ids[2]];
-    const outside = personGender(child) === 'female' ? '外' : '';
-    return personGender(grandchild) === 'male' ? outside + '孙媳' : outside + '孙女婿';
-  }
-  if (kinds === 'down-down-down') {
-    const outside = personGender(peopleById[ids[1]]) === 'female' ? '外' : '';
-    return targetGender === 'male' ? outside + '曾孙' : targetGender === 'female' ? outside + '曾孙女' : outside + '曾孙辈';
-  }
-  if (kinds === 'up-up-up') {
-    const outside = personGender(peopleById[ids[1]]) === 'female' || personGender(peopleById[ids[2]]) === 'female';
-    return targetGender === 'male' ? (outside ? '外曾祖父' : '曾祖父') : targetGender === 'female' ? (outside ? '外曾祖母' : '曾祖母') : '曾祖辈';
-  }
-  if (kinds === 'up-up-down-down') {
-    const parent = peopleById[ids[1]];
-    const parentSibling = peopleById[ids[3]];
-    const prefix = personGender(parent) === 'male' && personGender(parentSibling) === 'male' ? '堂' : '表';
-    return siblingLabel(viewpoint, target, prefix);
-  }
-  if (kinds === 'up-up-down-spouse') {
-    return parentSiblingSpouseLabel(peopleById[ids[1]], peopleById[ids[3]]);
-  }
-
-  return steps.map(function (step) { return step.label; }).join('的');
-}
-
-function calculateKinships(persons, relations, viewpointId) {
-  const result = {};
-  if (!viewpointId) return result;
-  const graph = buildAdjacency(persons, relations);
-  if (!graph.peopleById[viewpointId]) return result;
-
-  const queue = [{ id: viewpointId, ids: [viewpointId], steps: [] }];
-  const distances = {};
-  const candidates = {};
-  distances[viewpointId] = 0;
-  candidates[viewpointId] = [[]];
-  result[viewpointId] = '当前成员';
-
-  let queueIndex = 0;
-  while (queueIndex < queue.length) {
-    const current = queue[queueIndex];
-    queueIndex += 1;
-    if (current.steps.length >= MAX_KINSHIP_DEPTH) continue;
-
-    (graph.adjacency[current.id] || []).forEach(function (edge) {
-      if (current.ids.indexOf(edge.id) >= 0) return;
-      const nextDepth = current.steps.length + 1;
-      if (distances[edge.id] !== undefined && distances[edge.id] < nextDepth) return;
-      const step = directStep(current.id, edge.id, edge.relation, graph.peopleById);
-      const nextPath = {
-        id: edge.id,
-        ids: current.ids.concat(edge.id),
-        steps: current.steps.concat(step)
-      };
-      if (distances[edge.id] === undefined) {
-        distances[edge.id] = nextDepth;
-        candidates[edge.id] = [];
-      }
-      const signature = nextPath.ids.join('>');
-      if (candidates[edge.id].some(function (item) { return item.signature === signature; })) return;
-      if (candidates[edge.id].length >= 3) return;
-      candidates[edge.id].push({ signature: signature, path: nextPath });
-      queue.push(nextPath);
-    });
-  }
-
-  Object.keys(candidates).forEach(function (personId) {
-    if (personId === viewpointId) return;
-    const labels = [];
-    candidates[personId].forEach(function (candidate) {
-      const label = specializedKinship(candidate.path, graph.peopleById);
-      if (labels.indexOf(label) < 0) labels.push(label);
-    });
-    result[personId] = labels.length === 1 ? labels[0] : '亲属';
-  });
-
-  const connected = {};
-  const connectedQueue = [viewpointId];
-  connected[viewpointId] = true;
-  for (let index = 0; index < connectedQueue.length; index += 1) {
-    (graph.adjacency[connectedQueue[index]] || []).forEach(function (edge) {
-      if (connected[edge.id]) return;
-      connected[edge.id] = true;
-      connectedQueue.push(edge.id);
-    });
-  }
-  Object.keys(connected).forEach(function (personId) {
-    if (!result[personId]) result[personId] = '远亲';
   });
   return result;
 }
@@ -1137,7 +883,9 @@ function createFamilyConnections(nodesById, relations, selectedPersonId, metrics
 function layoutGraph(personsInput, relationsInput, options) {
   const optionsValue = options || {};
   const nameLayout = optionsValue.nameLayout === 'vertical' ? 'vertical' : 'horizontal';
-  const metrics = metricsForNameLayout(nameLayout);
+  const metrics = Object.assign({}, metricsForNameLayout(nameLayout));
+  if (optionsValue.mode === 'perspective') metrics.nodeHeight = nameLayout === 'vertical' ? 212 : 196;
+  if (nameLayout === 'vertical' && optionsValue.mode === 'perspective') metrics.nodeWidth = 112;
   const activePersons = (personsInput || []).filter(function (person) { return person.status !== 'deleted'; });
   const active = activeRelations(relationsInput);
   const filtered = filterCollapsed(activePersons, active, optionsValue.collapsedIds || []);
@@ -1154,9 +902,11 @@ function layoutGraph(personsInput, relationsInput, options) {
   let canvasHeight = Math.max(900, maxGeneration * metrics.gapY + metrics.nodeHeight + metrics.marginY * 2);
   const nodesById = {};
   const nodes = [];
-  const kinships = optionsValue.mode === 'perspective'
-    ? kinship.calculateKinships(persons, relations, optionsValue.viewpointId)
+  const kinshipDetails = optionsValue.mode === 'perspective'
+    ? (optionsValue.kinshipDetails || kinship.calculateKinshipDetails(activePersons, active, optionsValue.viewpointId))
     : {};
+  const kinships = {};
+  Object.keys(kinshipDetails).forEach(function (id) { kinships[id] = kinshipDetails[id].label; });
 
   generationKeys.forEach(function (generation) {
     unitsByGeneration[generation].forEach(function (unit) {
@@ -1166,9 +916,10 @@ function layoutGraph(personsInput, relationsInput, options) {
         const node = Object.assign({}, person, {
           x: x,
           y: y,
-          style: 'left:' + x + 'rpx;top:' + y + 'rpx;',
+          style: 'left:' + x + 'rpx;top:' + y + 'rpx;width:' + metrics.nodeWidth + 'rpx;height:' + metrics.nodeHeight + 'rpx;',
           verticalName: verticalDisplayName(person.name),
           relationLabel: kinships[person._id] || '',
+          hasMultipleKinships: !!(kinshipDetails[person._id] && kinshipDetails[person._id].multiple),
           familySize: unit.members.length,
           hiddenDescendantCount: filtered.hiddenByCollapsed[person._id] || 0,
           isViewpoint: person._id === optionsValue.viewpointId,
@@ -1191,6 +942,7 @@ function layoutGraph(personsInput, relationsInput, options) {
     width: Math.ceil(canvasWidth),
     height: Math.ceil(canvasHeight),
     kinships: kinships,
+    kinshipDetails: kinshipDetails,
     hiddenCount: filtered.hiddenCount
   };
 }

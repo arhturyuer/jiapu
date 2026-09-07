@@ -1,5 +1,6 @@
 const api = require('../../utils/api');
 const graphLayout = require('../../utils/graph-layout');
+const kinship = require('../../utils/kinship');
 const graphViewport = require('../../utils/graph-viewport');
 const shareCard = require('../../utils/share-card');
 const MAX_INTERACTIVE_NODES = 80;
@@ -19,6 +20,7 @@ function exampleDetailUrl(slug, personId) {
 
 Page({
   data: {
+    selectedKinship: null,
     loading: true, error: '', slug: '', example: null, rawPersons: [], rawRelations: [], nodes: [], lines: [], junctions: [],
     canvasWidth: 750, canvasHeight: 900, graphScale: 1, graphX: 0, graphY: 0, graphScaleMin: 0.32, graphZoomClass: 'zoom-detail',
     collapsedPersonIds: [], hiddenBranchCount: 0, canExpandAll: false, nameLayout: 'horizontal', viewMode: 'full', viewpointId: '', viewpointName: '',
@@ -85,11 +87,13 @@ Page({
     const collapsedIds = optionsValue.collapsedPersonIds || this.data.collapsedPersonIds;
     const selectedPersonId = Object.prototype.hasOwnProperty.call(optionsValue, 'selectedPersonId') ? optionsValue.selectedPersonId : this.data.selectedPersonId;
     const nameLayout = optionsValue.nameLayout === 'vertical' ? 'vertical' : optionsValue.nameLayout === 'horizontal' ? 'horizontal' : this.data.nameLayout;
-    const result = graphLayout.layoutGraph(this.data.rawPersons, this.data.rawRelations, { mode: mode, viewpointId: viewpointId, nameLayout: nameLayout, collapsedIds: collapsedIds, selectedPersonId: selectedPersonId });
+    if (!this._kinshipCache) this._kinshipCache = kinship.createKinshipCache();
+    const kinshipDetails = mode === 'perspective' ? this._kinshipCache(this.data.rawPersons, this.data.rawRelations, viewpointId) : {};
+    const result = graphLayout.layoutGraph(this.data.rawPersons, this.data.rawRelations, { mode: mode, viewpointId: viewpointId, nameLayout: nameLayout, collapsedIds: collapsedIds, selectedPersonId: selectedPersonId, kinshipDetails: kinshipDetails });
     const viewpoint = this.data.rawPersons.find(function (person) { return person._id === viewpointId; });
     const self = this;
     this._lastLayout = result;
-    this.setData(Object.assign({ nodes: result.nodes, lines: result.lines, junctions: result.junctions || [], canvasWidth: result.width, canvasHeight: result.height, viewpointName: viewpoint ? viewpoint.name : '', hiddenBranchCount: result.hiddenCount || 0, canExpandAll: (result.hiddenCount || 0) > 0 && this.data.rawPersons.length <= MAX_INTERACTIVE_NODES }, optionsValue.statePatch || {}), function () {
+    this.setData(Object.assign({ selectedKinship: this.data.showMemberSheet ? kinship.memberKinshipCard(kinshipDetails, selectedPersonId, viewpoint ? viewpoint.name : '', this.data.rawPersons) : null, nodes: result.nodes, lines: result.lines, junctions: result.junctions || [], canvasWidth: result.width, canvasHeight: result.height, viewpointName: viewpoint ? viewpoint.name : '', hiddenBranchCount: result.hiddenCount || 0, canExpandAll: (result.hiddenCount || 0) > 0 && this.data.rawPersons.length <= MAX_INTERACTIVE_NODES }, optionsValue.statePatch || {}), function () {
       if (optionsValue.preserveViewport) return;
       if (mode === 'perspective' && viewpointId) self.fitGraph(viewpointId, false, { minimumFocusScale: 0.6 }); else self.fitGraph('', true);
     });
@@ -126,10 +130,11 @@ Page({
   openMemberActions: function (event) {
     const personId = event.currentTarget.dataset.id;
     const person = this.data.rawPersons.find(function (item) { return item._id === personId; });
-    if (person) this.setData({ selectedPersonId: personId, selectedPerson: Object.assign({}, person, { isCollapsed: this.data.collapsedPersonIds.indexOf(personId) >= 0 }), showMemberSheet: true });
+    if (person) this.setData({ selectedKinship: this.data.viewMode === 'perspective' ? kinship.memberKinshipCard(this._lastLayout && this._lastLayout.kinshipDetails, personId, this.data.viewpointName, this.data.rawPersons) : null,
+      selectedPersonId: personId, selectedPerson: Object.assign({}, person, { isCollapsed: this.data.collapsedPersonIds.indexOf(personId) >= 0 }), showMemberSheet: true });
   },
   clearGraphSelection: function () { if (this.data.selectedPersonId && !this.data.showMemberSheet) this.renderGraph(this.data.viewMode, this.data.viewpointId, { preserveViewport: true, selectedPersonId: '', statePatch: { selectedPersonId: '', selectedPerson: null } }); },
-  closeMemberSheet: function () { this.setData({ showMemberSheet: false }); },
+  closeMemberSheet: function () { this.setData({ showMemberSheet: false, selectedKinship: null }); },
   openPerspectiveSheet: function () { this.setData({ showPerspectiveSheet: true, perspectiveKeyword: '', perspectiveResults: this.data.rawPersons }); },
   closePerspectiveSheet: function () { this.setData({ showPerspectiveSheet: false }); },
   filterPerspectives: function (event) { const keyword = (event.detail.value || '').trim(); this.setData({ perspectiveKeyword: keyword, perspectiveResults: this.data.rawPersons.filter(function (person) { return !keyword || person.name.indexOf(keyword) >= 0; }) }); },
