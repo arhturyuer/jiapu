@@ -120,6 +120,10 @@ test('关于页使用正式版实际版本并按最新在前展示受控更新�
   const verifier = fs.readFileSync(path.join(root, 'deployment/verify-release-note.mjs'), 'utf8');
   assert.deepEqual(releaseInfo.validateReleaseNotes(releaseNotes), [
     {
+      version: '1.2.3',
+      summary: '完善人物视角亲属称谓，修正姑姥、表舅等称呼，支持多重关系与路径查看。'
+    },
+    {
       version: '1.2.2',
       summary: '新增家庭会员购买记录与待确认订单自动核验。'
     },
