@@ -41,6 +41,7 @@
 
   <view class="detail-actions" wx:if="{{canEdit}}">
     <button class="primary-button" bindtap="editPerson">编辑资料</button>
+    <button class="secondary-button" bindtap="addRelative">添加亲属</button>
     <button class="danger-button" wx:if="{{isAdmin}}" bindtap="deletePerson">删除成员</button>
   </view>
   <button class="secondary-button report-button" bindtap="reportPerson">举报资料问题</button>

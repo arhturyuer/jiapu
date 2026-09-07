@@ -46,6 +46,29 @@ test('关联已有成员时关系方向与中心成员视角一致', function ()
   assert.equal(domain.relationDefinition('a', 'b', 'cousin'), null);
 });
 
+test('一次添加亲属会生成完整且去重的关系批次', function () {
+  assert.deepEqual(domain.relatedRelationEdges('father', 'child', 'son', { coParentId: 'mother' }), [
+    { type: 'parent_child', fromId: 'father', toId: 'child' },
+    { type: 'parent_child', fromId: 'mother', toId: 'child' }
+  ]);
+  assert.deepEqual(domain.relatedRelationEdges('child', 'new-parent', 'father', {
+    parentPartnerId: 'known-parent', sharedChildIds: ['sibling']
+  }), [
+    { type: 'parent_child', fromId: 'new-parent', toId: 'child' },
+    { type: 'spouse', fromId: 'known-parent', toId: 'new-parent' },
+    { type: 'parent_child', fromId: 'new-parent', toId: 'sibling' }
+  ]);
+  assert.deepEqual(domain.relatedRelationEdges('person-z', 'person-a', 'spouse', { sharedChildIds: ['child', 'child'] }), [
+    { type: 'spouse', fromId: 'person-a', toId: 'person-z' },
+    { type: 'parent_child', fromId: 'person-z', toId: 'child' },
+    { type: 'parent_child', fromId: 'person-a', toId: 'child' }
+  ]);
+  assert.deepEqual(domain.relatedRelationEdges('child', 'sibling', 'sibling', { sharedParentIds: ['father', 'mother'] }), [
+    { type: 'parent_child', fromId: 'father', toId: 'sibling' },
+    { type: 'parent_child', fromId: 'mother', toId: 'sibling' }
+  ]);
+});
+
 test('移除关系只允许使用其他有效关系保持两端连通', function () {
   const relations = [
     { _id: 'target', type: 'parent_child', fromPersonId: 'parent', toPersonId: 'child', status: 'active' },

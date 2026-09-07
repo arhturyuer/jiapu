@@ -32,6 +32,33 @@ function relationDefinition(anchorPersonId, relatedPersonId, relationType) {
   return null;
 }
 
+function relatedRelationEdges(anchorPersonId, relatedPersonId, relationType, options) {
+  const selected = options || {};
+  const edges = [];
+  function add(type, fromId, toId) {
+    const pair = canonicalPair(type, fromId, toId);
+    const key = type + ':' + pair[0] + ':' + pair[1];
+    if (!edges.some(function (edge) { return edge.key === key; })) edges.push({ key: key, type: type, fromId: pair[0], toId: pair[1] });
+  }
+  if (relationType === 'father' || relationType === 'mother') {
+    add('parent_child', relatedPersonId, anchorPersonId);
+    if (selected.parentPartnerId) add('spouse', relatedPersonId, selected.parentPartnerId);
+    (selected.sharedChildIds || []).forEach(function (childId) { add('parent_child', relatedPersonId, childId); });
+  } else if (relationType === 'son' || relationType === 'daughter') {
+    add('parent_child', anchorPersonId, relatedPersonId);
+    if (selected.coParentId) add('parent_child', selected.coParentId, relatedPersonId);
+  } else if (relationType === 'spouse') {
+    add('spouse', anchorPersonId, relatedPersonId);
+    (selected.sharedChildIds || []).forEach(function (childId) {
+      add('parent_child', anchorPersonId, childId);
+      add('parent_child', relatedPersonId, childId);
+    });
+  } else if (relationType === 'sibling') {
+    (selected.sharedParentIds || []).forEach(function (parentId) { add('parent_child', parentId, relatedPersonId); });
+  }
+  return edges.map(function (edge) { return { type: edge.type, fromId: edge.fromId, toId: edge.toId }; });
+}
+
 function reachesTarget(startId, targetId, relations) {
   const children = {};
   (relations || []).forEach(function (relation) {
@@ -93,6 +120,7 @@ module.exports = {
   roleAllows: roleAllows,
   canonicalPair: canonicalPair,
   relationDefinition: relationDefinition,
+  relatedRelationEdges: relatedRelationEdges,
   reachesTarget: reachesTarget,
   hasAlternateConnection: hasAlternateConnection,
   invitationState: invitationState

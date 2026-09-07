@@ -120,6 +120,10 @@ test('关于页使用正式版实际版本并按最新在前展示受控更新�
   const verifier = fs.readFileSync(path.join(root, 'deployment/verify-release-note.mjs'), 'utf8');
   assert.deepEqual(releaseInfo.validateReleaseNotes(releaseNotes), [
     {
+      version: '1.2.4',
+      summary: '优化添加亲属流程，支持一次补齐共同父母、共同子女和伴侣关系，提升连续录入效率。'
+    },
+    {
       version: '1.2.3',
       summary: '完善人物视角亲属称谓，修正姑姥、表舅等称呼，支持多重关系与路径查看。'
     },
@@ -158,10 +162,21 @@ test('添加亲属支持关联已有成员并由用户确认伴侣的共同子�
   const userApi = fs.readFileSync(path.join(root, 'cloudfunctions/youpuUserApi/index.js'), 'utf8');
   assert.match(pageSource, /api\.call\('relation\.linkExisting'/);
   assert.match(pageSource, /sharedChildIds:/);
+  assert.match(pageSource, /coParentId:/);
+  assert.match(pageSource, /parentPartnerId:/);
+  assert.match(pageSource, /sharedParentIds:/);
+  assert.match(pageSource, /idempotencyKey:/);
   assert.match(template, /关联已有成员/);
+  assert.match(template, /保存并继续添加/);
+  assert.match(template, /兄弟姐妹/);
+  assert.match(template, /照片和补充资料（可选）/);
+  assert.equal((template.match(/（可选）/g) || []).length, 1);
+  assert.ok(template.indexOf('出生日期') < template.indexOf('wx:if="{{showMoreFields}}"'));
   assert.match(template, /未勾选不会自动推断/);
   assert.match(userApi, /type:\s*'link_existing_relation'/);
   assert.match(userApi, /relationCount:\s*_\.inc\(linked\.relationCount\)/);
+  assert.match(userApi, /relatedRelationEdges/);
+  assert.match(userApi, /relationSummary:/);
 });
 
 test('头像使用独立保存接口、只读审核状态且新增成员延迟上传', function () {

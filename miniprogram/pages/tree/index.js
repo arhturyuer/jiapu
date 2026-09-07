@@ -63,7 +63,8 @@ Page({
       { key: 'mother', label: '母亲' },
       { key: 'spouse', label: '伴侣' },
       { key: 'son', label: '儿子' },
-      { key: 'daughter', label: '女儿' }
+      { key: 'daughter', label: '女儿' },
+      { key: 'sibling', label: '兄弟姐妹' }
     ]
   },
 
@@ -591,7 +592,8 @@ Page({
         { key: 'mother', label: '母亲' },
         { key: 'spouse', label: kinship.relationTypeLabel(person, 'spouse') },
         { key: 'son', label: '儿子' },
-        { key: 'daughter', label: '女儿' }
+        { key: 'daughter', label: '女儿' },
+        { key: 'sibling', label: '兄弟姐妹' }
       ]
     });
   },

@@ -168,6 +168,19 @@ Page({
     wx.navigateTo({ url: '/pages/edit-member/index?id=' + this.data.personId });
   },
 
+  addRelative: function () {
+    const person = this.data.person;
+    if (!person || !this.data.canEdit) return;
+    const types = ['father', 'mother', 'spouse', 'son', 'daughter', 'sibling'];
+    wx.showActionSheet({ itemList: ['父亲', '母亲', '伴侣', '儿子', '女儿', '兄弟姐妹'] }).then(function (result) {
+      const relationType = types[result.tapIndex];
+      if (!relationType) return;
+      wx.navigateTo({
+        url: '/pages/add-member/index?familyId=' + person.familyId + '&anchorId=' + person._id + '&anchorName=' + encodeURIComponent(person.name) + '&relationType=' + relationType
+      });
+    }).catch(function () {});
+  },
+
   reportPerson: function () {
     const person = this.data.person;
     if (!person) return;

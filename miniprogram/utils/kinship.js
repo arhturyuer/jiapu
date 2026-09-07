@@ -43,7 +43,7 @@ function directRelationshipLabel(reference, target, role) {
 
 function relationTypeLabel(anchor, relationType) {
   if (relationType === 'spouse') return personGender(anchor) === 'male' ? '妻子' : personGender(anchor) === 'female' ? '丈夫' : '配偶';
-  return { father: '父亲', mother: '母亲', son: '儿子', daughter: '女儿' }[relationType] || '亲属';
+  return { father: '父亲', mother: '母亲', son: '儿子', daughter: '女儿', sibling: '兄弟姐妹' }[relationType] || '亲属';
 }
 
 function siblingToken(reference, target) {

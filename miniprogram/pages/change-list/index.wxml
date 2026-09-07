@@ -11,6 +11,7 @@
     <view class="change-card surface-card" wx:for="{{changes}}" wx:key="_id">
       <view class="change-head"><text class="change-title">{{item.title}}</text><text class="change-status {{item.status}}">{{item.statusText}}</text></view>
       <text class="change-meta">由 {{item.requesterName || '家人'}} 提交 · {{item.timeText}}</text>
+      <text class="review-note" wx:if="{{item.relationSummary}}">关系内容：{{item.relationSummary}}</text>
       <text class="review-note" wx:if="{{item.reviewNote}}">处理说明：{{item.reviewNote}}</text>
       <view class="review-actions" wx:if="{{isAdmin && item.status === 'pending'}}"><button class="review-button reject" data-id="{{item._id}}" data-decision="reject" disabled="{{reviewingId !== ''}}" bindtap="reviewChange">拒绝</button><button class="review-button approve" data-id="{{item._id}}" data-decision="approve" disabled="{{reviewingId !== ''}}" loading="{{reviewingId === item._id}}" bindtap="reviewChange">通过</button></view>
     </view>

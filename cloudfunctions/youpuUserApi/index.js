@@ -270,6 +270,7 @@ function publicChangeRequest(item) {
     familyId: item.familyId,
     type: item.type,
     title: item.title || '家庭资料修改',
+    relationSummary: item.relationSummary || '',
     requesterName: item.requesterName || '家人',
     status: item.status,
     reviewNote: item.reviewNote || '',
@@ -646,19 +647,8 @@ async function createRelationTx(transaction, familyId, type, firstId, secondId, 
   return relation;
 }
 
-async function getSharedChildrenTx(transaction, familyId, anchorPersonId, childIds) {
-  const children = [];
-  for (const childId of cleanPersonIds(childIds, 30)) {
-    const relation = await maybeGet(transaction, 'relations', relationId(familyId, 'parent_child', anchorPersonId, childId));
-    assert(relation && relation.status === 'active', 'INVALID_SHARED_CHILD', '所选成员不是中心成员的子女');
-    const child = await mustGet(transaction, 'persons', childId, 'PERSON_NOT_FOUND', '所选子女不存在');
-    assert(child.familyId === familyId && child.status === 'active', 'CROSS_FAMILY_RELATION', '所选子女不属于当前家谱');
-    children.push(child);
-  }
-  return children;
-}
-
 function existingRelationDefinition(anchorPersonId, relatedPersonId, relationType) {
+  if (relationType === 'sibling') return null;
   const definition = domain.relationDefinition(anchorPersonId, relatedPersonId, relationType);
   if (!definition) throw new BusinessError('INVALID_RELATION', '请选择与中心成员的关系');
   return definition;
@@ -680,63 +670,130 @@ function assertRelationGender(person, relationType) {
 async function createRelatedTx(transaction, familyId, anchorPersonId, relationType, personInput, openid, options) {
   const anchor = await mustGet(transaction, 'persons', anchorPersonId, 'PERSON_NOT_FOUND', '中心成员不存在');
   assert(anchor.familyId === familyId && anchor.status === 'active', 'CROSS_FAMILY_RELATION', '中心成员不属于当前家谱');
-  const sharedChildren = relationType === 'spouse'
-    ? await getSharedChildrenTx(transaction, familyId, anchorPersonId, options && options.sharedChildIds)
-    : [];
+  const optionPeople = await preloadRelatedPeopleTx(transaction, familyId, options);
   const prepared = Object.assign({}, personInput || {});
   if (relationType === 'father' || relationType === 'son') prepared.gender = 'male';
   if (relationType === 'mother' || relationType === 'daughter') prepared.gender = 'female';
   const person = await createPersonTx(transaction, familyId, prepared, openid);
-  const personsById = {};
-  personsById[anchor._id] = anchor;
-  personsById[person._id] = person;
-  if (relationType === 'father' || relationType === 'mother') {
-    await createRelationTx(transaction, familyId, 'parent_child', person._id, anchorPersonId, openid, { personsById: personsById });
-  } else if (relationType === 'son' || relationType === 'daughter') {
-    await createRelationTx(transaction, familyId, 'parent_child', anchorPersonId, person._id, openid, { personsById: personsById });
-  } else if (relationType === 'spouse') {
-    await createRelationTx(transaction, familyId, 'spouse', anchorPersonId, person._id, openid, { personsById: personsById });
-  } else {
-    throw new BusinessError('INVALID_RELATION', '请选择与中心成员的关系');
-  }
-  for (const child of sharedChildren) {
-    const childPeople = Object.assign({}, personsById);
-    childPeople[child._id] = child;
-    await createRelationTx(transaction, familyId, 'parent_child', person._id, child._id, openid, { personsById: childPeople });
-  }
-  return person;
+  const relationCount = await applyRelatedRelationsTx(transaction, familyId, anchor, person, relationType, Object.assign({}, options, { peopleById: optionPeople }), openid);
+  return { person: person, relationCount: relationCount };
 }
 
-async function linkExistingTx(transaction, familyId, anchorPersonId, relatedPersonId, relationType, sharedChildIds, openid, relations) {
+function activeRelation(relations, type, firstId, secondId) {
+  const pair = domain.canonicalPair(type, firstId, secondId);
+  return (relations || []).find(function (relation) {
+    return relation.status !== 'deleted' && relation.type === type && relation.fromPersonId === pair[0] && relation.toPersonId === pair[1];
+  }) || null;
+}
+
+function relatedOptions(source) {
+  const value = source || {};
+  return {
+    coParentId: cleanText(value.coParentId, 80),
+    parentPartnerId: cleanText(value.parentPartnerId, 80),
+    sharedParentIds: cleanPersonIds(value.sharedParentIds, 2),
+    sharedChildIds: cleanPersonIds(value.sharedChildIds, 30)
+  };
+}
+
+function relationSelectionSummary(relationType, options) {
+  const selected = relatedOptions(options);
+  const parts = [relationType === 'sibling' ? '通过共同父母建立兄弟姐妹关系' : '建立' + relationTypeLabel(relationType) + '关系'];
+  if (selected.coParentId) parts.push('同时关联另一位父母');
+  if (selected.parentPartnerId) parts.push('同时确认父母伴侣关系');
+  if (selected.sharedParentIds.length) parts.push('共同父母 ' + selected.sharedParentIds.length + ' 位');
+  if (selected.sharedChildIds.length) parts.push('共同子女 ' + selected.sharedChildIds.length + ' 位');
+  return parts.join('；');
+}
+
+async function preloadRelatedPeopleTx(transaction, familyId, rawOptions) {
+  const options = relatedOptions(rawOptions);
+  const ids = [options.coParentId, options.parentPartnerId].concat(options.sharedParentIds, options.sharedChildIds).filter(Boolean);
+  const peopleById = {};
+  for (const personId of Array.from(new Set(ids))) {
+    const selected = await mustGet(transaction, 'persons', personId, 'PERSON_NOT_FOUND', '所选成员不存在');
+    assert(selected.familyId === familyId && selected.status === 'active', 'CROSS_FAMILY_RELATION', '所选成员不属于当前家谱');
+    peopleById[personId] = selected;
+  }
+  return peopleById;
+}
+
+function validateRelatedSelection(anchorId, relatedId, relationType, rawOptions, relations) {
+  const options = relatedOptions(rawOptions);
+  assert(['father', 'mother', 'spouse', 'son', 'daughter', 'sibling'].includes(relationType), 'INVALID_RELATION', '请选择与中心成员的关系');
+  if ((relationType === 'son' || relationType === 'daughter') && options.coParentId) {
+    assert(activeRelation(relations, 'spouse', anchorId, options.coParentId), 'INVALID_CO_PARENT', '所选成员不是中心成员的伴侣');
+  }
+  if (relationType === 'father' || relationType === 'mother') {
+    if (options.parentPartnerId) assert(activeRelation(relations, 'parent_child', options.parentPartnerId, anchorId), 'INVALID_PARENT_PARTNER', '所选成员不是中心成员的另一位父母');
+    for (const childId of options.sharedChildIds) {
+      assert(childId !== anchorId, 'INVALID_SHARED_CHILD', '中心成员无需重复选择');
+      const knownParent = (relations || []).some(function (relation) {
+        return relation.type === 'parent_child' && relation.toPersonId === anchorId && activeRelation(relations, 'parent_child', relation.fromPersonId, childId);
+      });
+      assert(knownParent, 'INVALID_SHARED_CHILD', '所选成员与中心成员没有已确认的共同父母');
+    }
+  }
+  if (relationType === 'spouse') {
+    for (const childId of options.sharedChildIds) {
+      assert(activeRelation(relations, 'parent_child', anchorId, childId) || (relatedId && activeRelation(relations, 'parent_child', relatedId, childId)), 'INVALID_SHARED_CHILD', '所选成员不是双方已有子女');
+    }
+  }
+  if (relationType === 'sibling') {
+    assert(options.sharedParentIds.length > 0, 'SHARED_PARENT_REQUIRED', '添加兄弟姐妹前，请至少选择一位已录入的共同父母');
+    options.sharedParentIds.forEach(function (parentId) {
+      assert(activeRelation(relations, 'parent_child', parentId, anchorId), 'INVALID_SHARED_PARENT', '所选成员不是中心成员的父母');
+    });
+  }
+}
+
+async function applyRelatedRelationsTx(transaction, familyId, anchor, related, relationType, rawOptions, openid) {
+  const options = relatedOptions(rawOptions);
+  const relations = (rawOptions && rawOptions.relations ? rawOptions.relations : []).slice();
+  const peopleById = Object.assign({}, rawOptions && rawOptions.peopleById);
+  peopleById[anchor._id] = anchor;
+  peopleById[related._id] = related;
+
+  async function person(personId, message) {
+    if (!peopleById[personId]) peopleById[personId] = await mustGet(transaction, 'persons', personId, 'PERSON_NOT_FOUND', message || '所选成员不存在');
+    const selected = peopleById[personId];
+    assert(selected.familyId === familyId && selected.status === 'active', 'CROSS_FAMILY_RELATION', '所选成员不属于当前家谱');
+    return selected;
+  }
+
+  async function ensure(type, firstId, secondId) {
+    if (activeRelation(relations, type, firstId, secondId)) return 0;
+    await person(firstId);
+    await person(secondId);
+    if (type === 'parent_child') {
+      assert(!domain.reachesTarget(secondId, firstId, relations), 'RELATION_CYCLE', '这条关系会形成循环，无法保存');
+    }
+    const created = await createRelationTx(transaction, familyId, type, firstId, secondId, openid, {
+      personsById: peopleById,
+      relations: relations
+    });
+    relations.push(created);
+    return 1;
+  }
+
+  validateRelatedSelection(anchor._id, related._id, relationType, options, relations);
+  let count = 0;
+  const edges = domain.relatedRelationEdges(anchor._id, related._id, relationType, options);
+  for (const edge of edges) count += await ensure(edge.type, edge.fromId, edge.toId);
+  return count;
+}
+
+async function linkExistingTx(transaction, familyId, anchorPersonId, relatedPersonId, relationType, options, openid, relations) {
   const anchor = await mustGet(transaction, 'persons', anchorPersonId, 'PERSON_NOT_FOUND', '中心成员不存在');
   const related = await mustGet(transaction, 'persons', relatedPersonId, 'PERSON_NOT_FOUND', '所选成员不存在');
   assert(anchor.familyId === familyId && related.familyId === familyId, 'CROSS_FAMILY_RELATION', '不能关联其他家谱的成员');
   assert(anchor.status === 'active' && related.status === 'active', 'PERSON_NOT_FOUND', '关系中的成员已删除');
   assertRelationGender(related, relationType);
+  validateRelatedSelection(anchorPersonId, relatedPersonId, relationType, options, relations);
+  const optionPeople = await preloadRelatedPeopleTx(transaction, familyId, options);
   const expectedGender = expectedRelationGender(relationType);
-  const definition = existingRelationDefinition(anchorPersonId, relatedPersonId, relationType);
-  const peopleById = {};
-  peopleById[anchor._id] = anchor;
-  peopleById[related._id] = related;
-  await createRelationTx(transaction, familyId, definition.type, definition.fromId, definition.toId, openid, {
-    personsById: peopleById,
-    relations: relations
-  });
-  let createdCount = 1;
-  if (relationType === 'spouse') {
-    const sharedChildren = await getSharedChildrenTx(transaction, familyId, anchorPersonId, sharedChildIds);
-    for (const child of sharedChildren) {
-      const existing = await maybeGet(transaction, 'relations', relationId(familyId, 'parent_child', relatedPersonId, child._id));
-      if (existing && existing.status === 'active') continue;
-      const childPeople = Object.assign({}, peopleById);
-      childPeople[child._id] = child;
-      await createRelationTx(transaction, familyId, 'parent_child', relatedPersonId, child._id, openid, {
-        personsById: childPeople,
-        relations: relations
-      });
-      createdCount += 1;
-    }
-  }
+  const createdCount = await applyRelatedRelationsTx(transaction, familyId, anchor, related, relationType, Object.assign({}, options, { relations: relations, peopleById: optionPeople }), openid);
+  assert(createdCount > 0, 'NO_RELATION_CHANGES', '所选关系均已存在，无需重复保存');
   if (expectedGender && related.gender === 'unknown') {
     await transaction.collection('persons').doc(related._id).update({
       data: { gender: expectedGender, updatedAt: db.serverDate() }
@@ -1483,6 +1540,10 @@ async function personCreateRelated(event) {
   const person = normalizePerson(event.person || {});
   await requireOwnedMedia(person.avatarAssetId, openid, event.familyId, 'person_avatar');
   await moderateText(openid, [person.name, person.birthPlace, person.bio]);
+  const selectedOptions = relatedOptions(event);
+  const snapshotAccess = await requireMembership(event.familyId, ['admin', 'member'], db, openid);
+  const relations = await listAll('relations', { familyId: event.familyId, status: 'active' }, GRAPH_RELATION_LIMIT);
+  const relationRevision = Number(snapshotAccess.family.relationRevision || 0);
   return mutate('person.createRelated', event, openid, async function (transaction) {
     const access = await requireMembership(event.familyId, ['admin', 'member'], transaction, openid);
     assert(Number(access.family.personCount || 0) < GRAPH_PERSON_LIMIT, 'FAMILY_PERSON_LIMIT', '单个家谱最多支持 500 人');
@@ -1491,14 +1552,22 @@ async function personCreateRelated(event) {
       anchorPersonId: cleanText(event.anchorPersonId, 80),
       relationType: cleanText(event.relationType, 20),
       person: person,
-      sharedChildIds: cleanPersonIds(event.sharedChildIds, 30)
+      coParentId: selectedOptions.coParentId,
+      parentPartnerId: selectedOptions.parentPartnerId,
+      sharedParentIds: selectedOptions.sharedParentIds,
+      sharedChildIds: selectedOptions.sharedChildIds
     };
+    const anchor = await mustGet(transaction, 'persons', payload.anchorPersonId, 'PERSON_NOT_FOUND', '中心成员不存在');
+    assert(anchor.familyId === event.familyId && anchor.status === 'active', 'CROSS_FAMILY_RELATION', '中心成员不属于当前家谱');
+    validateRelatedSelection(payload.anchorPersonId, '', payload.relationType, payload, relations);
+    await preloadRelatedPeopleTx(transaction, event.familyId, payload);
     if (access.membership.role === 'member') {
       const result = await transaction.collection('change_requests').add({
         data: {
           familyId: event.familyId,
           type: 'create_related',
           title: '添加家庭成员“' + person.name + '”',
+          relationSummary: relationSelectionSummary(payload.relationType, payload),
           payload: payload,
           status: 'pending',
           createdBy: userId(openid),
@@ -1509,6 +1578,7 @@ async function personCreateRelated(event) {
       });
       return { pending: true, requestId: result._id };
     }
+    assert(Number(access.family.relationRevision || 0) === relationRevision, 'GRAPH_CHANGED', '家谱关系刚刚发生变化，请刷新后重试');
     const created = await createRelatedTx(
       transaction,
       event.familyId,
@@ -1516,12 +1586,12 @@ async function personCreateRelated(event) {
       payload.relationType,
       person,
       openid,
-      { sharedChildIds: payload.sharedChildIds }
+      Object.assign({}, payload, { relations: relations })
     );
     await transaction.collection('families').doc(event.familyId).update({
       data: {
         personCount: _.inc(1),
-        relationCount: _.inc(1 + (payload.relationType === 'spouse' ? payload.sharedChildIds.length : 0)),
+        relationCount: _.inc(created.relationCount),
         relationRevision: _.inc(1),
         updatedAt: db.serverDate()
       }
@@ -1532,11 +1602,11 @@ async function personCreateRelated(event) {
       actorName: access.membership.displayName,
       action: 'person.create_related',
       objectType: 'person',
-      objectId: created._id,
+      objectId: created.person._id,
       summary: '添加家庭成员',
       requestId: event.requestId
     });
-    return { pending: false, person: created };
+    return { pending: false, person: created.person, relationCount: created.relationCount };
   });
 }
 
@@ -1546,7 +1616,8 @@ function relationTypeLabel(relationType) {
     mother: '母亲',
     spouse: '伴侣',
     son: '儿子',
-    daughter: '女儿'
+    daughter: '女儿',
+    sibling: '兄弟姐妹'
   }[relationType] || '亲属';
 }
 
@@ -1557,7 +1628,7 @@ async function relationLinkExisting(event) {
   const anchorPersonId = cleanText(event.anchorPersonId, 80);
   const relatedPersonId = cleanText(event.relatedPersonId, 80);
   const relationType = cleanText(event.relationType, 20);
-  const sharedChildIds = cleanPersonIds(event.sharedChildIds, 30);
+  const selectedOptions = relatedOptions(event);
   existingRelationDefinition(anchorPersonId, relatedPersonId, relationType);
   const snapshotAccess = await requireMembership(familyId, ['admin', 'member'], db, openid);
   const relations = await listAll('relations', { familyId: familyId, status: 'active' }, GRAPH_RELATION_LIMIT);
@@ -1569,16 +1640,22 @@ async function relationLinkExisting(event) {
       const related = await mustGet(transaction, 'persons', relatedPersonId, 'PERSON_NOT_FOUND', '所选成员不存在');
       assert(anchor.familyId === familyId && related.familyId === familyId, 'CROSS_FAMILY_RELATION', '不能关联其他家谱的成员');
       assertRelationGender(related, relationType);
+      validateRelatedSelection(anchorPersonId, relatedPersonId, relationType, selectedOptions, relations);
+      await preloadRelatedPeopleTx(transaction, familyId, selectedOptions);
       const result = await transaction.collection('change_requests').add({
         data: {
           familyId: familyId,
           type: 'link_existing_relation',
           title: '将“' + related.name + '”关联为“' + anchor.name + '”的' + relationTypeLabel(relationType),
+          relationSummary: relationSelectionSummary(relationType, selectedOptions),
           payload: {
             anchorPersonId: anchorPersonId,
             relatedPersonId: relatedPersonId,
             relationType: relationType,
-            sharedChildIds: sharedChildIds
+            coParentId: selectedOptions.coParentId,
+            parentPartnerId: selectedOptions.parentPartnerId,
+            sharedParentIds: selectedOptions.sharedParentIds,
+            sharedChildIds: selectedOptions.sharedChildIds
           },
           status: 'pending',
           createdBy: userId(openid),
@@ -1596,7 +1673,7 @@ async function relationLinkExisting(event) {
       anchorPersonId,
       relatedPersonId,
       relationType,
-      sharedChildIds,
+      selectedOptions,
       openid,
       relations
     );
@@ -1778,7 +1855,7 @@ async function changeReview(event) {
   const snapshotRequest = await mustGet(db, 'change_requests', changeRequestId, 'REQUEST_NOT_FOUND', '修改申请不存在');
   const snapshotAccess = await requireMembership(snapshotRequest.familyId, ['admin'], db, openid);
   let graphSnapshot = null;
-  if (event.decision === 'approve' && snapshotRequest.type === 'link_existing_relation') {
+  if (event.decision === 'approve' && ['create_related', 'link_existing_relation'].includes(snapshotRequest.type)) {
     graphSnapshot = {
       relationRevision: Number(snapshotAccess.family.relationRevision || 0),
       relations: await listAll('relations', { familyId: snapshotRequest.familyId, status: 'active' }, GRAPH_RELATION_LIMIT)
@@ -1792,6 +1869,7 @@ async function changeReview(event) {
     let createdPerson = null;
     if (approved && request.type === 'create_related') {
       assert(Number(access.family.personCount || 0) < GRAPH_PERSON_LIMIT, 'FAMILY_PERSON_LIMIT', '单个家谱最多支持 500 人');
+      assert(graphSnapshot && Number(access.family.relationRevision || 0) === graphSnapshot.relationRevision, 'GRAPH_CHANGED', '家谱关系刚刚发生变化，请重试');
       createdPerson = await createRelatedTx(
         transaction,
         request.familyId,
@@ -1799,19 +1877,17 @@ async function changeReview(event) {
         request.payload.relationType,
         request.payload.person,
         openid,
-        { sharedChildIds: cleanPersonIds(request.payload.sharedChildIds, 30) }
+        Object.assign({}, relatedOptions(request.payload), { relations: graphSnapshot.relations })
       );
-      const sharedChildCount = request.payload.relationType === 'spouse'
-        ? cleanPersonIds(request.payload.sharedChildIds, 30).length
-        : 0;
       await transaction.collection('families').doc(request.familyId).update({
         data: {
           personCount: _.inc(1),
-          relationCount: _.inc(1 + sharedChildCount),
+          relationCount: _.inc(createdPerson.relationCount),
           relationRevision: _.inc(1),
           updatedAt: db.serverDate()
         }
       });
+      createdPerson = createdPerson.person;
     }
     if (approved && request.type === 'link_existing_relation') {
       assert(graphSnapshot, 'GRAPH_CHANGED', '家谱关系刚刚发生变化，请重试');
@@ -1822,7 +1898,7 @@ async function changeReview(event) {
         request.payload.anchorPersonId,
         request.payload.relatedPersonId,
         request.payload.relationType,
-        cleanPersonIds(request.payload.sharedChildIds, 30),
+        relatedOptions(request.payload),
         openid,
         graphSnapshot.relations
       );
