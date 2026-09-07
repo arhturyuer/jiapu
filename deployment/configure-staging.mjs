@@ -37,6 +37,23 @@ if (!bootstrapSecret || /REPLACE_WITH|CHANGE_BEFORE_DEPLOY|\s/.test(bootstrapSec
   fail('STAGING_BOOTSTRAP_SECRET 必须是 staging 专用、至少 32 字符的随机值。');
 }
 
+if (values.STAGING_PAYMENT_MODE !== 'sandbox') {
+  fail('STAGING_PAYMENT_MODE 必须固定为 sandbox；staging 不允许使用 mock 或 live。');
+}
+
+const sandboxVariables = {
+  VP_APP_ID: values.STAGING_VP_APP_ID || '',
+  VP_APP_SECRET: values.STAGING_VP_APP_SECRET || '',
+  VP_OFFER_ID: values.STAGING_VP_OFFER_ID || '',
+  VP_APP_KEY: values.STAGING_VP_APP_KEY || '',
+  VP_INTERNAL_NOTIFY_SECRET: values.STAGING_VP_INTERNAL_NOTIFY_SECRET || ''
+};
+for (const [key, value] of Object.entries(sandboxVariables)) {
+  if (!value || /REPLACE_WITH|CHANGE_BEFORE_DEPLOY|\s/.test(value)) fail('缺少有效的 STAGING_' + key + '；不会生成沙箱部署清单。');
+}
+if (sandboxVariables.VP_INTERNAL_NOTIFY_SECRET.length < 32) {
+  fail('STAGING_VP_INTERNAL_NOTIFY_SECRET 必须是 staging 专用、至少 32 字符的随机值。');
+}
 writeFileSync(destination, [
   '// 由 deployment/configure-staging.mjs 生成；请勿提交。',
   'module.exports = {',
@@ -49,8 +66,22 @@ const manifest = JSON.parse(readFileSync(resolve(root, 'deployment/cloudbaserc.e
 manifest.envId = envId;
 for (const fn of manifest.functions || []) {
   if (fn.name === 'youpuJobs') fn.envVariables.BOOTSTRAP_SECRET = bootstrapSecret;
+  if (fn.name === 'youpuUserApi') Object.assign(fn.envVariables, {
+    PAYMENT_MODE: 'sandbox', VP_APP_ID: sandboxVariables.VP_APP_ID,
+    VP_APP_SECRET: sandboxVariables.VP_APP_SECRET, VP_OFFER_ID: sandboxVariables.VP_OFFER_ID,
+    VP_APP_KEY: sandboxVariables.VP_APP_KEY, VP_INTERNAL_NOTIFY_SECRET: sandboxVariables.VP_INTERNAL_NOTIFY_SECRET
+  });
+  if (fn.name === 'youpuJobs') Object.assign(fn.envVariables, {
+    PAYMENT_MODE: 'sandbox', VP_APP_ID: sandboxVariables.VP_APP_ID,
+    VP_APP_SECRET: sandboxVariables.VP_APP_SECRET, VP_APP_KEY: sandboxVariables.VP_APP_KEY,
+    VP_INTERNAL_NOTIFY_SECRET: sandboxVariables.VP_INTERNAL_NOTIFY_SECRET
+  });
+  if (fn.name === 'youpuPaymentNotify') Object.assign(fn.envVariables, {
+    VP_INTERNAL_NOTIFY_SECRET: sandboxVariables.VP_INTERNAL_NOTIFY_SECRET
+  });
 }
 writeFileSync(cloudbaseConfig, JSON.stringify(manifest, null, 2) + '\n');
 
 console.log('已生成小程序 staging 本地配置：' + destination);
 console.log('已生成 staging 云函数部署清单：' + cloudbaseConfig);
+console.log('staging 虚拟支付已固定为 sandbox；请在云开发控制台将两类虚拟支付事件推送绑定到 youpuPaymentNotify。');

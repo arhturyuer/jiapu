@@ -820,6 +820,70 @@ async function dashboardSummary(event, context) {
   };
 }
 
+function publicCommerceOrder(order) {
+  return {
+    _id: order._id, familyId: order.familyId || '', familyName: order.familyName || '',
+    productId: order.productId || '', productName: order.productName || '',
+    priceCents: Number(order.priceCents) || 0, status: order.status || 'pending',
+    paymentMode: order.paymentMode || '', wxOrderId: order.wxOrderId || '',
+    reconcileStatus: order.reconcileStatus || '', reconcileMessage: order.reconcileMessage || '',
+    createdAt: order.createdAt || null, paidAt: order.paidAt || null, refundedAt: order.refundedAt || null
+  };
+}
+
+async function commerceSummary(event, context) {
+  await requireOperator(context, ['super_admin', 'operator']);
+  const now = new Date(); const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const [orders, paidOrders, refunded] = await Promise.all([
+    listAll('payment_orders', { createdAt: _.gte(monthStart) }, 20000),
+    listAll('payment_orders', { paidAt: _.gte(monthStart) }, 20000),
+    listAll('payment_orders', { refundedAt: _.gte(monthStart) }, 20000)
+  ]);
+  const fulfilled = orders.filter(function (item) { return ['fulfilled', 'refunded'].includes(item.status); });
+  const gmvCents = paidOrders.reduce(function (sum, item) { return sum + Number(item.priceCents || 0); }, 0);
+  const refundCents = refunded.reduce(function (sum, item) { return sum + Number(item.priceCents || 0); }, 0);
+  const sku = {};
+  paidOrders.forEach(function (item) { if (!sku[item.productId]) sku[item.productId] = { productId: item.productId, name: item.productName || item.productId, orders: 0, gmvCents: 0 }; sku[item.productId].orders += 1; sku[item.productId].gmvCents += Number(item.priceCents || 0); });
+  const [lifetimeFamilies, fixedFamilies] = await Promise.all([
+    db.collection('families').where({ status: 'active', proLifetime: true }).count(),
+    db.collection('families').where({ status: 'active', proExpiresAt: _.gt(now) }).count()
+  ]);
+  const limitCents = 10000000; const ratio = Math.round(gmvCents / limitCents * 1000) / 10;
+  return {
+    gmvCents: gmvCents, refundCents: refundCents, netCents: gmvCents - refundCents,
+    orderCount: orders.length, fulfilledCount: fulfilled.length, refundedCount: refunded.length,
+    conversionRate: orders.length ? Math.round(fulfilled.length / orders.length * 1000) / 10 : 0,
+    activeMemberFamilies: Number(lifetimeFamilies.total || 0) + Number(fixedFamilies.total || 0),
+    monthlyLimitCents: limitCents, monthlyLimitPercent: ratio,
+    alertLevel: ratio >= 100 ? 100 : ratio >= 90 ? 90 : ratio >= 80 ? 80 : 0,
+    sku: Object.keys(sku).map(function (key) { return sku[key]; }),
+    generatedAt: now.toISOString()
+  };
+}
+
+async function commerceOrders(event, context) {
+  await requireOperator(context, ['super_admin', 'operator']);
+  const where = {};
+  const status = cleanText(event.status, 30);
+  if (status) where.status = status;
+  const result = await page('payment_orders', where, event, 'createdAt');
+  result.items = result.items.map(publicCommerceOrder);
+  return result;
+}
+
+async function commerceRetryOrder(event, context) {
+  const operator = await requireOperator(context, ['super_admin', 'operator']);
+  const orderId = cleanText(event.orderId, 80);
+  const order = await maybeGet('payment_orders', orderId);
+  assert(order, 'ORDER_NOT_FOUND', '订单不存在');
+  assert(order.status === 'pending', 'ORDER_NOT_PENDING', '只允许对待确认订单重新查单');
+  return opsMutate(operator, 'commerce.retryOrder', event, async function (transaction) {
+    await transaction.collection('payment_orders').doc(orderId).update({ data: { reconcileStatus: 'retry_requested', reconcileMessage: '', lastQueriedAt: _.remove(), updatedAt: db.serverDate() } });
+    await writeOpsAudit(transaction, operator, 'ops.commerce.retry_order', 'payment_order', orderId, '订单查单重试', '请求后台任务重新查询订单，不直接修改会员权益', event.requestId, order.familyId);
+    return { orderId: orderId, queued: true };
+  });
+}
+
 function shareMetricDay(offset) {
   const date = new Date();
   date.setUTCDate(date.getUTCDate() - (Number(offset) || 0));
@@ -1723,6 +1787,9 @@ async function examplesArchive(event, context) {
 const handlers = {
   'session.me': sessionMe,
   'dashboard.summary': dashboardSummary,
+  'commerce.summary': commerceSummary,
+  'commerce.orders': commerceOrders,
+  'commerce.retryOrder': commerceRetryOrder,
   'users.list': usersList,
   'users.detail': usersDetail,
   'users.freeze': usersFreeze,

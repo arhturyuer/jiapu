@@ -45,7 +45,7 @@ cp deployment/staging.local.env.example deployment/staging.local.env
 
 staging 命令要求独立环境 ID，且对生产 ID、占位 ID 和不一致的目标一律失败。生产预检必须显式设置 `PREFLIGHT_MODE=production`、`TARGET_ENV_ID=cloud1-d5gs5yj4l283d9c6d` 和 `ALLOW_PRODUCTION=1`。
 
-小程序包根据微信官方 `wx.getAccountInfoSync().miniProgram.envVersion` 在运行时选择环境：开发版 `develop` 与体验版 `trial` 连接 staging，正式版 `release` 连接 production；未知值安全降级到 staging。因此同一上传包可用于体验和正式发布，但必须先完成 staging 验收。
+小程序包根据微信官方 `wx.getAccountInfoSync().miniProgram.envVersion` 在运行时选择环境：开发版 `develop` 连接 staging，体验版 `trial` 与正式版 `release` 连接 production；未知值安全降级到 staging。因此体验版和正式发布均会连接 production，发布前必须先完成 staging 验收。
 
 每次上传前，先在 `miniprogram/config/release-notes.js` 的首项新增 `{ version, summary }` 版本记录；上传脚本会校验版本号并自动使用该摘要作为微信后台上传描述。
 

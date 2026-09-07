@@ -40,7 +40,7 @@ fi
 if [[ "${MODE}" == "production" ]]; then
   RUNTIME_VERSION="release"
 else
-  RUNTIME_VERSION="trial"
+  RUNTIME_VERSION="develop"
 fi
 ACTIVE_ENV="$("${NODE}" -e "const c=require('${PROJECT_PATH}/miniprogram/config/env'); const r=c.resolveRuntimeEnvironment({getAccountInfoSync:()=>({miniProgram:{envVersion:'${RUNTIME_VERSION}'}})}); console.log(r.active||'')")"
 CONFIGURED_ENV_ID="$("${NODE}" -e "const c=require('${PROJECT_PATH}/miniprogram/config/env'); const r=c.resolveRuntimeEnvironment({getAccountInfoSync:()=>({miniProgram:{envVersion:'${RUNTIME_VERSION}'}})}); console.log((r.environment||{}).cloudEnv||'')")"
@@ -73,7 +73,24 @@ elif [[ "${MODE}" == "staging" ]]; then
     exit 3
   fi
   if [[ "${ACTIVE_ENV}" != "staging" || "${CONFIGURED_ENV_ID}" != "${TARGET_ENV_ID}" ]]; then
-    echo "staging 预检要求小程序 trial 运行时配置为 staging/${TARGET_ENV_ID}，当前为 ${ACTIVE_ENV}/${CONFIGURED_ENV_ID:-未配置}。"
+    echo "staging 预检要求小程序 develop 运行时配置为 staging/${TARGET_ENV_ID}，当前为 ${ACTIVE_ENV}/${CONFIGURED_ENV_ID:-未配置}。"
+    exit 3
+  fi
+  if [[ "${STAGING_PAYMENT_MODE:-}" != "sandbox" ]]; then
+    echo "staging 虚拟支付必须设置 STAGING_PAYMENT_MODE=sandbox。"
+    exit 3
+  fi
+  for payment_key in \
+    STAGING_VP_APP_ID STAGING_VP_APP_SECRET STAGING_VP_OFFER_ID STAGING_VP_APP_KEY \
+    STAGING_VP_INTERNAL_NOTIFY_SECRET; do
+    payment_value="${!payment_key:-}"
+    if [[ -z "${payment_value}" || "${payment_value}" == *"REPLACE_WITH"* || "${payment_value}" == *"CHANGE_BEFORE_DEPLOY"* ]]; then
+      echo "staging 虚拟支付缺少有效配置：${payment_key}。"
+      exit 3
+    fi
+  done
+  if [[ "${#payment_value}" -lt 32 ]]; then
+    echo "STAGING_VP_INTERNAL_NOTIFY_SECRET 必须是至少 32 字符的 staging 专用随机值。"
     exit 3
   fi
 else

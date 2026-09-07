@@ -8,6 +8,7 @@
     "node": ">=20.19.0"
   },
   "dependencies": {
+    "archiver": "7.0.1",
     "ws": "8.18.3",
     "wx-server-sdk": "4.0.2"
   }

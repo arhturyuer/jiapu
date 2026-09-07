@@ -45,6 +45,7 @@ run_security() {
     "${NODE_BIN}" "${PROJECT_PATH}/deployment/apply-security.mjs" "${STAGING_ENV_ID}" "${STAGING_STORAGE_BUCKET}"
 }
 run_verify() {
+  "${NODE_BIN}" "${PROJECT_PATH}/deployment/configure-staging.mjs"
   DEPLOYMENT_TARGET=staging STAGING_ENV_ID="${STAGING_ENV_ID}" \
     "${NODE_BIN}" "${PROJECT_PATH}/deployment/verify-cloud.mjs" "${STAGING_ENV_ID}"
 }

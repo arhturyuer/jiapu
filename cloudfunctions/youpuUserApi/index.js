@@ -1,6 +1,7 @@
 const cloud = require('wx-server-sdk');
 const crypto = require('crypto');
 const domain = require('./domain');
+const commerce = require('./commerce');
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
@@ -14,6 +15,11 @@ const RATE_LIMITS = {
   'auth.updateProfile': { max: 20, windowMs: 60 * 60 * 1000 },
   'auth.updateAvatar': { max: 20, windowMs: 60 * 60 * 1000 },
   'account.export': { max: 3, windowMs: 24 * 60 * 60 * 1000 },
+  'payment.createOrder': { max: 10, windowMs: 60 * 60 * 1000 },
+  'payment.reconcileNow': { max: 20, windowMs: 60 * 60 * 1000 },
+  'payment.mockComplete': { max: 10, windowMs: 60 * 60 * 1000 },
+  'payment.mockRefund': { max: 10, windowMs: 60 * 60 * 1000 },
+  'family.backup.create': { max: 3, windowMs: 24 * 60 * 60 * 1000 },
   'family.create': { max: 10, windowMs: 24 * 60 * 60 * 1000 },
   'invite.create': { max: 60, windowMs: 60 * 60 * 1000 },
   'invite.preview': { max: 60, windowMs: 60 * 1000 },
@@ -29,6 +35,11 @@ const MUTATION_TYPES = new Set([
   'account.exportUrl',
   'account.requestDeletion',
   'account.cancelDeletion',
+  'payment.createOrder',
+  'payment.reconcileNow',
+  'payment.mockComplete',
+  'payment.mockRefund',
+  'family.backup.create',
   'family.create',
   'family.update',
   'family.archive',
@@ -72,6 +83,15 @@ function success(data) {
 
 function cleanText(value, maxLength) {
   return domain.cleanText(value, maxLength);
+}
+
+// The staging notifier predates the immutable runtime limitation on the
+// production function.  Live payments therefore use the Node.js 20
+// replacement, while every non-live environment keeps its existing target.
+function paymentNotifyFunctionName() {
+  return String(process.env.PAYMENT_MODE || '').toLowerCase() === 'live'
+    ? 'youpuPaymentNotifyV2'
+    : 'youpuPaymentNotify';
 }
 
 function cleanDate(value) {
@@ -193,6 +213,7 @@ function publicAccount(user) {
 
 function publicFamily(family, currentRole) {
   const sharedAt = family.sharedAt || family.onboardingSharedAt || null;
+  const familyMembership = commerce.entitlementFromFamily(family);
   return {
     _id: family._id,
     name: family.name || '',
@@ -206,6 +227,12 @@ function publicFamily(family, currentRole) {
     createdAt: family.createdAt || null,
     updatedAt: family.updatedAt || null,
     currentRole: currentRole || '',
+    membership: {
+      active: familyMembership.active,
+      lifetime: familyMembership.lifetime,
+      expiresAt: familyMembership.expiresAt,
+      plan: familyMembership.plan
+    },
     sharedAt: sharedAt,
     shareReminderDismissedAt: family.shareReminderDismissedAt || null
   };
@@ -519,6 +546,7 @@ async function audit(scope, data) {
     data: {
       familyId: data.familyId || '',
       actorId: userId(data.openid),
+      actorName: cleanText(data.actorName, 30) || '一位家人',
       actorType: 'user',
       action: data.action,
       objectType: data.objectType || '',
@@ -2429,6 +2457,562 @@ async function examplesGet(event) {
   return { example: publicExampleContent(result.data[0]) };
 }
 
+function paymentMode() {
+  return commerce.paymentProfile(process.env.PAYMENT_MODE).mode;
+}
+
+function publicOrder(order) {
+  return {
+    orderId: order._id,
+    familyId: order.familyId,
+    familyName: order.familyName || '',
+    productId: order.productId,
+    productName: order.productName || '',
+    priceCents: Number(order.priceCents) || 0,
+    status: order.status || 'pending',
+    closeReason: order.closeReason || '',
+    paymentMode: order.paymentMode || 'mock',
+    paymentEnv: Number(order.paymentEnv) === 1 ? 1 : 0,
+    wxOrderId: order.wxOrderId || '',
+    createdAt: order.createdAt || null,
+    paidAt: order.paidAt || null,
+    fulfilledAt: order.fulfilledAt || null,
+    refundedAt: order.refundedAt || null,
+    updatedAt: order.updatedAt || null,
+    reconcileStatus: order.reconcileStatus || '',
+    reconcileMessage: cleanText(order.reconcileMessage, 160)
+  };
+}
+
+async function membershipCatalog() {
+  const openid = getOpenid();
+  await requireActiveUser(openid);
+  return {
+    products: commerce.catalog().map(commerce.publicProduct),
+    rules: {
+      scope: 'family',
+      autoRenew: false,
+      transferable: false,
+      freeHistoryLimit: 20,
+      backupCooldownDays: 7
+    },
+    paymentMode: paymentMode()
+  };
+}
+
+async function membershipStatus(event) {
+  const openid = getOpenid();
+  await requireActiveUser(openid);
+  const access = await requireMembership(event.familyId, ACTIVE_ROLES, db, openid, { allowArchived: true });
+  const membership = commerce.entitlementFromFamily(access.family);
+  return {
+    family: publicFamily(access.family, access.membership.role),
+    membership: membership,
+    canPurchase: access.family.status === 'active' && !membership.lifetime,
+    canBackup: access.membership.role === 'admin' && membership.active
+  };
+}
+
+async function code2Session(loginCode, expectedOpenid) {
+  const code = cleanText(loginCode, 160);
+  assert(code, 'PAYMENT_LOGIN_REQUIRED', '支付登录状态已过期，请重试');
+  const context = cloud.getWXContext() || {};
+  const appId = cleanText(process.env.VP_APP_ID || context.APPID, 80);
+  const appSecret = String(process.env.VP_APP_SECRET || '');
+  assert(appId && appSecret, 'PAYMENT_NOT_CONFIGURED', '虚拟支付尚未完成服务端配置');
+  const url = 'https://api.weixin.qq.com/sns/jscode2session?appid=' + encodeURIComponent(appId) +
+    '&secret=' + encodeURIComponent(appSecret) + '&js_code=' + encodeURIComponent(code) + '&grant_type=authorization_code';
+  let response;
+  try {
+    response = await fetch(url, { method: 'GET' });
+  } catch (error) {
+    throw new BusinessError('PAYMENT_LOGIN_UNAVAILABLE', '支付登录校验暂时不可用，请稍后重试');
+  }
+  const payload = await response.json().catch(function () { return {}; });
+  assert(response.ok && payload.openid && payload.session_key, 'PAYMENT_LOGIN_INVALID', '支付登录状态无效，请重新发起支付');
+  assert(payload.openid === expectedOpenid, 'PAYMENT_IDENTITY_MISMATCH', '支付身份校验失败，请重新打开小程序');
+  return { openid: payload.openid, sessionKey: payload.session_key };
+}
+
+function createTradeNumber() {
+  return ('YP' + Date.now().toString(36) + crypto.randomBytes(5).toString('hex')).slice(0, 32);
+}
+
+function paymentEnvironment(order) {
+  return Number(order && order.paymentEnv) === 1 || (order && order.paymentMode === 'sandbox') ? 1 : 0;
+}
+
+function isPaidPaymentResult(result) {
+  const source = result || {};
+  return Number(source.order_state || source.orderState) === 1 ||
+    [2, 3, 4].includes(Number(source.status)) || String(source.status || '').toLowerCase() === 'paid';
+}
+
+function canReconcilePaymentOrder(order) {
+  return Boolean(order && (order.status === 'pending' || (order.status === 'closed' && order.closeReason === 'payment_timeout')));
+}
+
+function paymentResultOrderId(result) {
+  const source = result || {};
+  return cleanText(source.mch_order_no || source.wx_order_id || source.wxOrderId || source.transaction_id, 80);
+}
+
+async function paymentAccessToken() {
+  const appId = String(process.env.VP_APP_ID || '');
+  const appSecret = String(process.env.VP_APP_SECRET || '');
+  assert(appId && appSecret, 'PAYMENT_NOT_CONFIGURED', '虚拟支付尚未完成服务端配置');
+  let response;
+  try {
+    response = await fetch('https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=' + encodeURIComponent(appId) + '&secret=' + encodeURIComponent(appSecret));
+  } catch (error) {
+    throw new BusinessError('PAYMENT_QUERY_UNAVAILABLE', '支付状态暂时无法确认，请稍后重试');
+  }
+  const payload = await response.json().catch(function () { return {}; });
+  assert(response.ok && payload.access_token, 'PAYMENT_QUERY_UNAVAILABLE', '支付状态暂时无法确认，请稍后重试');
+  return payload.access_token;
+}
+
+async function queryPaymentOrder(order, openid, accessToken) {
+  const appKey = String(process.env.VP_APP_KEY || '');
+  assert(appKey, 'PAYMENT_NOT_CONFIGURED', '虚拟支付尚未完成服务端配置');
+  // The client success callback may expose the WeChat-side order id. Prefer it
+  // when available, while retaining outTradeNo as the documented fallback.
+  const orderReference = cleanText(order.wxOrderId, 80);
+  const body = JSON.stringify(orderReference
+    ? { openid: openid, env: paymentEnvironment(order), wx_order_id: orderReference }
+    : { openid: openid, env: paymentEnvironment(order), order_id: order._id });
+  const paySig = crypto.createHmac('sha256', appKey).update('/xpay/query_order&' + body, 'utf8').digest('hex');
+  let response;
+  try {
+    response = await fetch('https://api.weixin.qq.com/xpay/query_order?access_token=' + encodeURIComponent(accessToken) + '&pay_sig=' + paySig, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: body
+    });
+  } catch (error) {
+    throw new BusinessError('PAYMENT_QUERY_UNAVAILABLE', '支付状态暂时无法确认，请稍后重试');
+  }
+  const payload = await response.json().catch(function () { return {}; });
+  if (!response.ok || Number(payload.errcode || 0) !== 0) {
+    if (Number(payload.errcode) === 268490002) {
+      // The platform documents this as a request-field error. In sandbox it
+      // commonly carries “data does not exist”, but it must not be presented
+      // as conclusive proof that the user did not pay.
+      throw new BusinessError('PAYMENT_QUERY_NOT_FOUND', '微信沙箱暂时无法查询该订单（268490002：' + cleanText(payload.errmsg, 80) + '），请稍后刷新订单状态');
+    }
+    throw new BusinessError('PAYMENT_QUERY_UNAVAILABLE', '支付状态暂时无法确认，请稍后重试');
+  }
+  return payload.order || payload;
+}
+
+function clientWxOrderId(event) {
+  const value = cleanText(event && event.wxOrderId, 80);
+  return /^[A-Za-z0-9_-]{8,80}$/.test(value) ? value : '';
+}
+
+async function paymentClientCompleted(event) {
+  const openid = getOpenid();
+  const user = await requireActiveUser(openid);
+  const orderId = cleanText(event && event.orderId, 40);
+  const wxOrderId = clientWxOrderId(event);
+  const resultCode = Number(event && event.resultCode);
+  const resultKeys = Array.from(new Set((Array.isArray(event && event.resultKeys) ? event.resultKeys : [])
+    .map(function (key) { return cleanText(key, 40); }).filter(Boolean))).slice(0, 12);
+  return mutate('payment.clientCompleted', event, openid, async function (transaction) {
+    const order = await mustGet(transaction, 'payment_orders', orderId, 'PAYMENT_ORDER_NOT_FOUND', '订单不存在');
+    assert(order.payerUserId === user._id, 'NO_PERMISSION', '不能处理其他用户的订单');
+    if (order.status !== 'pending') return { order: publicOrder(order) };
+    const update = {
+      clientPaymentCompletedAt: db.serverDate(),
+      clientResultCode: Number.isFinite(resultCode) ? resultCode : 0,
+      clientResultKeys: resultKeys,
+      updatedAt: db.serverDate()
+    };
+    if (wxOrderId && !order.wxOrderId) update.wxOrderId = wxOrderId;
+    await transaction.collection('payment_orders').doc(orderId).update({ data: update });
+    return { order: publicOrder(Object.assign({}, order, update)) };
+  });
+}
+
+async function paymentCreateOrder(event) {
+  const openid = getOpenid();
+  const user = await requireActiveUser(openid);
+  const access = await requireMembership(event.familyId, ACTIVE_ROLES, db, openid);
+  const item = commerce.product(event.productId);
+  assert(item, 'PAYMENT_PRODUCT_INVALID', '所选会员商品不存在或已下架');
+  const currentMembership = commerce.entitlementFromFamily(access.family);
+  assert(!currentMembership.lifetime, 'MEMBERSHIP_ALREADY_LIFETIME', '这份家谱已经是永久会员');
+  const profile = commerce.paymentProfile(process.env.PAYMENT_MODE);
+  const session = profile.external ? await code2Session(event.loginCode, openid) : { sessionKey: 'staging-mock-session-key' };
+  const monthStart = new Date();
+  monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
+  const monthOrders = await listAll('payment_orders', { status: _.in(['fulfilled', 'refunded']), paidAt: _.gte(monthStart) }, 5000);
+  const monthGmv = monthOrders.reduce(function (total, order) { return total + (Number(order.priceCents) || 0); }, 0);
+  assert(monthGmv + item.priceCents <= 10000000, 'PAYMENT_MONTHLY_LIMIT', '本月支付额度已达到平台上限，请下月再试');
+  const offerId = profile.external ? cleanText(process.env.VP_OFFER_ID, 80) : 'staging_mock_offer';
+  const appKey = profile.external ? String(process.env.VP_APP_KEY || '') : 'staging-mock-app-key';
+  assert(offerId && appKey, 'PAYMENT_NOT_CONFIGURED', '虚拟支付尚未完成服务端配置');
+  const orderId = createTradeNumber();
+  const attach = JSON.stringify({ familyId: access.family._id, orderId: orderId });
+  const signData = commerce.buildSignData({
+    offerId: offerId,
+    env: profile.env,
+    productId: item.productId,
+    goodsPrice: item.priceCents,
+    outTradeNo: orderId,
+    attach: attach
+  });
+  const payData = {
+    signData: signData,
+    mode: 'short_series_goods',
+    paySig: commerce.paySignature('requestVirtualPayment', signData, appKey),
+    signature: commerce.userSignature(signData, session.sessionKey)
+  };
+  return mutate('payment.createOrder', event, openid, async function (transaction) {
+    await transaction.collection('payment_orders').doc(orderId).set({
+      data: {
+        familyId: access.family._id,
+        familyName: access.family.name || '',
+        payerUserId: user._id,
+        productId: item.productId,
+        productName: item.name,
+        priceCents: item.priceCents,
+        durationDays: item.durationDays,
+        lifetime: item.lifetime,
+        quantity: 1,
+        mode: 'short_series_goods',
+        paymentMode: profile.mode,
+        paymentEnv: profile.env,
+        status: 'pending',
+        createdAt: db.serverDate(),
+        updatedAt: db.serverDate(),
+        expiresAt: new Date(Date.now() + 30 * 60 * 1000)
+      }
+    });
+    return { order: publicOrder(Object.assign({ _id: orderId }, item, { productName: item.name, familyId: access.family._id, familyName: access.family.name, status: 'pending' })), payData: payData, mock: !profile.external };
+  });
+}
+
+async function fulfillOrderTransaction(transaction, order, wxOrderId, paidAt) {
+  const grantId = 'grant_' + order._id;
+  const priorGrant = await maybeGet(transaction, 'membership_grants', grantId);
+  if (priorGrant && priorGrant.status === 'active') return;
+  const family = await mustGet(transaction, 'families', order.familyId, 'FAMILY_NOT_FOUND', '订单对应的家谱不存在');
+  const now = paidAt instanceof Date ? paidAt : new Date(paidAt || Date.now());
+  let startsAt = now;
+  let endsAt = null;
+  if (!order.lifetime) {
+    const currentExpiry = family.proExpiresAt ? new Date(family.proExpiresAt) : null;
+    if (currentExpiry && currentExpiry.getTime() > startsAt.getTime()) startsAt = currentExpiry;
+    endsAt = new Date(startsAt.getTime() + Number(order.durationDays || 0) * 24 * 60 * 60 * 1000);
+  }
+  await transaction.collection('membership_grants').doc(grantId).set({
+    data: {
+      familyId: order.familyId,
+      orderId: order._id,
+      productId: order.productId,
+      durationDays: Number(order.durationDays) || 0,
+      lifetime: Boolean(order.lifetime),
+      startsAt: startsAt,
+      endsAt: endsAt,
+      paidAt: now,
+      status: 'active',
+      createdAt: db.serverDate(),
+      updatedAt: db.serverDate()
+    }
+  });
+  await transaction.collection('families').doc(order.familyId).update({
+    data: {
+      proLifetime: Boolean(family.proLifetime || order.lifetime),
+      proExpiresAt: family.proLifetime || order.lifetime ? _.remove() : endsAt,
+      proUpdatedAt: db.serverDate(),
+      updatedAt: db.serverDate()
+    }
+  });
+  await transaction.collection('payment_orders').doc(order._id).update({
+    data: {
+      status: 'fulfilled',
+      wxOrderId: wxOrderId,
+      paidAt: now,
+      fulfilledAt: db.serverDate(),
+      updatedAt: db.serverDate()
+    }
+  });
+}
+
+async function paymentMockComplete(event) {
+  assert(paymentMode() === 'mock', 'MOCK_PAYMENT_DISABLED', '当前环境不允许模拟支付');
+  const openid = getOpenid();
+  const user = await requireActiveUser(openid);
+  const orderId = cleanText(event.orderId, 40);
+  return mutate('payment.mockComplete', event, openid, async function (transaction) {
+    const order = await mustGet(transaction, 'payment_orders', orderId, 'PAYMENT_ORDER_NOT_FOUND', '订单不存在');
+    assert(order.payerUserId === user._id, 'NO_PERMISSION', '不能处理其他用户的订单');
+    if (order.status === 'fulfilled') return { order: publicOrder(order) };
+    assert(order.status === 'pending', 'PAYMENT_ORDER_FINAL', '订单已经结束');
+    await fulfillOrderTransaction(transaction, Object.assign({ _id: orderId }, order), 'mock_' + orderId, new Date());
+    await transaction.collection('payment_events').doc('mock_deliver_' + orderId).set({ data: {
+      type: 'xpay_goods_deliver_notify', wxOrderId: 'mock_' + orderId, orderId: orderId,
+      familyId: order.familyId, status: 'applied', source: 'staging_mock', createdAt: db.serverDate()
+    } });
+    return { order: publicOrder(Object.assign({}, order, { _id: orderId, status: 'fulfilled', wxOrderId: 'mock_' + orderId, paidAt: new Date(), fulfilledAt: new Date() })) };
+  });
+}
+
+async function paymentMockRefund(event) {
+  assert(paymentMode() === 'mock', 'MOCK_PAYMENT_DISABLED', '当前环境不允许模拟退款');
+  const openid = getOpenid();
+  const user = await requireActiveUser(openid);
+  const orderId = cleanText(event.orderId, 40);
+  const previewOrder = await mustGet(db, 'payment_orders', orderId, 'PAYMENT_ORDER_NOT_FOUND', '订单不存在');
+  assert(previewOrder.payerUserId === user._id, 'NO_PERMISSION', '不能处理其他用户的订单');
+  assert(previewOrder.status === 'fulfilled', 'PAYMENT_NOT_REFUNDABLE', '当前订单不能模拟退款');
+  const activeGrantResult = await db.collection('membership_grants').where({ familyId: previewOrder.familyId, status: 'active' }).limit(100).get();
+  return mutate('payment.mockRefund', event, openid, async function (transaction) {
+    const order = await mustGet(transaction, 'payment_orders', orderId, 'PAYMENT_ORDER_NOT_FOUND', '订单不存在');
+    assert(order.payerUserId === user._id, 'NO_PERMISSION', '不能处理其他用户的订单');
+    assert(order.status === 'fulfilled', 'PAYMENT_NOT_REFUNDABLE', '当前订单不能模拟退款');
+    const grant = await mustGet(transaction, 'membership_grants', 'grant_' + orderId, 'MEMBERSHIP_GRANT_NOT_FOUND', '会员发放记录不存在');
+    await transaction.collection('membership_grants').doc(grant._id).update({ data: { status: 'refunded', refundedAt: db.serverDate(), updatedAt: db.serverDate() } });
+    const entitlement = commerce.recomputeEntitlement((activeGrantResult.data || []).filter(function (item) { return item._id !== grant._id; }), new Date());
+    await transaction.collection('families').doc(order.familyId).update({ data: { proLifetime: entitlement.lifetime, proExpiresAt: entitlement.expiresAt || _.remove(), proUpdatedAt: db.serverDate(), updatedAt: db.serverDate() } });
+    await transaction.collection('payment_orders').doc(orderId).update({ data: { status: 'refunded', refundedAt: db.serverDate(), updatedAt: db.serverDate() } });
+    await transaction.collection('payment_events').doc('mock_refund_' + orderId).set({ data: {
+      type: 'xpay_refund_notify', wxOrderId: order.wxOrderId || ('mock_' + orderId), orderId: orderId,
+      familyId: order.familyId, status: 'applied', source: 'staging_mock', createdAt: db.serverDate()
+    } });
+    return { order: publicOrder(Object.assign({}, order, { _id: orderId, status: 'refunded', refundedAt: new Date() })), membership: entitlement };
+  });
+}
+
+async function paymentGetOrder(event) {
+  const openid = getOpenid();
+  const user = await requireActiveUser(openid);
+  const order = await mustGet(db, 'payment_orders', cleanText(event.orderId, 40), 'PAYMENT_ORDER_NOT_FOUND', '订单不存在');
+  assert(order.payerUserId === user._id, 'NO_PERMISSION', '不能查看其他用户的订单');
+  return { order: publicOrder(order) };
+}
+
+async function paymentReconcileNow(event) {
+  const openid = getOpenid();
+  const user = await requireActiveUser(openid);
+  const orderId = cleanText(event.orderId, 40);
+  const previewOrder = await mustGet(db, 'payment_orders', orderId, 'PAYMENT_ORDER_NOT_FOUND', '订单不存在');
+  assert(previewOrder.payerUserId === user._id, 'NO_PERMISSION', '不能处理其他用户的订单');
+  if (!canReconcilePaymentOrder(previewOrder)) return { order: publicOrder(previewOrder), reconciled: false };
+  assert(['sandbox', 'live'].includes(previewOrder.paymentMode), 'PAYMENT_RECONCILE_UNAVAILABLE', '当前订单不支持支付状态查询');
+
+  let result;
+  try {
+    result = await queryPaymentOrder(previewOrder, openid, await paymentAccessToken());
+  } catch (error) {
+    const status = error && error.code === 'PAYMENT_QUERY_NOT_FOUND' ? 'query_not_found' : 'query_failed';
+    const message = cleanText(error && error.message, 160) || '支付状态暂时无法确认，请稍后重试';
+    const pending = await db.runTransaction(async function (transaction) {
+      const latest = await mustGet(transaction, 'payment_orders', orderId, 'PAYMENT_ORDER_NOT_FOUND', '订单不存在');
+      if (!canReconcilePaymentOrder(latest)) return latest;
+      await transaction.collection('payment_orders').doc(orderId).update({ data: {
+        reconcileStatus: status, reconcileMessage: message, lastQueriedAt: db.serverDate(), updatedAt: db.serverDate()
+      } });
+      return Object.assign({}, latest, { reconcileStatus: status, reconcileMessage: message, lastQueriedAt: new Date(), updatedAt: new Date() });
+    });
+    return { order: publicOrder(pending), reconciled: false };
+  }
+  const paid = isPaidPaymentResult(result);
+  if (!paid) {
+    return db.runTransaction(async function (transaction) {
+      const latest = await mustGet(transaction, 'payment_orders', orderId, 'PAYMENT_ORDER_NOT_FOUND', '订单不存在');
+      if (!canReconcilePaymentOrder(latest)) return { order: publicOrder(latest), reconciled: false };
+      const expired = latest.expiresAt && new Date(latest.expiresAt).getTime() <= Date.now();
+      await transaction.collection('payment_orders').doc(orderId).update({ data: {
+        status: expired ? 'closed' : 'pending',
+        closeReason: expired ? 'payment_timeout' : '',
+        reconcileStatus: expired ? 'closed_unpaid' : 'not_paid',
+        lastQueriedAt: db.serverDate(), updatedAt: db.serverDate()
+      } });
+      return { order: publicOrder(Object.assign({}, latest, { status: expired ? 'closed' : 'pending' })), reconciled: false };
+    });
+  }
+
+  const wxOrderId = paymentResultOrderId(result);
+  assert(wxOrderId, 'PAYMENT_QUERY_INVALID', '支付平台返回的订单信息不完整，请稍后重试');
+  const internalSecret = String(process.env.VP_INTERNAL_NOTIFY_SECRET || '');
+  assert(internalSecret, 'PAYMENT_NOTIFY_UNAVAILABLE', '支付发货服务暂未完成配置，请稍后重试');
+  const notification = await cloud.callFunction({
+    name: paymentNotifyFunctionName(),
+    data: {
+      internalSecret: internalSecret,
+      Event: 'xpay_goods_deliver_notify',
+      MchOrderNo: wxOrderId,
+      OutTradeNo: orderId,
+      ProductId: previewOrder.productId,
+      Quantity: 1
+    }
+  });
+  const notificationResult = notification && notification.result || {};
+  assert(Number(notificationResult.ErrCode) === 0, 'PAYMENT_NOTIFY_UNAVAILABLE', '支付发货暂未完成，请稍后刷新订单状态');
+  const completed = await mustGet(db, 'payment_orders', orderId, 'PAYMENT_ORDER_NOT_FOUND', '订单不存在');
+  return { order: publicOrder(completed), reconciled: completed.status === 'fulfilled' };
+}
+
+async function paymentListMine(event) {
+  const openid = getOpenid();
+  const user = await requireActiveUser(openid);
+  const familyId = cleanText(event && event.familyId, 80);
+  const pageSize = Math.max(1, Math.min(Math.floor(Number(event && event.pageSize) || 10), 50));
+  const requestedOffset = Number(event && event.cursor);
+  const offset = Number.isFinite(requestedOffset) ? Math.max(0, Math.min(Math.floor(requestedOffset), 10000)) : 0;
+  const where = { payerUserId: user._id };
+  if (familyId) where.familyId = familyId;
+  const result = await db.collection('payment_orders')
+    .where(where)
+    .orderBy('createdAt', 'desc')
+    .skip(offset)
+    .limit(pageSize + 1)
+    .get();
+  const rows = result.data || [];
+  const items = rows.slice(0, pageSize);
+  return {
+    items: items.map(publicOrder),
+    hasMore: rows.length > pageSize,
+    nextCursor: rows.length > pageSize ? String(offset + items.length) : ''
+  };
+}
+
+function publicActivity(item) {
+  return {
+    _id: item._id,
+    actorId: item.actorId || '',
+    actorName: item.actorName || '一位家人',
+    action: item.action || '',
+    objectType: item.objectType || '',
+    objectId: item.objectId || '',
+    summary: item.summary || '',
+    createdAt: item.createdAt || null
+  };
+}
+
+async function familyActivityList(event) {
+  const openid = getOpenid();
+  await requireActiveUser(openid);
+  const access = await requireMembership(event.familyId, ACTIVE_ROLES, db, openid, { allowArchived: true });
+  const entitlement = commerce.entitlementFromFamily(access.family);
+  const size = entitlement.active ? Math.max(1, Math.min(Number(event.pageSize) || 30, 50)) : 20;
+  const action = cleanText(event.action, 80);
+  const actorId = cleanText(event.actorId, 80);
+  const actorName = cleanText(event.actorName, 60);
+  const from = event.from ? new Date(event.from) : null;
+  const to = event.to ? new Date(event.to) : null;
+  if (!entitlement.active) {
+    const recent = await db.collection('audit_logs').where({ familyId: access.family._id }).orderBy('createdAt', 'desc').limit(20).get();
+    const items = (recent.data || []).filter(function (item) {
+      const created = new Date(item.createdAt || 0).getTime();
+      return (!action || item.action === action) && (!actorId || item.actorId === actorId) && (!actorName || item.actorName === actorName) &&
+        (!from || Number.isNaN(from.getTime()) || created >= from.getTime()) && (!to || Number.isNaN(to.getTime()) || created <= to.getTime());
+    });
+    return { items: items.map(publicActivity), hasMore: false, nextCursor: null, membershipRequired: true, freeLimit: 20 };
+  }
+  const where = { familyId: access.family._id };
+  if (action) where.action = action;
+  if (actorId) where.actorId = actorId;
+  if (actorName) where.actorName = actorName;
+  const cursor = event.cursor ? new Date(event.cursor) : null;
+  const lower = from && !Number.isNaN(from.getTime()) ? from : null;
+  const upperCandidates = [to, cursor].filter(function (date) { return date && !Number.isNaN(date.getTime()); });
+  const upper = upperCandidates.length ? new Date(Math.min.apply(null, upperCandidates.map(function (date) { return date.getTime(); }))) : null;
+  if (lower && upper) where.createdAt = _.gte(lower).and(_.lt(upper));
+  else if (lower) where.createdAt = _.gte(lower);
+  else if (upper) where.createdAt = _.lt(upper);
+  const result = await db.collection('audit_logs').where(where).orderBy('createdAt', 'desc').limit(size + 1).get();
+  const rows = result.data || [];
+  const items = rows.slice(0, size);
+  return {
+    items: items.map(publicActivity),
+    hasMore: entitlement.active && rows.length > size,
+    nextCursor: entitlement.active && rows.length > size && items.length ? items[items.length - 1].createdAt : null,
+    membershipRequired: !entitlement.active,
+    freeLimit: 20
+  };
+}
+
+function publicBackupTask(task) {
+  return {
+    taskId: task._id,
+    familyId: task.familyId,
+    status: task.status || 'pending',
+    progress: Math.max(0, Math.min(100, Number(task.progress) || 0)),
+    parts: (task.parts || []).map(function (part, index) {
+      return { index: index, fileName: part.fileName || ('有谱家庭备份-' + (index + 1) + '.zip'), size: Number(part.size) || 0 };
+    }),
+    unavailableMediaCount: Number(task.unavailableMediaCount) || 0,
+    createdAt: task.createdAt || null,
+    completedAt: task.completedAt || null,
+    expiresAt: task.expiresAt || null,
+    failureMessage: task.status === 'failed' ? cleanText(task.failureMessage, 160) : ''
+  };
+}
+
+async function familyBackupCreate(event) {
+  const openid = getOpenid();
+  const user = await requireActiveUser(openid);
+  const access = await requireMembership(event.familyId, ['admin'], db, openid);
+  assert(commerce.entitlementFromFamily(access.family).active, 'MEMBERSHIP_REQUIRED', '完整家庭备份是会员权益，请先开通会员');
+  const existing = await db.collection('export_tasks').where({ familyId: access.family._id, kind: 'family_backup' }).limit(30).get();
+  const tasks = existing.data || [];
+  assert(!tasks.some(function (task) { return ['pending', 'processing'].includes(task.status); }), 'BACKUP_IN_PROGRESS', '这份家谱已有备份正在生成');
+  const latest = tasks.filter(function (task) { return task.completedAt; }).sort(function (left, right) {
+    return new Date(right.completedAt).getTime() - new Date(left.completedAt).getTime();
+  })[0];
+  assert(!latest || Date.now() - new Date(latest.completedAt).getTime() >= 7 * 24 * 60 * 60 * 1000, 'BACKUP_COOLDOWN', '完整备份每 7 天可生成一次');
+  return mutate('family.backup.create', event, openid, async function (transaction) {
+    const lockedFamily = await mustGet(transaction, 'families', access.family._id, 'FAMILY_NOT_FOUND', '家谱不存在或已删除');
+    assert(!lockedFamily.backupTaskId, 'BACKUP_IN_PROGRESS', '这份家谱已有备份正在生成');
+    assert(!lockedFamily.lastBackupCompletedAt || Date.now() - new Date(lockedFamily.lastBackupCompletedAt).getTime() >= 7 * 24 * 60 * 60 * 1000, 'BACKUP_COOLDOWN', '完整备份每 7 天可生成一次');
+    const taskId = 'fexp_' + randomToken(18);
+    await transaction.collection('export_tasks').doc(taskId).set({
+      data: {
+        kind: 'family_backup',
+        familyId: access.family._id,
+        familyName: access.family.name || '',
+        userId: user._id,
+        status: 'pending',
+        progress: 0,
+        parts: [],
+        requestedAt: db.serverDate(),
+        createdAt: db.serverDate(),
+        updatedAt: db.serverDate()
+      }
+    });
+    await transaction.collection('families').doc(access.family._id).update({ data: { backupTaskId: taskId, updatedAt: db.serverDate() } });
+    return publicBackupTask({ _id: taskId, familyId: access.family._id, status: 'pending', progress: 0, parts: [], createdAt: new Date() });
+  });
+}
+
+async function familyBackupStatus(event) {
+  const openid = getOpenid();
+  await requireActiveUser(openid);
+  const task = await mustGet(db, 'export_tasks', cleanText(event.taskId, 80), 'BACKUP_NOT_FOUND', '家庭备份任务不存在');
+  const access = await requireMembership(task.familyId, ['admin'], db, openid, { allowArchived: true });
+  assert(task.kind === 'family_backup', 'BACKUP_NOT_FOUND', '家庭备份任务不存在');
+  assert(commerce.entitlementFromFamily(access.family).active, 'MEMBERSHIP_REQUIRED', '完整家庭备份是会员权益，请先开通会员');
+  return publicBackupTask(task);
+}
+
+async function familyBackupPartUrl(event) {
+  const openid = getOpenid();
+  await requireActiveUser(openid);
+  const task = await mustGet(db, 'export_tasks', cleanText(event.taskId, 80), 'BACKUP_NOT_FOUND', '家庭备份任务不存在');
+  const access = await requireMembership(task.familyId, ['admin'], db, openid, { allowArchived: true });
+  assert(task.kind === 'family_backup' && task.status === 'completed', 'BACKUP_NOT_READY', '家庭备份尚未生成完成');
+  assert(commerce.entitlementFromFamily(access.family).active, 'MEMBERSHIP_REQUIRED', '完整家庭备份是会员权益，请先开通会员');
+  assert(task.expiresAt && new Date(task.expiresAt).getTime() > Date.now(), 'BACKUP_EXPIRED', '家庭备份领取时间已结束，请重新生成');
+  const index = Math.max(0, Number(event.partIndex) || 0);
+  const part = (task.parts || [])[index];
+  assert(part && part.fileId, 'BACKUP_PART_NOT_FOUND', '备份分卷不存在');
+  const result = await cloud.getTempFileURL({ fileList: [part.fileId] });
+  const url = result.fileList && result.fileList[0] && result.fileList[0].tempFileURL;
+  assert(url, 'BACKUP_URL_FAILED', '备份下载链接生成失败，请稍后重试');
+  return { url: url, fileName: part.fileName, size: Number(part.size) || 0, expiresAt: task.expiresAt };
+}
+
 async function feedbackGroupGet() {
   const openid = getOpenid();
   await ensureUser(openid);
@@ -2452,6 +3036,15 @@ const handlers = {
   'account.exportUrl': accountExportUrl,
   'account.requestDeletion': accountRequestDeletion,
   'account.cancelDeletion': accountCancelDeletion,
+  'membership.catalog': membershipCatalog,
+  'membership.status': membershipStatus,
+  'payment.createOrder': paymentCreateOrder,
+  'payment.clientCompleted': paymentClientCompleted,
+  'payment.getOrder': paymentGetOrder,
+  'payment.reconcileNow': paymentReconcileNow,
+  'payment.listMine': paymentListMine,
+  'payment.mockComplete': paymentMockComplete,
+  'payment.mockRefund': paymentMockRefund,
   'family.create': familyCreate,
   'family.list': familyList,
   'family.update': familyUpdate,
@@ -2461,6 +3054,10 @@ const handlers = {
   'family.setPreference': familySetPreference,
   'family.markOnboardingShared': familyMarkOnboardingShared,
   'family.dismissShareReminder': familyDismissShareReminder,
+  'family.activity.list': familyActivityList,
+  'family.backup.create': familyBackupCreate,
+  'family.backup.status': familyBackupStatus,
+  'family.backup.partUrl': familyBackupPartUrl,
   'graph.get': graphGet,
   'membership.list': membershipList,
   'membership.updateRole': membershipUpdateRole,

@@ -23,17 +23,19 @@ fi
 
 "${NODE_BIN}" "${PROJECT_PATH}/deployment/configure-staging.mjs"
 if [[ "${TARGET}" == "staging" ]]; then
-  EXPECTED_RUNTIME="trial"
+  EXPECTED_RUNTIMES=("develop")
 else
-  EXPECTED_RUNTIME="release"
+  EXPECTED_RUNTIMES=("trial" "release")
 fi
-RESOLVED_ENV="$("${NODE_BIN}" -e "const c=require('${PROJECT_PATH}/miniprogram/config/env');console.log(c.resolveRuntimeEnvironment({getAccountInfoSync:()=>({miniProgram:{envVersion:'${EXPECTED_RUNTIME}'}})}).active)")"
-if [[ "${RESOLVED_ENV}" != "${TARGET}" ]]; then
-  echo "已阻止上传：运行时 ${EXPECTED_RUNTIME} 会路由到 ${RESOLVED_ENV}，与上传目标 ${TARGET} 不一致。"
-  exit 3
-fi
+for EXPECTED_RUNTIME in "${EXPECTED_RUNTIMES[@]}"; do
+  RESOLVED_ENV="$("${NODE_BIN}" -e "const c=require('${PROJECT_PATH}/miniprogram/config/env');console.log(c.resolveRuntimeEnvironment({getAccountInfoSync:()=>({miniProgram:{envVersion:'${EXPECTED_RUNTIME}'}})}).active)")"
+  if [[ "${RESOLVED_ENV}" != "${TARGET}" ]]; then
+    echo "已阻止上传：运行时 ${EXPECTED_RUNTIME} 会路由到 ${RESOLVED_ENV}，与上传目标 ${TARGET} 不一致。"
+    exit 3
+  fi
+done
 
 DESCRIPTION="$("${NODE_BIN}" "${PROJECT_PATH}/deployment/verify-release-note.mjs" "${VERSION}")"
 "${WECHAT_CLI}" upload --project "${PROJECT_PATH}" --version "${VERSION}" --desc "${DESCRIPTION}"
 
-echo "已上传同一运行时路由包：开发版/体验版连接 staging，正式发布后连接 production。"
+echo "已上传同一运行时路由包：开发版连接 staging，体验版/正式版连接 production。"

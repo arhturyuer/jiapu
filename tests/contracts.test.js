@@ -118,10 +118,16 @@ test('关于页使用正式版实际版本并按最新在前展示受控更新�
   const aboutTemplate = fs.readFileSync(path.join(root, 'miniprogram/pages/about/index.wxml'), 'utf8');
   const uploadScript = fs.readFileSync(path.join(root, 'deployment/upload-miniprogram.sh'), 'utf8');
   const verifier = fs.readFileSync(path.join(root, 'deployment/verify-release-note.mjs'), 'utf8');
-  assert.deepEqual(releaseInfo.validateReleaseNotes(releaseNotes), [{
-    version: '1.2.1',
-    summary: '修复家谱归档、优化注销引导、增加关于页与版本更新记录'
-  }]);
+  assert.deepEqual(releaseInfo.validateReleaseNotes(releaseNotes), [
+    {
+      version: '1.2.2',
+      summary: '新增家庭会员购买记录与待确认订单自动核验。'
+    },
+    {
+      version: '1.2.1',
+      summary: '修复家谱归档、优化注销引导、增加关于页与版本更新记录'
+    }
+  ]);
   assert.throws(function () {
     releaseInfo.validateReleaseNotes([{ version: '1.0.0', summary: '旧版本' }, { version: '1.1.0', summary: '新版本' }]);
   }, /最新版本在前/);
@@ -181,7 +187,8 @@ test('我的页具备账户三态、单次家谱加载和受控媒体展示', fu
   assert.match(profile, /api\.getMediaPresentation/);
   assert.match(template, /账户正在注销冷静期/);
   assert.match(template, />创建家谱</);
-  assert.match(template, /查看家谱/);
+  assert.doesNotMatch(template, /查看家谱/);
+  assert.match(template, /membershipTierText/);
   assert.match(template, /保存名字/);
   assert.match(clientApi, /function getMediaPresentation/);
   assert.match(userApi, /'media\.getPresentation':\s*mediaGetPresentation/);
@@ -256,7 +263,8 @@ test('个人导出使用私有异步任务，不会复制数据到剪贴板', fu
   assert.match(privacy, /api\.call\('account\.export'/);
   assert.match(privacy, /api\.call\('account\.exportStatus'/);
   assert.match(privacy, /api\.call\('account\.exportUrl'/);
-  assert.match(privacy, /wx\.downloadFile/);
+  assert.match(privacy, /fileTransfer\.downloadToTempFile/);
+  assert.match(privacy, /fileTransfer\.removeTempFile/);
   assert.match(template, /仅可领取一次/);
   assert.match(userApi, /'account\.exportStatus':\s*accountExportStatus/);
   assert.match(userApi, /'account\.exportUrl':\s*accountExportUrl/);
@@ -309,7 +317,7 @@ test('用户反馈群二维码由运营后台受控替换并在小程序双入�
   assert.match(jobs, /'feedback_group_settings'/);
 });
 
-test('小程序按官方运行时版本路由环境，体验版只能连接 staging', function () {
+test('小程序按官方运行时版本路由环境，开发版连接 staging、体验版和正式版连接 production', function () {
   const environment = require(path.join(root, 'miniprogram/config/env.js'));
   const legal = require(path.join(root, 'miniprogram/config/legal.js'));
   const preflight = fs.readFileSync(path.join(root, 'deployment/preflight.sh'), 'utf8');
@@ -318,6 +326,12 @@ test('小程序按官方运行时版本路由环境，体验版只能连接 stag
   assert.ok(fs.existsSync(localStaging));
   assert.equal(environment.active, 'staging');
   assert.equal(environment.resolveRuntimeEnvironment({
+    getAccountInfoSync: function () { return { miniProgram: { envVersion: 'develop' } }; }
+  }).active, 'staging');
+  assert.equal(environment.resolveRuntimeEnvironment({
+    getAccountInfoSync: function () { return { miniProgram: { envVersion: 'trial' } }; }
+  }).active, 'production');
+  assert.equal(environment.resolveRuntimeEnvironment({
     getAccountInfoSync: function () { return { miniProgram: { envVersion: 'release' } }; }
   }).active, 'production');
   assert.notEqual(environment.environments.staging.cloudEnv, environment.environments.production.cloudEnv);
@@ -325,14 +339,15 @@ test('小程序按官方运行时版本路由环境，体验版只能连接 stag
   assert.equal(legal.registrationVerified, true);
   assert.doesNotMatch(legal.operatorName, /^(运营者|有谱小程序运营者|待填写|测试主体|示例主体)$/);
   assert.match(preflight, /RUNTIME_VERSION="release"/);
-  assert.match(preflight, /RUNTIME_VERSION="trial"/);
+  assert.match(preflight, /RUNTIME_VERSION="develop"/);
   assert.match(preflight, /已阻止 staging 预检指向 production/);
   const config = fs.readFileSync(path.join(root, 'miniprogram/config/env.js'), 'utf8');
   const upload = fs.readFileSync(path.join(root, 'deployment/upload-miniprogram.sh'), 'utf8');
   assert.match(config, /miniProgram\.envVersion/);
-  assert.match(config, /runtimeVersion === 'release' \? 'production' : 'staging'/);
+  assert.match(config, /runtimeVersion === 'trial' \|\| runtimeVersion === 'release'/);
   assert.match(upload, /\{staging\|production\}/);
-  assert.match(upload, /开发版\/体验版连接 staging，正式发布后连接 production/);
+  assert.match(upload, /EXPECTED_RUNTIMES=\("trial" "release"\)/);
+  assert.match(upload, /开发版连接 staging，体验版\/正式版连接 production/);
   assert.ok(indexes.indexes.example_templates.some(function (index) { return index.name === 'slug_unique' && index.unique; }));
   assert.ok(indexes.indexes.example_template_versions.some(function (index) { return index.name === 'template_version_unique' && index.unique; }));
 });
@@ -365,7 +380,7 @@ test('生产基础库、云函数运行时和客户端直连禁用配置已锁�
   assert.equal(project.libVersion, '3.16.2');
   assert.equal(project.setting.urlCheck, true);
   const cloudbase = JSON.parse(fs.readFileSync(path.join(root, 'deployment/cloudbaserc.example.json'), 'utf8'));
-  assert.deepEqual(cloudbase.functions.map(function (item) { return item.runtime; }), ['Nodejs20.19', 'Nodejs20.19', 'Nodejs20.19']);
+  assert.deepEqual(cloudbase.functions.map(function (item) { return item.runtime; }), ['Nodejs20.19', 'Nodejs20.19', 'Nodejs20.19', 'Nodejs20.19']);
   const databaseRule = JSON.parse(fs.readFileSync(path.join(root, 'deployment/security/database-deny-all.json'), 'utf8'));
   assert.equal(databaseRule.read, false);
   assert.equal(databaseRule.write, false);
@@ -378,6 +393,7 @@ test('函数与存储安全规则支持个人套餐显式 PRIVATE 生产基线',
   assert.equal(functionRules.youpuUserApi.invoke, authenticatedRule);
   assert.equal(functionRules.youpuOpsApi.invoke, authenticatedRule);
   assert.equal(functionRules.youpuJobs.invoke, false);
+  assert.equal(functionRules.youpuPaymentNotify.invoke, false);
 
   const storageRules = JSON.parse(fs.readFileSync(path.join(root, 'deployment/security/storage-private-staging.json'), 'utf8'));
   assert.equal(storageRules.read, false);

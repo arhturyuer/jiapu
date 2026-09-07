@@ -3,9 +3,11 @@
 .family-hero { padding: 32rpx; }
 .family-hero-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 20rpx; }
 .family-heading { min-width: 0; flex: 1; }
+.family-title-row { min-width:0; display:flex; align-items:center; gap:14rpx; }
 .family-name, .family-role { display: block; }
-.family-name { overflow: hidden; font-size: 44rpx; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.family-name { min-width:0; overflow: hidden; font-size: 44rpx; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .family-role { margin-top: 8rpx; color: #65706A; font-size: 26rpx; }
+.family-membership-badge { padding:8rpx 14rpx; display:flex; flex:none; align-items:center; gap:5rpx; color:#654B1B; background:#FFF0CA; border-radius:999rpx; font-size:22rpx; font-weight:650; line-height:1.2; }.family-membership-badge.active { color:#FFFFFF; background:#34715D; }.family-membership-badge-pressed { opacity:.72; }.family-membership-arrow { font-size:26rpx; line-height:1; }
 .invite-button { min-width: 168rpx; height: 76rpx; padding: 0 22rpx; display: inline-flex; flex: none; align-items: center; justify-content: center; color: #FFFFFF; background: #245C4A; border-radius: 22rpx; box-shadow: 0 8rpx 18rpx rgba(36, 92, 74, 0.18); font-size: 28rpx; font-weight: 600; line-height: 1; }
 .invite-button:active { background: #194636; }
 .family-description { margin-top: 24rpx; display: block; color: #65706A; line-height: 1.6; }
@@ -54,3 +56,4 @@
 .share-role-title { font-weight: 600; }
 .share-role-desc { margin-top: 6rpx; color: #65706A; font-size: 26rpx; }
 .share-button { width: 100%; margin-top: 28rpx; }
+.family-upgrade { margin-top:24rpx; padding:26rpx 28rpx; display:flex; flex-direction:column; gap:8rpx; color:#624816; background:#FFF1D1; border-radius:24rpx; }.family-upgrade text:first-child { font-size:25rpx; }.family-upgrade text:last-child { font-size:29rpx; font-weight:650; }.banner-ad { margin-top:40rpx; }

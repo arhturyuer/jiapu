@@ -2,7 +2,7 @@
   "permissions": {
     "openapi": []
   },
-  "envVariables": {},
+  "envVariables": { "PAYMENT_MODE": "mock" },
   "triggers": [
     {
       "name": "youpu-frequent-maintenance",

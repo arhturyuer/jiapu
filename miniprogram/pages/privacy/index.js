@@ -2,6 +2,7 @@ const app = getApp();
 const api = require('../../utils/api');
 const legal = require('../../config/legal');
 const format = require('../../utils/format');
+const fileTransfer = require('../../utils/file-transfer');
 
 const EXPORT_TASK_STORAGE_KEY = 'youpu_export_task';
 
@@ -21,7 +22,7 @@ function deletionExecuteText(deletion) {
 Page({
   data: {
     loading: true, error: '', legal: legal, accountState: 'active', deletion: null,
-    reports: [], reportCursor: '', hasMoreReports: false, exporting: false, exportTask: null,
+    reports: [], reportCursor: '', hasMoreReports: false, exporting: false, exportTask: null, exportFileReady: false,
     deleting: false, cancelling: false, deletionExecuteText: ''
   },
 
@@ -36,6 +37,8 @@ Page({
   onUnload: function () {
     this._pageVisible = false;
     this.clearExportTimer();
+    if (this._readyExport) fileTransfer.removeTempFile(this._readyExport.filePath);
+    this._readyExport = null;
   },
 
   clearExportTimer: function () {
@@ -104,27 +107,50 @@ Page({
     const self = this;
     const task = this.data.exportTask;
     if (!task || task.status !== 'completed' || this.data.exporting) return;
-    if (!wx.shareFileMessage) {
+    if (!fileTransfer.canShareFile(wx)) {
       wx.showModal({ title: '当前微信版本暂不支持安全导出', content: '请升级微信后再下载导出文件，或通过微信客服申请导出。为保护隐私，文件不会复制到剪贴板。', showCancel: false });
+      return;
+    }
+    if (this.data.exportFileReady && this._readyExport) {
+      this.shareReadyExport();
       return;
     }
     this.setData({ exporting: true });
     let filePath = '';
     api.call('account.exportUrl', { taskId: task.taskId }).then(function (data) {
-      return wx.downloadFile({ url: data.url });
+      return fileTransfer.downloadToTempFile(data.url, { fileName: '有谱个人信息导出.json' });
     }).then(function (result) {
-      if (result.statusCode !== 200) throw new Error('导出文件下载失败');
-      filePath = result.tempFilePath;
-      return wx.shareFileMessage({ filePath: filePath, fileName: '有谱个人信息导出.json' });
-    }).then(function () {
-      wx.removeStorageSync(EXPORT_TASK_STORAGE_KEY);
-      self.setData({ exportTask: Object.assign({}, task, { status: 'download_issued' }) });
+      filePath = result.filePath;
+      self._readyExport = { filePath: filePath, fileName: '有谱个人信息导出.json' };
+      self.setData({ exporting: false, exportFileReady: true });
+      wx.showToast({ title: '下载完成，请再次点击转发', icon: 'none', duration: 2600 });
     }).catch(function (error) {
-      if (error && error.errMsg && error.errMsg.indexOf('cancel') >= 0) wx.showToast({ title: '已取消分享；如需导出请重新申请', icon: 'none' });
-      else wx.showToast({ title: error.message || '导出文件分享失败', icon: 'none' });
+      wx.showToast({ title: error.message || '导出文件下载失败', icon: 'none' });
     }).then(function () {
-      if (filePath) wx.getFileSystemManager().unlink({ filePath: filePath, fail: function () {} });
+      if (!self._readyExport) return fileTransfer.removeTempFile(filePath).then(function () { self.setData({ exporting: false, exportFileReady: false }); });
+      return null;
+    });
+  },
+
+  shareReadyExport: function () {
+    const self = this;
+    const task = this.data.exportTask;
+    const ready = this._readyExport;
+    if (!ready || !task) { this.setData({ exportFileReady: false }); return; }
+    this.setData({ exporting: true });
+    fileTransfer.shareFile(ready.filePath, ready.fileName).then(function () {
+      self._readyExport = null;
+      wx.removeStorageSync(EXPORT_TASK_STORAGE_KEY);
+      self.setData({ exporting: false, exportFileReady: false, exportTask: Object.assign({}, task, { status: 'download_issued' }) });
+      return fileTransfer.removeTempFile(ready.filePath);
+    }).catch(function (error) {
       self.setData({ exporting: false });
+      if (fileTransfer.isCancelled(error)) {
+        wx.showToast({ title: '已取消，可再次点击转发', icon: 'none' });
+        return;
+      }
+      console.error('个人信息导出文件转发失败', { code: error.code, errMsg: error.errMsg });
+      wx.showModal({ title: '导出文件转发失败', content: fileTransfer.shareFailureText(error), showCancel: false });
     });
   },
 

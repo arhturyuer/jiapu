@@ -4,7 +4,7 @@
 </view>
 <view class="family-page page-shell" wx:else>
   <view class="family-hero surface-card">
-    <view class="family-hero-top"><view class="family-heading"><text class="family-name">{{currentFamily.name}}</text><text class="family-role">{{isAdmin ? '你是家谱管理员' : currentRole === 'member' ? '你是家庭成员' : '你是访客'}}</text></view><button class="invite-button" wx:if="{{isAdmin}}" bindtap="openShareSheet">邀请家人</button></view>
+    <view class="family-hero-top"><view class="family-heading"><view class="family-title-row"><text class="family-name">{{currentFamily.name}}</text><view class="family-membership-badge {{membershipActive ? 'active' : ''}}" bindtap="openMembership" hover-class="family-membership-badge-pressed"><text>{{membershipTierText}}</text><text class="family-membership-arrow">›</text></view></view><text class="family-role">{{isAdmin ? '你是家谱管理员' : currentRole === 'member' ? '你是家庭成员' : '你是访客'}} · {{membershipDetailText}}</text></view><button class="invite-button" wx:if="{{isAdmin}}" bindtap="openShareSheet">邀请家人</button></view>
     <text class="family-description">{{currentFamily.description || '一家人，共修一份家谱'}}</text>
     <view class="progress-track"><view class="progress-value" style="width:{{stats.completion}}%;"></view></view>
     <text class="progress-text">资料完整度 {{stats.completion}}%</text>
@@ -47,7 +47,7 @@
   </view>
 
   <view class="section-block">
-    <view class="section-heading"><text class="section-title">最近动态</text></view>
+    <view class="section-heading"><text class="section-title">最近动态</text><text class="section-action" bindtap="openActivity">完整历史</text></view>
     <view class="activity-list surface-card" wx:if="{{recentActivities.length}}">
       <view class="activity-row" wx:for="{{recentActivities}}" wx:key="_id"><view class="activity-dot"></view><view class="activity-copy"><text class="activity-summary">{{item.actorName || '一位家人'}} {{item.summary}}</text><text class="activity-time">{{item.timeText}}</text></view></view>
     </view>
@@ -55,7 +55,10 @@
   </view>
 
   <button class="secondary-button graph-button" bindtap="openGraph">查看完整家谱</button>
+  <button class="secondary-button graph-button" wx:if="{{isAdmin}}" bindtap="openFamilyBackup">生成完整家庭备份</button>
+  <view class="family-upgrade" wx:if="{{!membershipActive}}" bindtap="openMembership"><text>解锁完整历史、家庭备份与去广告</text><text>升级家庭会员 ›</text></view>
   <button class="secondary-button graph-button" bindtap="openFamilyManage">家庭与权限管理</button>
+  <ad class="banner-ad" wx:if="{{adVisible}}" unit-id="{{adUnitId}}" binderror="hideAd"></ad>
 
   <view class="sheet-mask" wx:if="{{showShareSheet}}" bindtap="closeShareSheet">
     <view class="bottom-sheet" catchtap="stopEvent"><view class="sheet-handle"></view><view class="sheet-title">邀请家人</view>

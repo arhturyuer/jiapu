@@ -11,8 +11,19 @@
       "memorySize": 512,
       "installDependency": true,
       "envVariables": {
-        "CONTENT_MODERATION_MODE": "strict"
+        "CONTENT_MODERATION_MODE": "strict",
+        "PAYMENT_MODE": "mock"
       }
+    },
+    {
+      "name": "youpuPaymentNotify",
+      "dir": "cloudfunctions/youpuPaymentNotify",
+      "handler": "index.main",
+      "runtime": "Nodejs20.19",
+      "timeout": 20,
+      "memorySize": 512,
+      "installDependency": true,
+      "envVariables": {}
     },
     {
       "name": "youpuOpsApi",
@@ -29,11 +40,12 @@
       "dir": "cloudfunctions/youpuJobs",
       "handler": "index.main",
       "runtime": "Nodejs20.19",
-      "timeout": 60,
+      "timeout": 900,
       "memorySize": 512,
       "installDependency": true,
       "envVariables": {
-        "BOOTSTRAP_SECRET": "REPLACE_WITH_A_RANDOM_SECRET"
+        "BOOTSTRAP_SECRET": "REPLACE_WITH_A_RANDOM_SECRET",
+        "PAYMENT_MODE": "mock"
       },
       "triggers": [
         { "name": "youpu-frequent-maintenance", "type": "timer", "config": "0 */5 * * * * *" },

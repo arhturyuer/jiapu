@@ -39,6 +39,10 @@ const collections = [
   'profile_sync_tasks',
   'rate_limits',
   'export_tasks',
+  'payment_orders',
+  'payment_events',
+  'membership_grants',
+  'commerce_metrics_daily',
   'feedback_group_settings',
   'example_templates',
   'example_template_versions',
@@ -152,8 +156,10 @@ try {
   ]);
   customStorageApplied = true;
 } catch (error) {
-  const isFreePlanRestriction = String(error.message || '').includes('OperationDenied.FreePackageDenied');
-  if (!isFreePlanRestriction || process.env.ALLOW_PERSONAL_PRIVATE_STORAGE !== '1') throw error;
+  const storageRuleError = String(error.message || '');
+  const isPersonalPlanRestriction = storageRuleError.includes('OperationDenied.FreePackageDenied') ||
+    (storageRuleError.includes('ModifyStorageSafeRule') && storageRuleError.includes('rule invalid'));
+  if (!isPersonalPlanRestriction || process.env.ALLOW_PERSONAL_PRIVATE_STORAGE !== '1') throw error;
 }
 const storagePermission = callCli(['storage', 'rules', 'get', '--json', '-e', envId]);
 const storagePermissionName = storagePermission.Permission || storagePermission.permission || storagePermission.acl || storagePermission.Acl;

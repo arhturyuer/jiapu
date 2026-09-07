@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 7,
+  "schemaVersion": 8,
   "indexes": {
     "users": [
       { "name": "openid_unique", "unique": true, "sparse": true, "fields": [{ "field": "openid", "order": "asc" }] },
@@ -15,6 +15,8 @@
       { "name": "status_purge", "fields": [{ "field": "status", "order": "asc" }, { "field": "purgeAt", "order": "asc" }] },
       { "name": "status_deletion_started", "fields": [{ "field": "status", "order": "asc" }, { "field": "deletionStartedAt", "order": "asc" }] },
       { "name": "creator_status", "fields": [{ "field": "creatorId", "order": "asc" }, { "field": "status", "order": "asc" }] },
+      { "name": "status_pro_lifetime", "fields": [{ "field": "status", "order": "asc" }, { "field": "proLifetime", "order": "asc" }] },
+      { "name": "status_pro_expires", "fields": [{ "field": "status", "order": "asc" }, { "field": "proExpiresAt", "order": "asc" }] },
       { "name": "status_id", "fields": [{ "field": "status", "order": "asc" }, { "field": "_id", "order": "asc" }] }
     ],
     "family_memberships": [
@@ -88,7 +90,31 @@
     ],
     "export_tasks": [
       { "name": "status_id", "fields": [{ "field": "status", "order": "asc" }, { "field": "_id", "order": "asc" }] },
-      { "name": "status_expires", "fields": [{ "field": "status", "order": "asc" }, { "field": "expiresAt", "order": "asc" }] }
+      { "name": "status_expires", "fields": [{ "field": "status", "order": "asc" }, { "field": "expiresAt", "order": "asc" }] },
+      { "name": "family_kind_created", "fields": [{ "field": "familyId", "order": "asc" }, { "field": "kind", "order": "asc" }, { "field": "createdAt", "order": "desc" }] },
+      { "name": "kind_status_id", "fields": [{ "field": "kind", "order": "asc" }, { "field": "status", "order": "asc" }, { "field": "_id", "order": "asc" }] }
+      ,{ "name": "kind_status_started", "fields": [{ "field": "kind", "order": "asc" }, { "field": "status", "order": "asc" }, { "field": "startedAt", "order": "asc" }] }
+    ],
+    "payment_orders": [
+      { "name": "wx_order_unique", "unique": true, "sparse": true, "fields": [{ "field": "wxOrderId", "order": "asc" }] },
+      { "name": "payer_created", "fields": [{ "field": "payerUserId", "order": "asc" }, { "field": "createdAt", "order": "desc" }] },
+      { "name": "family_status_created", "fields": [{ "field": "familyId", "order": "asc" }, { "field": "status", "order": "asc" }, { "field": "createdAt", "order": "desc" }] },
+      { "name": "status_created", "fields": [{ "field": "status", "order": "asc" }, { "field": "createdAt", "order": "asc" }] },
+      { "name": "status_paid", "fields": [{ "field": "status", "order": "asc" }, { "field": "paidAt", "order": "desc" }] }
+      ,{ "name": "created_id_desc", "fields": [{ "field": "createdAt", "order": "desc" }, { "field": "_id", "order": "desc" }] }
+      ,{ "name": "paid_id_desc", "fields": [{ "field": "paidAt", "order": "desc" }, { "field": "_id", "order": "desc" }] }
+      ,{ "name": "refunded_id_desc", "fields": [{ "field": "refundedAt", "order": "desc" }, { "field": "_id", "order": "desc" }] }
+    ],
+    "payment_events": [
+      { "name": "wx_type_unique", "unique": true, "fields": [{ "field": "wxOrderId", "order": "asc" }, { "field": "type", "order": "asc" }] },
+      { "name": "family_created", "fields": [{ "field": "familyId", "order": "asc" }, { "field": "createdAt", "order": "desc" }] }
+    ],
+    "membership_grants": [
+      { "name": "order_unique", "unique": true, "fields": [{ "field": "orderId", "order": "asc" }] },
+      { "name": "family_status_paid", "fields": [{ "field": "familyId", "order": "asc" }, { "field": "status", "order": "asc" }, { "field": "paidAt", "order": "asc" }] }
+    ],
+    "commerce_metrics_daily": [
+      { "name": "day_unique", "unique": true, "fields": [{ "field": "day", "order": "asc" }] }
     ],
     "operators": [
       { "name": "auth_uid_unique", "unique": true, "fields": [{ "field": "authUid", "order": "asc" }] },
@@ -98,6 +124,9 @@
     ],
     "audit_logs": [
       { "name": "family_created", "fields": [{ "field": "familyId", "order": "asc" }, { "field": "createdAt", "order": "desc" }] },
+      { "name": "family_action_created", "fields": [{ "field": "familyId", "order": "asc" }, { "field": "action", "order": "asc" }, { "field": "createdAt", "order": "desc" }] },
+      { "name": "family_actor_created", "fields": [{ "field": "familyId", "order": "asc" }, { "field": "actorName", "order": "asc" }, { "field": "createdAt", "order": "desc" }] },
+      { "name": "family_action_actor_created", "fields": [{ "field": "familyId", "order": "asc" }, { "field": "action", "order": "asc" }, { "field": "actorName", "order": "asc" }, { "field": "createdAt", "order": "desc" }] },
       { "name": "created_id_desc", "fields": [{ "field": "createdAt", "order": "desc" }, { "field": "_id", "order": "desc" }] },
       { "name": "operator_created", "fields": [{ "field": "operatorAudit", "order": "asc" }, { "field": "createdAt", "order": "desc" }] },
       { "name": "actor_id", "fields": [{ "field": "actorId", "order": "asc" }, { "field": "_id", "order": "asc" }] },

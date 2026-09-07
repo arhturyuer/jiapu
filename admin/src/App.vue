@@ -4,7 +4,7 @@ import { callOps, getErrorMessage, hasLoginState, signIn, signOut } from './clou
 import ExampleManager from './components/ExampleManager.vue';
 import FeedbackGroupManager from './components/FeedbackGroupManager.vue';
 
-type ModuleKey = 'dashboard' | 'users' | 'families' | 'examples' | 'feedbackGroup' | 'reports' | 'moderation' | 'deletions' | 'audits' | 'operators';
+type ModuleKey = 'dashboard' | 'commerce' | 'users' | 'families' | 'examples' | 'feedbackGroup' | 'reports' | 'moderation' | 'deletions' | 'audits' | 'operators';
 type ModerationScope = 'pending' | 'reviewed';
 type ParticipationFilter = 'all' | 'visitor' | 'creator' | 'member' | 'creator_member' | 'participating';
 type Row = Record<string, any>;
@@ -46,6 +46,7 @@ interface ShareFunnelItem {
 
 const navItems: Array<{ key: ModuleKey; label: string; caption: string }> = [
   { key: 'dashboard', label: '概览', caption: '运行状态' },
+  { key: 'commerce', label: '商业化', caption: '收入与订单' },
   { key: 'users', label: '用户', caption: '账号处置' },
   { key: 'families', label: '家谱', caption: '风险治理' },
   { key: 'examples', label: '示例家谱', caption: '内容发布' },
@@ -58,6 +59,7 @@ const navItems: Array<{ key: ModuleKey; label: string; caption: string }> = [
 ];
 
 const actionByModule: Record<Exclude<ModuleKey, 'dashboard' | 'examples' | 'feedbackGroup'>, string> = {
+  commerce: 'commerce.orders',
   users: 'users.list',
   families: 'families.list',
   reports: 'reports.list',
@@ -86,6 +88,7 @@ const pageNumber = ref(1);
 const pageCursors = ref<string[]>(['']);
 const totals = reactive({ activeUsers: 0, currentParticipatingUsers: 0, visitorUsers: 0, activeFamilies: 0, reportBacklog: 0, moderationBacklog: 0, deletionBacklog: 0 });
 const shareFunnel = ref<{ days: number; items: ShareFunnelItem[] }>({ days: 30, items: [] });
+const commerceStats = ref<Row>({});
 const dialog = reactive({
   open: false,
   title: '',
@@ -118,6 +121,8 @@ function formatDate(value: unknown): string {
   return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString('zh-CN', { hour12: false });
 }
 
+function formatMoney(cents: unknown): string { return `¥${(Number(cents || 0) / 100).toFixed(2)}`; }
+
 function resetListPagination(): void {
   pageNumber.value = 1;
   pageCursors.value = [''];
@@ -147,6 +152,11 @@ function statusLabel(value: string): string {
     pending: '待执行', failed: '失败', completed: '已完成', cancelled: '已撤销',
     review: '待人工复核', approved: '已通过', disabled: '已停用'
   };
+  return labels[value] || value || '—';
+}
+
+function commerceStatusLabel(value: string): string {
+  const labels: Record<string, string> = { pending: '待确认', fulfilled: '已发货', refunded: '已退款', failed: '失败', closed: '已关闭' };
   return labels[value] || value || '—';
 }
 
@@ -310,6 +320,7 @@ async function loadModule(module: ModuleKey, direction: 'reset' | 'next' | 'prev
     if (['users', 'families'].includes(module) && listStatus.value) params.status = listStatus.value;
     if (['reports', 'deletions'].includes(module) && listScope.value) params.scope = listScope.value;
     if (module === 'users' && userParticipationFilter.value !== 'all') params.participationType = userParticipationFilter.value;
+    if (module === 'commerce') commerceStats.value = await callOps<Row>('commerce.summary');
     const data = await callOps<PageResult>(actionByModule[module], params);
     rows.value = data.items;
     nextCursor.value = data.nextCursor;
@@ -574,6 +585,18 @@ onMounted(bootstrap);
 
       <ExampleManager v-else-if="activeModule === 'examples'" :is-super-admin="operator?.role === 'super_admin'" />
       <FeedbackGroupManager v-else-if="activeModule === 'feedbackGroup'" />
+
+      <section v-else-if="activeModule === 'commerce'" class="commerce-module">
+        <div class="dashboard-grid">
+          <article class="dashboard-card"><span>本月 GMV</span><strong>{{ formatMoney(commerceStats.gmvCents) }}</strong><small>净收入 {{ formatMoney(commerceStats.netCents) }}</small></article>
+          <article class="dashboard-card"><span>退款</span><strong>{{ formatMoney(commerceStats.refundCents) }}</strong><small>{{ commerceStats.refundedCount || 0 }} 笔退款订单</small></article>
+          <article class="dashboard-card"><span>支付转化</span><strong>{{ commerceStats.conversionRate || 0 }}%</strong><small>{{ commerceStats.fulfilledCount || 0 }} / {{ commerceStats.orderCount || 0 }} 笔</small></article>
+          <article class="dashboard-card"><span>有效会员家庭</span><strong>{{ commerceStats.activeMemberFamilies || 0 }}</strong><small>期限与永久会员合计</small></article>
+          <article class="dashboard-card" :class="{ attention: commerceStats.alertLevel }"><span>月支付额度</span><strong>{{ commerceStats.monthlyLimitPercent || 0 }}%</strong><small>上限 {{ formatMoney(commerceStats.monthlyLimitCents) }}<template v-if="commerceStats.alertLevel"> · 已触发 {{ commerceStats.alertLevel }}% 告警</template></small></article>
+        </div>
+        <div class="share-funnel-card"><div class="share-funnel-heading"><div><p class="eyebrow">SKU MIX</p><h2>本月商品结构</h2></div><small>价格由用户 API 服务端商品目录决定，后台不可修改。</small></div><div class="table-wrap"><table><thead><tr><th>商品</th><th>订单</th><th>GMV</th></tr></thead><tbody><tr v-for="item in commerceStats.sku || []" :key="item.productId"><td><strong>{{ item.name }}</strong><small>{{ item.productId }}</small></td><td>{{ item.orders }}</td><td>{{ formatMoney(item.gmvCents) }}</td></tr></tbody></table></div></div>
+        <div class="table-card"><div v-if="loading && !rows.length" class="loading-state"><div class="spinner"></div><p>正在读取订单…</p></div><div v-else-if="!rows.length" class="empty-state"><div>空</div><h3>当前没有订单</h3></div><div v-else class="table-wrap"><table><thead><tr><th>订单 / 家谱</th><th>商品</th><th>金额</th><th>状态</th><th>查单状态</th><th>创建时间</th><th>操作</th></tr></thead><tbody><tr v-for="row in rows" :key="row._id"><td><strong>{{ row._id }}</strong><small>{{ row.familyName || row.familyId }}</small></td><td><strong>{{ row.productName }}</strong><small>{{ row.productId }}</small></td><td>{{ formatMoney(row.priceCents) }}</td><td><span class="status" :class="row.status">{{ commerceStatusLabel(row.status) }}</span></td><td><strong>{{ row.reconcileStatus || '—' }}</strong><small>{{ row.reconcileMessage }}</small></td><td>{{ formatDate(row.createdAt) }}</td><td class="row-actions"><button v-if="row.status === 'pending'" @click="openAction('重新查询订单', '只会请求后台重新向微信平台查单，不会手工开会员、改价或退款。', 'commerce.retryOrder', { orderId: row._id })">查单重试</button></td></tr></tbody></table></div><div v-if="rows.length" class="pagination"><span>本页 {{ rows.length }} 条</span><div><button :disabled="loading || pageNumber === 1" @click="loadModule(activeModule, 'previous')">上一页</button><strong>第 {{ pageNumber }} 页</strong><button :disabled="loading || !hasMore" @click="loadModule(activeModule, 'next')">下一页</button></div></div></div>
+      </section>
 
       <section v-else class="table-card">
         <div v-if="activeFilterDescription()" class="active-filter"><span>当前查看：{{ activeFilterDescription() }}</span><button :disabled="loading" @click="showAllRecords">查看全部</button></div>

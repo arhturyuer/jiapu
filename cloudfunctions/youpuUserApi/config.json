@@ -6,6 +6,7 @@
     ]
   },
   "envVariables": {
-    "CONTENT_MODERATION_MODE": "strict"
+    "CONTENT_MODERATION_MODE": "strict",
+    "PAYMENT_MODE": "mock"
   }
 }

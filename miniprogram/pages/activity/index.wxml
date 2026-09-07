@@ -1,0 +1,8 @@
+<view class="activity-page page-shell">
+  <view class="filter-card surface-card"><view class="filter-row"><input placeholder="操作类型，如 person.update" value="{{action}}" bindinput="inputAction"/><input placeholder="操作者昵称（精确）" value="{{actorName}}" bindinput="inputActor"/></view><view class="date-row"><picker mode="date" value="{{from}}" bindchange="changeFrom"><view>{{from || '开始日期'}}</view></picker><text>至</text><picker mode="date" bindchange="changeTo"><view>{{to ? '已选择结束日期' : '结束日期'}}</view></picker></view><view class="filter-actions"><button class="secondary-button" bindtap="clearFilters">清除</button><button class="primary-button" bindtap="applyFilters">查询</button></view></view>
+  <view class="upgrade-tip" wx:if="{{membershipRequired}}" bindtap="openMembership"><view><text>免费家庭显示最近 20 条</text><text>升级后可查看自功能上线以来的完整历史并分页筛选。</text></view><text>升级 ›</text></view>
+  <view class="loading-panel" wx:if="{{loading}}"><view class="loading-dot"></view><text>正在读取变更历史…</text></view>
+  <view class="history-list surface-card" wx:elif="{{items.length}}"><view class="history-row" wx:for="{{items}}" wx:key="_id"><view class="history-dot"></view><view><text class="history-summary">{{item.actorName}} {{item.summary}}</text><text class="history-meta">{{item.action}} · {{item.timeText}}</text></view></view></view>
+  <view class="empty-panel" wx:else><text class="empty-title">没有匹配的变更记录</text><text class="empty-description">修改家谱后，记录会出现在这里。</text></view>
+  <button class="secondary-button more-button" wx:if="{{hasMore}}" loading="{{loadingMore}}" bindtap="loadMore">加载更早记录</button>
+</view>

@@ -3,6 +3,8 @@ const api = require('../../utils/api');
 const privacy = require('../../utils/privacy');
 const formState = require('../../utils/form-state');
 const format = require('../../utils/format');
+const commerceConfig = require('../../config/commerce');
+const membershipDisplay = require('../../utils/membership-display');
 
 var AVATAR_CACHE_KEY = 'youpu_avatar_cache';
 
@@ -75,7 +77,12 @@ Page({
     currentFamily: null,
     currentRoleText: '',
     currentFamilyUpdatedText: '',
-    showFamilySheet: false
+    showFamilySheet: false,
+    membershipTierText: '免费版',
+    membershipDetailText: '升级后全体家人共享会员权益',
+    membershipActive: false,
+    adUnitId: '',
+    adVisible: false
   },
 
   onShow: function () { this.loadPage(); },
@@ -101,6 +108,7 @@ Page({
       return app.loadFamilyPages(true /* cached */, config).then(function (result) {
         const grouped = splitFamilies(result.families);
         const currentFamily = reconcileCurrentFamily(grouped.active);
+        const membershipPresentation = membershipDisplay.fromFamily(currentFamily);
         self._initialNickName = user.nickName || '';
         const cachedUrl = getCachedAvatarUrl(user.avatarAssetId);
         const pageData = {
@@ -108,7 +116,12 @@ Page({
           nickName: user.nickName || '', avatarUrl: cachedUrl, avatarAssetId: user.avatarAssetId || '',
           familyList: grouped.active, archivedFamilies: grouped.archived, currentFamily: currentFamily,
           currentRoleText: currentFamily ? format.roleText(currentFamily.currentRole) : '',
-          currentFamilyUpdatedText: currentFamily && currentFamily.updatedAt ? '最近更新 ' + format.relativeTime(currentFamily.updatedAt) : ''
+          currentFamilyUpdatedText: currentFamily && currentFamily.updatedAt ? '最近更新 ' + format.relativeTime(currentFamily.updatedAt) : '',
+          membershipActive: membershipPresentation.active,
+          membershipTierText: membershipPresentation.tierText,
+          membershipDetailText: membershipPresentation.detailText,
+          adUnitId: commerceConfig.resolveBanner(app.globalData.environment, 'profile'),
+          adVisible: Boolean(currentFamily && !(currentFamily.membership && currentFamily.membership.active) && commerceConfig.resolveBanner(app.globalData.environment, 'profile'))
         };
         if (!user.avatarAssetId) return pageData;
         return api.getMediaPresentation([user.avatarAssetId]).then(function (presentation) {
@@ -228,16 +241,16 @@ Page({
     app.setCurrentFamily(family);
     app.invalidateCache({ graph: family._id, dashboard: family._id });
     wx.setStorageSync('youpu_pending_view', { mode: 'full', personId: '' });
-    this.setData({ currentFamily: family, currentRoleText: format.roleText(family.currentRole), currentFamilyUpdatedText: family.updatedAt ? '最近更新 ' + format.relativeTime(family.updatedAt) : '', showFamilySheet: false });
+    const adUnitId = commerceConfig.resolveBanner(app.globalData.environment, 'profile');
+    const membershipPresentation = membershipDisplay.fromFamily(family);
+    this.setData({ currentFamily: family, currentRoleText: format.roleText(family.currentRole), currentFamilyUpdatedText: family.updatedAt ? '最近更新 ' + format.relativeTime(family.updatedAt) : '', showFamilySheet: false,
+      membershipActive: membershipPresentation.active,
+      membershipTierText: membershipPresentation.tierText,
+      membershipDetailText: membershipPresentation.detailText,
+      adUnitId: adUnitId, adVisible: Boolean(adUnitId && !(family.membership && family.membership.active)) });
     wx.showModal({ title: '已切换到“' + family.name + '”', content: '现在去查看这份家谱吗？', confirmText: '去查看', cancelText: '留在这里' }).then(function (result) {
       if (result.confirm) wx.switchTab({ url: '/pages/tree/index' });
     });
-  },
-
-  openCurrentGraph: function () {
-    if (!this.data.currentFamily) return;
-    app.openFullGraph(this.data.currentFamily);
-    wx.switchTab({ url: '/pages/tree/index' });
   },
 
   createFamily: function () { this.closeFamilySheet(); wx.navigateTo({ url: '/pages/create-family/index' }); },
@@ -251,6 +264,20 @@ Page({
     if (!family) return;
     wx.navigateTo({ url: '/pages/family-manage/index?familyId=' + family._id });
   },
+
+  openMembership: function () {
+    if (!this.data.currentFamily) return;
+    wx.navigateTo({ url: '/pages/membership/index?familyId=' + this.data.currentFamily._id });
+  },
+  openActivity: function () {
+    if (!this.data.currentFamily) return;
+    wx.navigateTo({ url: '/pages/activity/index?familyId=' + this.data.currentFamily._id });
+  },
+  openFamilyBackup: function () {
+    if (!this.data.currentFamily) return;
+    wx.navigateTo({ url: '/pages/family-backup/index?familyId=' + this.data.currentFamily._id });
+  },
+  hideAd: function () { this.setData({ adVisible: false }); },
 
   openArchivedFamily: function (event) { wx.navigateTo({ url: '/pages/family-manage/index?familyId=' + event.currentTarget.dataset.id }); },
 

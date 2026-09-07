@@ -19,6 +19,9 @@
     "pages/report/index",
     "pages/legal/index",
     "pages/about/index"
+    ,"pages/membership/index"
+    ,"pages/activity/index"
+    ,"pages/family-backup/index"
   ],
   "window": {
     "backgroundColor": "#F7F4EC",

@@ -47,8 +47,10 @@ function resolveRuntimeEnvironment(wxApi) {
   const runtimeVersion = getRuntimeVersion(wxApi);
   // Official values: develop (开发版), trial (体验版), release (正式版).
   // Unknown values deliberately stay on staging so a platform/API anomaly can
-  // never redirect a test package to production.
-  const active = runtimeVersion === 'release' ? 'production' : 'staging';
+  // never redirect an unrecognized package to production.
+  const active = (runtimeVersion === 'trial' || runtimeVersion === 'release')
+    ? 'production'
+    : 'staging';
   return {
     active: active,
     runtimeVersion: runtimeVersion || 'unknown',

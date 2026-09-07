@@ -24,13 +24,24 @@ const CONTENT = {
       { title: '暂停与终止', body: '对存在安全风险、违法内容或严重滥用的账户和家谱，运营人员可以冻结访问并保留申诉渠道。你可以退出家庭、归档家谱或申请注销账户。' },
       { title: '联系与争议', body: '如需更正、删除、投诉或申诉，请通过小程序内微信客服与运营者联系。' }
     ]
+  },
+  membership: {
+    title: '有谱家庭会员与退款说明',
+    intro: '家庭会员按所选家谱生效。购买前请确认家谱名称、商品期限和以下规则。',
+    sections: [
+      { title: '权益范围', body: '任一有效家庭成员均可为当前家谱购买，去广告、完整变更历史和完整家庭备份由该家谱全体有效成员共享。多份家谱分别付费，权益不可转移。' },
+      { title: '商品与期限', body: '家庭会员为固定期限道具直购，不自动续费、不设试用。期限从当前有效期与支付时间中较晚者开始累加；永久会员覆盖已有期限会员，永久会员不可重复购买。' },
+      { title: '归档与删除', body: '归档家谱不会暂停会员期限。家谱永久删除时会员随之终止且不可转移。永久会员指家谱未永久删除且有谱服务持续运营期间有效，不承诺服务永续。' },
+      { title: '退款处理', body: 'Android 等终端请通过微信客服申请并由平台处理；iOS 请按 App Store 规则申请。权益只在收到平台退款通知后，按剩余未退款订单重新计算。已下载的备份不追回，云端待领取文件仍按原有效期删除。' },
+      { title: '支付确认', body: '支付完成后可能需要短暂确认。前端支付成功提示不代表会员已开通，以平台通知并由服务端完成发货为准。请勿重复支付，长时间未确认可联系微信客服查单。' }
+    ]
   }
 };
 
 Page({
   data: { legal: legal, content: CONTENT.privacy },
   onLoad: function (options) {
-    const content = options.type === 'terms' ? CONTENT.terms : CONTENT.privacy;
+    const content = options.type === 'membership' ? CONTENT.membership : (options.type === 'terms' ? CONTENT.terms : CONTENT.privacy);
     this.setData({ content: content });
     wx.setNavigationBarTitle({ title: content.title });
   }

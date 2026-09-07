@@ -3,6 +3,8 @@ const api = require('../../utils/api');
 const format = require('../../utils/format');
 const shareInvite = require('../../utils/share-invite');
 const shareCard = require('../../utils/share-card');
+const commerceConfig = require('../../config/commerce');
+const membershipDisplay = require('../../utils/membership-display');
 
 Page({
   data: {
@@ -20,7 +22,12 @@ Page({
     shareReady: false,
     shareCreating: false,
     shareCard: null,
-    systemShareCard: shareCard.create({ kind: 'discovery' })
+    systemShareCard: shareCard.create({ kind: 'discovery' }),
+    membershipActive: false,
+    membershipTierText: '免费版',
+    membershipDetailText: '升级后全体家人共享会员权益',
+    adUnitId: '',
+    adVisible: false
   },
 
   onShow: function () {
@@ -57,6 +64,7 @@ Page({
           avatarUrl: ''
         });
       });
+      const membershipPresentation = membershipDisplay.fromFamily(data.family);
       self.setData({
         loading: false,
         currentFamily: data.family,
@@ -66,6 +74,11 @@ Page({
         onboarding: data.onboarding || { isCreator: false, sharedAt: null },
         collaborators: collaborators,
         pendingChanges: data.pendingChanges || [],
+        membershipActive: membershipPresentation.active,
+        membershipTierText: membershipPresentation.tierText,
+        membershipDetailText: membershipPresentation.detailText,
+        adUnitId: commerceConfig.resolveBanner(app.globalData.environment, 'family'),
+        adVisible: Boolean(commerceConfig.resolveBanner(app.globalData.environment, 'family') && !(data.family.membership && data.family.membership.active)),
         recentActivities: (data.recentActivities || []).map(function (item) {
           return Object.assign({}, item, { timeText: format.relativeTime(item.createdAt) });
         })
@@ -118,6 +131,11 @@ Page({
     if (!this.data.currentFamily) return;
     wx.navigateTo({ url: '/pages/family-manage/index?familyId=' + this.data.currentFamily._id });
   },
+
+  openMembership: function () { if (this.data.currentFamily) wx.navigateTo({ url: '/pages/membership/index?familyId=' + this.data.currentFamily._id }); },
+  openActivity: function () { if (this.data.currentFamily) wx.navigateTo({ url: '/pages/activity/index?familyId=' + this.data.currentFamily._id }); },
+  openFamilyBackup: function () { if (this.data.currentFamily) wx.navigateTo({ url: '/pages/family-backup/index?familyId=' + this.data.currentFamily._id }); },
+  hideAd: function () { this.setData({ adVisible: false }); },
 
   reviewChange: function (event) {
     const self = this;

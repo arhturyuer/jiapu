@@ -15,10 +15,10 @@ function runtime(version) {
   };
 }
 
-test('官方小程序版本将开发版和体验版路由到 staging，正式版路由到 production', function () {
+test('官方小程序版本将开发版路由到 staging，体验版和正式版路由到 production', function () {
   const environment = loadEnvironment();
   assert.equal(environment.resolveRuntimeEnvironment(runtime('develop')).active, 'staging');
-  assert.equal(environment.resolveRuntimeEnvironment(runtime('trial')).active, 'staging');
+  assert.equal(environment.resolveRuntimeEnvironment(runtime('trial')).active, 'production');
   assert.equal(environment.resolveRuntimeEnvironment(runtime('release')).active, 'production');
 });
 

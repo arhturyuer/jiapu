@@ -11,6 +11,12 @@
   "youpuJobs": {
     "invoke": false
   },
+  "youpuPaymentNotify": {
+    "invoke": false
+  },
+  "youpuPaymentNotifyV2": {
+    "invoke": false
+  },
   "familyFunctions": {
     "invoke": "auth.loginType != 'ANONYMOUS' && auth != null"
   }
