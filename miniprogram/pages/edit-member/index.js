@@ -2,6 +2,7 @@ const app = getApp();
 const api = require('../../utils/api');
 const privacy = require('../../utils/privacy');
 const formState = require('../../utils/form-state');
+const personGender = require('../../utils/person-gender');
 
 const FORM_FIELDS = ['name', 'gender', 'birthDate', 'birthPlace', 'bio', 'lifeStatus'];
 
@@ -31,6 +32,7 @@ Page({
     error: '',
     name: '',
     gender: 'unknown',
+    canKeepUnknownGender: false,
     birthDate: '',
     birthPlace: '',
     avatar: '',
@@ -75,6 +77,7 @@ Page({
         familyId: person.familyId || '',
         name: person.name || '',
         gender: person.gender || 'unknown',
+        canKeepUnknownGender: !personGender.isKnown(person.gender),
         birthDate: person.birthDate || '',
         birthPlace: person.birthPlace || '',
         avatar: '',
@@ -132,7 +135,9 @@ Page({
   },
 
   chooseGender: function (event) {
-    this.setFormData({ gender: event.currentTarget.dataset.gender });
+    const gender = event.currentTarget.dataset.gender;
+    if (!personGender.isKnown(gender) && !(gender === 'unknown' && this.data.canKeepUnknownGender)) return;
+    this.setFormData({ gender: gender });
   },
 
   chooseLifeStatus: function (event) {
@@ -257,7 +262,7 @@ Page({
     }).then(function (data) {
       if (app.invalidateFamilyData) app.invalidateFamilyData(self.data.familyId);
       self._initialForm = current;
-      self.setData({ submitting: false, hasFormChanges: false }, function () { self.refreshFormState(); });
+      self.setData({ submitting: false, hasFormChanges: false, canKeepUnknownGender: !personGender.isKnown(current.gender) }, function () { self.refreshFormState(); });
       wx.showToast({
         title: self.data.avatarState === 'failed'
           ? '资料已保存，头像仍需重试'

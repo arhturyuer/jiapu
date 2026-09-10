@@ -20,9 +20,9 @@
       <view class="generation-heading"><text class="generation-title">{{section.label}}</text><text class="generation-count">{{section.persons.length}} 人</text></view>
       <view class="member-list surface-card">
         <view class="member-row" wx:for="{{section.persons}}" wx:key="_id" wx:for-item="member" data-id="{{member._id}}" hover-class="member-row-active" bindtap="openMember">
-          <image class="member-avatar" wx:if="{{member.avatar}}" src="{{member.avatar}}" mode="aspectFill"></image>
-          <view class="member-avatar member-placeholder" wx:else>{{member.initial}}</view>
-          <view class="member-copy"><text class="member-name">{{member.name}}</text><text class="member-meta">{{member.metaText}}</text></view>
+          <image class="member-avatar gender-avatar {{member.genderClass}}" wx:if="{{member.avatar}}" src="{{member.avatar}}" mode="aspectFill"></image>
+          <view class="member-avatar member-placeholder gender-avatar {{member.genderClass}}" wx:else>{{member.initial}}</view>
+          <view class="member-copy"><view class="member-name-row"><text class="member-name">{{member.name}}</text><text class="gender-badge {{member.genderClass}}">{{member.genderText}}</text></view><text class="member-meta">{{member.metaText}}</text></view>
           <text class="member-arrow">›</text>
         </view>
       </view>
@@ -31,9 +31,9 @@
 
   <view class="member-list flat-list surface-card" wx:if="{{!showEmpty && (searching || viewMode !== 'generation')}}">
     <view class="member-row" wx:for="{{displayedPersons}}" wx:key="_id" data-id="{{item._id}}" hover-class="member-row-active" bindtap="openMember">
-      <image class="member-avatar" wx:if="{{item.avatar}}" src="{{item.avatar}}" mode="aspectFill"></image>
-      <view class="member-avatar member-placeholder" wx:else>{{item.initial}}</view>
-      <view class="member-copy"><text class="member-name">{{item.name}}</text><text class="member-meta {{viewMode === 'missing' ? 'missing-meta' : ''}}">{{viewMode === 'missing' ? item.missingText : (viewMode === 'name' || searching) ? item.nameMetaText : item.metaText}}</text></view>
+      <image class="member-avatar gender-avatar {{item.genderClass}}" wx:if="{{item.avatar}}" src="{{item.avatar}}" mode="aspectFill"></image>
+      <view class="member-avatar member-placeholder gender-avatar {{item.genderClass}}" wx:else>{{item.initial}}</view>
+      <view class="member-copy"><view class="member-name-row"><text class="member-name">{{item.name}}</text><text class="gender-badge {{item.genderClass}}">{{item.genderText}}</text></view><text class="member-meta {{viewMode === 'missing' ? 'missing-meta' : ''}}">{{viewMode === 'missing' ? item.missingText : (viewMode === 'name' || searching) ? item.nameMetaText : item.metaText}}</text></view>
       <text class="member-arrow">›</text>
     </view>
   </view>

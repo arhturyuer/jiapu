@@ -2,11 +2,11 @@
 <view class="page-shell" wx:elif="{{error}}"><view class="empty-panel"><view class="empty-mark">!</view><text class="empty-title">无法打开人物资料</text><text class="empty-description">{{error}}</text><button class="secondary-button" bindtap="loadPerson">重新加载</button></view></view>
 <view class="detail-page page-shell" wx:elif="{{person}}">
   <view class="hero-card surface-card">
-    <image class="hero-avatar" wx:if="{{person.avatar}}" src="{{person.avatar}}" mode="aspectFill"></image>
-    <view class="hero-avatar hero-placeholder" wx:else>{{person.initial}}</view>
+    <image class="hero-avatar gender-avatar {{person.genderClass}}" wx:if="{{person.avatar}}" src="{{person.avatar}}" mode="aspectFill"></image>
+    <view class="hero-avatar hero-placeholder gender-avatar {{person.genderClass}}" wx:else>{{person.initial}}</view>
     <text class="hero-name">{{person.name}}</text>
     <view class="hero-tags">
-      <text class="status-tag">{{person.genderText}}</text>
+      <text class="status-tag gender-badge {{person.genderClass}}">{{person.genderText}}</text>
       <text class="status-tag">{{person.lifeText}}</text>
     </view>
     <button class="secondary-button perspective-button" bindtap="viewFromPerson">从他/她看家谱</button>
@@ -29,9 +29,9 @@
           <text class="relation-remove-text">{{removingRelationId === item.relationId ? '移除中' : '移除关系'}}</text>
         </view>
         <view class="relation-row {{openRelationId === item.relationId ? 'swiped' : ''}}" data-id="{{item.person._id}}" data-relation-id="{{item.relationId}}" bindtouchstart="onRelationTouchStart" bindtouchmove="onRelationTouchMove" bindtouchend="onRelationTouchEnd" bindtouchcancel="onRelationTouchCancel" bindtap="openRelative">
-          <image class="relation-avatar" wx:if="{{item.person.avatar}}" src="{{item.person.avatar}}" mode="aspectFill"></image>
-          <view class="relation-avatar relation-placeholder" wx:else>{{item.initial}}</view>
-          <view class="relation-copy"><text class="relation-name">{{item.person.name}}</text><text class="relation-label">{{item.label}}</text></view>
+          <image class="relation-avatar gender-avatar {{item.person.genderClass}}" wx:if="{{item.person.avatar}}" src="{{item.person.avatar}}" mode="aspectFill"></image>
+          <view class="relation-avatar relation-placeholder gender-avatar {{item.person.genderClass}}" wx:else>{{item.initial}}</view>
+          <view class="relation-copy"><view class="relation-name-row"><text class="relation-name">{{item.person.name}}</text><text class="gender-badge {{item.person.genderClass}}">{{item.person.genderText}}</text></view><text class="relation-label">{{item.label}}</text></view>
           <text class="relation-arrow">›</text>
         </view>
       </view>

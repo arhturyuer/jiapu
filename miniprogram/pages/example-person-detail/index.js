@@ -1,5 +1,6 @@
 const api = require('../../utils/api');
 const kinship = require('../../utils/kinship');
+const personGender = require('../../utils/person-gender');
 
 function labelForRelation(person, relation, related) {
   const role = relation.type === 'spouse' ? 'spouse' : relation.toPersonId === person._id ? 'parent' : 'child';
@@ -28,9 +29,9 @@ Page({
       const relatives = (example.relations || []).filter(function (relation) { return relation.fromPersonId === person._id || relation.toPersonId === person._id; }).map(function (relation) {
         const relatedId = relation.fromPersonId === person._id ? relation.toPersonId : relation.fromPersonId;
         const related = people.find(function (item) { return item._id === relatedId; }) || {};
-        return { relationId: relation._id, person: Object.assign({}, related, { initial: (related.name || '家').slice(0, 1) }), label: labelForRelation(person, relation, related) };
+        return { relationId: relation._id, person: personGender.decorate(Object.assign({}, related, { initial: (related.name || '家').slice(0, 1) })), label: labelForRelation(person, relation, related) };
       });
-      self.setData({ loading: false, person: Object.assign({}, person, { initial: (person.name || '家').slice(0, 1), genderText: person.gender === 'male' ? '男' : person.gender === 'female' ? '女' : '未填写', lifeText: person.lifeStatus === 'living' ? '健在' : person.lifeStatus === 'deceased' ? '已故' : '未填写' }), relatives: relatives });
+      self.setData({ loading: false, person: personGender.decorate(Object.assign({}, person, { initial: (person.name || '家').slice(0, 1), lifeText: person.lifeStatus === 'living' ? '健在' : person.lifeStatus === 'deceased' ? '已故' : '未填写' })), relatives: relatives });
     }).catch(function (error) { self.setData({ loading: false, error: error.message || '资料加载失败' }); });
   },
   openRelative: function (event) {

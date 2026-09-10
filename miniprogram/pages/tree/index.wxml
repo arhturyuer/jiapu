@@ -91,18 +91,19 @@
         <view
           wx:for="{{nodes}}"
           wx:key="_id"
-          class="person-node {{nameLayout === 'vertical' ? 'node-vertical' : ''}} {{item.isViewpoint ? 'is-viewpoint' : ''}} {{item.isSelected ? 'is-selected' : ''}}"
+          class="person-node gender-surface {{item.genderClass}} {{nameLayout === 'vertical' ? 'node-vertical' : ''}} {{item.isViewpoint ? 'is-viewpoint' : ''}} {{item.isSelected ? 'is-selected' : ''}}"
           style="{{item.style}}"
           data-id="{{item._id}}"
           catchtap="showPerson"
         >
+          <text class="gender-badge gender-node-badge {{item.genderClass}}">{{item.genderText}}</text>
           <block wx:if="{{nameLayout === 'vertical'}}">
             <text class="node-name node-name-vertical">{{item.verticalName}}</text>
             <text class="node-meta node-kinship" wx:if="{{viewMode === 'perspective' && item.relationLabel}}">{{item.relationLabel}}</text>
           </block>
           <block wx:else>
-            <image class="node-avatar" wx:if="{{item.avatar}}" src="{{item.avatar}}" mode="aspectFill"></image>
-            <view class="node-avatar node-placeholder" wx:else>{{item.initial}}</view>
+            <image class="node-avatar gender-avatar {{item.genderClass}}" wx:if="{{item.avatar}}" src="{{item.avatar}}" mode="aspectFill"></image>
+            <view class="node-avatar node-placeholder gender-avatar {{item.genderClass}}" wx:else>{{item.initial}}</view>
             <text class="node-name">{{item.name}}</text>
             <text class="node-meta" wx:if="{{viewMode === 'perspective' && item.relationLabel}}">{{item.relationLabel}}</text>
             <text class="node-meta" wx:elif="{{item.metaText}}">{{item.metaText}}</text>
@@ -151,10 +152,10 @@
     <view class="bottom-sheet person-sheet" catchtap="stopEvent">
       <view class="sheet-handle"></view>
       <view class="person-sheet-head">
-        <image class="person-sheet-avatar" wx:if="{{selectedPerson.avatar}}" src="{{selectedPerson.avatar}}" mode="aspectFill"></image>
-        <view class="person-sheet-avatar person-sheet-placeholder" wx:else>{{selectedPerson.initial}}</view>
+        <image class="person-sheet-avatar gender-avatar {{selectedPerson.genderClass}}" wx:if="{{selectedPerson.avatar}}" src="{{selectedPerson.avatar}}" mode="aspectFill"></image>
+        <view class="person-sheet-avatar person-sheet-placeholder gender-avatar {{selectedPerson.genderClass}}" wx:else>{{selectedPerson.initial}}</view>
         <view class="person-sheet-copy">
-          <text class="person-sheet-name">{{selectedPerson.name}}</text>
+          <view class="person-sheet-name-row"><text class="person-sheet-name">{{selectedPerson.name}}</text><text class="gender-badge {{selectedPerson.genderClass}}">{{selectedPerson.genderText}}</text></view>
           <text class="muted-text">{{selectedPerson.birthDate || '家庭成员'}}</text>
         </view>
       </view>
@@ -195,8 +196,9 @@
       <input class="person-search" placeholder="输入姓名查找" value="{{perspectiveKeyword}}" bindinput="filterPerspectives" />
       <scroll-view class="perspective-list" scroll-y>
         <view class="perspective-option" wx:for="{{perspectiveResults}}" wx:key="_id" data-id="{{item._id}}" bindtap="selectPerspective">
-          <view class="small-avatar">{{item.initial}}</view>
-          <text>{{item.name}}</text>
+          <view class="small-avatar gender-avatar {{item.genderClass}}">{{item.initial}}</view>
+          <text class="perspective-name">{{item.name}}</text>
+          <text class="gender-badge {{item.genderClass}}">{{item.genderText}}</text>
         </view>
       </scroll-view>
     </view>

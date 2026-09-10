@@ -3,6 +3,7 @@ const graphLayout = require('../../utils/graph-layout');
 const kinship = require('../../utils/kinship');
 const graphViewport = require('../../utils/graph-viewport');
 const shareCard = require('../../utils/share-card');
+const personGender = require('../../utils/person-gender');
 const MAX_INTERACTIVE_NODES = 80;
 const EXAMPLE_NAME_LAYOUT_KEY_PREFIX = 'youpu_example_name_layout_';
 
@@ -46,7 +47,7 @@ Page({
     return api.call('examples.get', { slug: this.data.slug }).then(function (data) {
       const example = data.example;
       const persons = (example.persons || []).map(function (person) {
-        return Object.assign({}, person, { initial: (person.name || '家').slice(0, 1), metaText: person.lifeStatus === 'deceased' ? '故' : person.birthDate ? person.birthDate.slice(0, 4) + '年' : '' });
+        return personGender.decorate(Object.assign({}, person, { initial: (person.name || '家').slice(0, 1), metaText: person.lifeStatus === 'deceased' ? '故' : person.birthDate ? person.birthDate.slice(0, 4) + '年' : '' }));
       });
       const relations = example.relations || [];
       const collapsed = graphLayout.suggestCollapsedIds(persons, relations, { limit: 36 });

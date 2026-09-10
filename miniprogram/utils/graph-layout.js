@@ -25,6 +25,7 @@ const LINE_OVERLAP = 2;
 const MAX_ANIMATED_CHILDREN = 12;
 const FAMILY_RAIL_CLEARANCE = 24;
 const kinship = require('./kinship');
+const personGenderDisplay = require('./person-gender');
 
 function metricsForNameLayout(nameLayout) {
   return nameLayout === 'vertical' ? VERTICAL_METRICS : HORIZONTAL_METRICS;
@@ -913,7 +914,7 @@ function layoutGraph(personsInput, relationsInput, options) {
       unit.members.forEach(function (person, memberIndex) {
         const x = unit.x + memberIndex * (metrics.nodeWidth + metrics.coupleGap);
         const y = metrics.marginY + generation * metrics.gapY;
-        const node = Object.assign({}, person, {
+        const node = Object.assign({}, personGenderDisplay.decorate(person), {
           x: x,
           y: y,
           style: 'left:' + x + 'rpx;top:' + y + 'rpx;width:' + metrics.nodeWidth + 'rpx;height:' + metrics.nodeHeight + 'rpx;',

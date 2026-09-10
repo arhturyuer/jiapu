@@ -23,6 +23,7 @@
 .relation-avatar { width: 72rpx; height: 72rpx; margin-right: 20rpx; border-radius: 22rpx; }
 .relation-placeholder { display: flex; align-items: center; justify-content: center; color: #245C4A; background: #E4EFEA; font-weight: 600; }
 .relation-copy { flex: 1; display: flex; flex-direction: column; }
+.relation-name-row { min-width: 0; display: flex; align-items: center; gap: 12rpx; }
 .relation-name { font-weight: 600; }
 .relation-label { margin-top: 4rpx; color: #65706A; font-size: 26rpx; }
 .relation-arrow { color: #9AA39E; font-size: 48rpx; }

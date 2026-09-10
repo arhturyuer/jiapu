@@ -39,6 +39,7 @@
 .duplicate-box { margin-top: 16rpx; padding: 20rpx; background: #FFF7E4; border: 2rpx solid #E9D39A; border-radius: 18rpx; }
 .duplicate-title, .duplicate-note { display: block; color: #765A20; font-size: 24rpx; }
 .duplicate-person { min-height: 64rpx; display: flex; align-items: center; justify-content: space-between; border-bottom: 2rpx solid rgba(118, 90, 32, 0.12); font-size: 25rpx; }
+.duplicate-person-main { min-width: 0; display: flex; align-items: center; gap: 10rpx; }
 .link-text { margin-left: 20rpx; color: #245C4A; white-space: nowrap; }
 .duplicate-note { margin-top: 10rpx; }
 .more-toggle { margin-top: 26rpx; padding: 24rpx 0 4rpx; display: flex; justify-content: space-between; color: #245C4A; border-top: 2rpx solid #EEF0ED; }

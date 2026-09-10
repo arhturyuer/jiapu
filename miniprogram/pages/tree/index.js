@@ -3,6 +3,7 @@ const api = require('../../utils/api');
 const graphLayout = require('../../utils/graph-layout');
 const graphViewport = require('../../utils/graph-viewport');
 const kinship = require('../../utils/kinship');
+const personGender = require('../../utils/person-gender');
 const shareInvite = require('../../utils/share-invite');
 const shareCard = require('../../utils/share-card');
 
@@ -109,7 +110,7 @@ Page({
       }
       return app.getGraph(currentFamily._id, config).then(function (data) {
         const persons = (data.persons || []).map(function (person) {
-          return Object.assign({}, person, {
+          return personGender.decorate(Object.assign({}, person, {
             avatar: '',
             initial: (person.name || '家').slice(0, 1),
             metaText: person.lifeStatus === 'deceased'
@@ -117,7 +118,7 @@ Page({
               : person.birthDate
                 ? person.birthDate.slice(0, 4) + '年'
                 : ''
-          });
+          }));
         });
         let mode = self.data.viewMode;
         let personId = self.data.viewpointId;

@@ -1,6 +1,7 @@
 const app = getApp();
 const api = require('../../utils/api');
 const kinship = require('../../utils/kinship');
+const personGender = require('../../utils/person-gender');
 
 Page({
   data: {
@@ -33,15 +34,15 @@ Page({
     const self = this;
     this.setData({ loading: true, error: '', openRelationId: '' });
     return api.call('person.get', { personId: this.data.personId }).then(function (data) {
-      const person = Object.assign({}, data.person, {
+      const person = personGender.decorate(Object.assign({}, data.person, {
         initial: (data.person.name || '家').slice(0, 1),
-        genderText: data.person.gender === 'male' ? '男' : data.person.gender === 'female' ? '女' : '未填写',
         lifeText: data.person.lifeStatus === 'living' ? '健在' : data.person.lifeStatus === 'deceased' ? '已故' : '未填写'
-      });
+      }));
       const relatives = (data.relatives || []).map(function (item) {
         return Object.assign({}, item, {
           label: kinship.directRelationshipLabel(person, item.person || {}, item.role),
-          initial: (item.person.name || '家').slice(0, 1)
+          initial: (item.person.name || '家').slice(0, 1),
+          person: personGender.decorate(item.person)
         });
       });
       self.setData({

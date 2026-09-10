@@ -18,7 +18,7 @@
     <view class="choice-row">
       <view class="choice-item {{gender === 'male' ? 'selected' : ''}}" data-gender="male" bindtap="chooseGender">男</view>
       <view class="choice-item {{gender === 'female' ? 'selected' : ''}}" data-gender="female" bindtap="chooseGender">女</view>
-      <view class="choice-item {{gender === 'unknown' ? 'selected' : ''}}" data-gender="unknown" bindtap="chooseGender">未填写</view>
+      <view class="choice-item {{gender === 'unknown' ? 'selected' : ''}}" wx:if="{{canKeepUnknownGender}}" data-gender="unknown" bindtap="chooseGender">未填写</view>
     </view>
     <text class="field-label second-label">状态</text>
     <view class="choice-row">

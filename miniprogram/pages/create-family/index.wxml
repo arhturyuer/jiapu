@@ -14,11 +14,10 @@
     <view class="form-card surface-card">
       <text class="field-label">姓名或家人称呼</text>
       <input class="field-input" placeholder="例如：张建国" value="{{startName}}" data-field="startName" bindinput="inputField" maxlength="30" focus />
-      <text class="field-label second-label">性别（可稍后补充）</text>
+      <text class="field-label second-label">性别</text>
       <view class="choice-row">
         <view class="choice-item {{startGender === 'male' ? 'selected' : ''}}" data-gender="male" bindtap="chooseGender">男</view>
         <view class="choice-item {{startGender === 'female' ? 'selected' : ''}}" data-gender="female" bindtap="chooseGender">女</view>
-        <view class="choice-item {{startGender === 'unknown' ? 'selected' : ''}}" data-gender="unknown" bindtap="chooseGender">暂不填写</view>
       </view>
     </view>
   </view>
@@ -33,6 +32,13 @@
       <input class="field-input" placeholder="可选" value="{{motherName}}" data-field="motherName" bindinput="inputField" maxlength="30" />
       <text class="field-label second-label">{{startName}}的伴侣</text>
       <input class="field-input" placeholder="可选" value="{{spouseName}}" data-field="spouseName" bindinput="inputField" maxlength="30" />
+      <block wx:if="{{spouseName}}">
+        <text class="field-label second-label">伴侣性别（已默认为异性，可修改）</text>
+        <view class="choice-row">
+          <view class="choice-item {{spouseGender === 'male' ? 'selected' : ''}}" data-gender="male" bindtap="chooseSpouseGender">男</view>
+          <view class="choice-item {{spouseGender === 'female' ? 'selected' : ''}}" data-gender="female" bindtap="chooseSpouseGender">女</view>
+        </view>
+      </block>
     </view>
   </view>
 

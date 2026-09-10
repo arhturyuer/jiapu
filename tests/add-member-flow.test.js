@@ -60,8 +60,22 @@ test('兄弟姐妹必须选择中心成员已有的共同父母', function () {
   page.refreshRelationChoices(true);
   assert.equal(page.data.siblingBlocked, false);
   page.toggleMulti({ currentTarget: { dataset: { field: 'selectedSharedParentIds', id: 'father' } } });
+  page.chooseGender({ currentTarget: { dataset: { gender: 'male' } } });
   assert.equal(page.canSubmit(), true);
   assert.deepEqual(page.requestPayload().sharedParentIds, ['father']);
+});
+
+test('伴侣默认为中心成员的相反性别且允许手动覆盖', function () {
+  const page = createPage({ anchorGender: 'male' });
+  page._graphPersons = persons;
+  page._graphRelations = [];
+  page.chooseRelation({ currentTarget: { dataset: { type: 'spouse' } } });
+  assert.equal(page.data.gender, 'female');
+  page.chooseGender({ currentTarget: { dataset: { gender: 'male' } } });
+  assert.equal(page.data.gender, 'male');
+  page.chooseRelation({ currentTarget: { dataset: { type: 'sibling' } } });
+  assert.equal(page.data.gender, '');
+  assert.equal(page.canSubmit(), false);
 });
 
 test('添加关系请求携带附带关系且固定称谓锁定性别', function () {

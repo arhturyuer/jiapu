@@ -48,6 +48,70 @@ image {
   background: #e8ece8;
 }
 
+.gender-avatar {
+  border: 3rpx solid #65706a;
+}
+
+.gender-avatar.gender-male {
+  color: #416b89;
+  background: #e6eff5;
+  border-color: #416b89;
+}
+
+.gender-avatar.gender-female {
+  color: #985565;
+  background: #f5e7eb;
+  border-color: #985565;
+}
+
+.gender-avatar.gender-unknown {
+  color: #65706a;
+  background: #ecefed;
+  border-color: #65706a;
+}
+
+.gender-surface.gender-male {
+  background: #e6eff5;
+  border-color: #416b89;
+}
+
+.gender-surface.gender-female {
+  background: #f5e7eb;
+  border-color: #985565;
+}
+
+.gender-surface.gender-unknown {
+  background: #ecefed;
+  border-color: #65706a;
+}
+
+.gender-badge {
+  min-width: 44rpx;
+  height: 34rpx;
+  padding: 0 10rpx;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  border-radius: 17rpx;
+  font-size: 20rpx;
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.gender-badge.gender-male { color: #ffffff; background: #416b89; }
+.gender-badge.gender-female { color: #ffffff; background: #985565; }
+.gender-badge.gender-unknown { color: #ffffff; background: #65706a; }
+
+.gender-node-badge {
+  position: absolute;
+  top: -15rpx;
+  left: -12rpx;
+  z-index: 6;
+  border: 3rpx solid #f5f0e8;
+}
+
 .page-shell {
   width: 100%;
   min-height: 100vh;

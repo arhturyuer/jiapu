@@ -23,7 +23,8 @@
 .member-avatar { width: 76rpx; height: 76rpx; flex: none; border-radius: 24rpx; }
 .member-placeholder { display: flex; align-items: center; justify-content: center; color: #245C4A; background: #E4EFEA; font-weight: 650; }
 .member-copy { min-width: 0; margin-left: 20rpx; flex: 1; display: flex; flex-direction: column; }
-.member-name { overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.member-name-row { min-width: 0; display: flex; align-items: center; gap: 12rpx; }
+.member-name { min-width: 0; overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .member-meta { margin-top: 4rpx; overflow: hidden; color: #65706A; font-size: 24rpx; text-overflow: ellipsis; white-space: nowrap; }
 .member-meta.missing-meta { color: #A15B22; }
 .member-arrow { margin-left: 14rpx; color: #86A99A; font-size: 40rpx; }

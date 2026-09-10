@@ -102,6 +102,14 @@ function cleanGender(value) {
   return ['male', 'female', 'unknown'].includes(value) ? value : 'unknown';
 }
 
+function assertKnownGender(value) {
+  assert(value === 'male' || value === 'female', 'PERSON_GENDER_REQUIRED', '请选择成员性别');
+}
+
+function assertGenderChangeAllowed(currentGender, nextGender) {
+  assert(nextGender !== 'unknown' || cleanGender(currentGender) === 'unknown', 'PERSON_GENDER_REQUIRED', '已明确的成员性别不能清空');
+}
+
 function cleanLifeStatus(value) {
   return ['living', 'deceased', 'unknown'].includes(value) ? value : 'unknown';
 }
@@ -674,6 +682,7 @@ async function createRelatedTx(transaction, familyId, anchorPersonId, relationTy
   const prepared = Object.assign({}, personInput || {});
   if (relationType === 'father' || relationType === 'son') prepared.gender = 'male';
   if (relationType === 'mother' || relationType === 'daughter') prepared.gender = 'female';
+  assertKnownGender(cleanGender(prepared.gender));
   const person = await createPersonTx(transaction, familyId, prepared, openid);
   const relationCount = await applyRelatedRelationsTx(transaction, familyId, anchor, person, relationType, Object.assign({}, options, { peopleById: optionPeople }), openid);
   return { person: person, relationCount: relationCount };
@@ -1043,9 +1052,13 @@ async function familyCreate(event) {
   const description = cleanText(event.description, 200);
   const shareSource = event.source === 'share_menu' ? 'share_menu' : '';
   const firstPerson = normalizePerson(event.startPerson || {});
+  assertKnownGender(firstPerson.gender);
   assert(name, 'FAMILY_NAME_REQUIRED', '请填写家谱名称');
   await requireOwnedMedia(firstPerson.avatarAssetId, openid, '', 'person_avatar');
   const relativeInput = event.relatives || {};
+  const spouseName = cleanText(relativeInput.spouseName, 30);
+  const spouseGender = cleanGender(relativeInput.spouseGender);
+  if (spouseName) assertKnownGender(spouseGender);
   await moderateText(openid, [
     name,
     description,
@@ -1096,13 +1109,13 @@ async function familyCreate(event) {
     let relationCount = 0;
     const relatives = event.relatives || {};
     const definitions = [
-      ['father', relatives.fatherName],
-      ['mother', relatives.motherName],
-      ['spouse', relatives.spouseName]
+      ['father', relatives.fatherName, 'male'],
+      ['mother', relatives.motherName, 'female'],
+      ['spouse', relatives.spouseName, spouseGender]
     ];
     for (const definition of definitions) {
       if (!cleanText(definition[1], 30)) continue;
-      await createRelatedTx(transaction, familyId, startPerson._id, definition[0], { name: definition[1] }, openid);
+      await createRelatedTx(transaction, familyId, startPerson._id, definition[0], { name: definition[1], gender: definition[2] }, openid);
       personCount += 1;
       relationCount += 1;
     }
@@ -1537,7 +1550,12 @@ async function personGet(event) {
 async function personCreateRelated(event) {
   const openid = getOpenid();
   await requireActiveUser(openid);
-  const person = normalizePerson(event.person || {});
+  const relationType = cleanText(event.relationType, 20);
+  const personInput = Object.assign({}, event.person || {});
+  const expectedGender = expectedRelationGender(relationType);
+  if (expectedGender) personInput.gender = expectedGender;
+  const person = normalizePerson(personInput);
+  assertKnownGender(person.gender);
   await requireOwnedMedia(person.avatarAssetId, openid, event.familyId, 'person_avatar');
   await moderateText(openid, [person.name, person.birthPlace, person.bio]);
   const selectedOptions = relatedOptions(event);
@@ -1550,7 +1568,7 @@ async function personCreateRelated(event) {
     const payload = {
       familyId: event.familyId,
       anchorPersonId: cleanText(event.anchorPersonId, 80),
-      relationType: cleanText(event.relationType, 20),
+      relationType: relationType,
       person: person,
       coParentId: selectedOptions.coParentId,
       parentPartnerId: selectedOptions.parentPartnerId,
@@ -1750,6 +1768,7 @@ async function personUpdate(event) {
   const changes = normalizePersonChanges(event.data || {});
   assert(Object.keys(changes).length, 'NO_CHANGES', '没有需要保存的修改');
   const snapshot = await mustGet(db, 'persons', event.personId, 'PERSON_NOT_FOUND', '成员不存在');
+  if (changes.gender !== undefined) assertGenderChangeAllowed(snapshot.gender, changes.gender);
   await requireMembership(snapshot.familyId, ['admin', 'member'], db, openid);
   if (changes.avatarAssetId) {
     await requireOwnedMedia(changes.avatarAssetId, openid, snapshot.familyId, 'person_avatar');
@@ -1757,6 +1776,7 @@ async function personUpdate(event) {
   await moderateText(openid, [changes.name, changes.birthPlace, changes.bio]);
   return mutate('person.update', event, openid, async function (transaction) {
     const person = await mustGet(transaction, 'persons', event.personId, 'PERSON_NOT_FOUND', '成员不存在');
+    if (changes.gender !== undefined) assertGenderChangeAllowed(person.gender, changes.gender);
     const access = await requireMembership(person.familyId, ['admin', 'member'], transaction, openid);
     if (access.membership.role === 'member') {
       const result = await transaction.collection('change_requests').add({
@@ -1914,6 +1934,7 @@ async function changeReview(event) {
     if (approved && request.type === 'update_person') {
       const person = await mustGet(transaction, 'persons', request.payload.personId, 'PERSON_NOT_FOUND', '成员不存在');
       assert(person.familyId === request.familyId, 'CROSS_FAMILY_RELATION', '申请数据异常');
+      if (request.payload.changes.gender !== undefined) assertGenderChangeAllowed(person.gender, request.payload.changes.gender);
       await transaction.collection('persons').doc(person._id).update({
         data: Object.assign({}, request.payload.changes, { updatedAt: db.serverDate() })
       });

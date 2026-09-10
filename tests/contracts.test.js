@@ -120,6 +120,10 @@ test('关于页使用正式版实际版本并按最新在前展示受控更新�
   const verifier = fs.readFileSync(path.join(root, 'deployment/verify-release-note.mjs'), 'utf8');
   assert.deepEqual(releaseInfo.validateReleaseNotes(releaseNotes), [
     {
+      version: '1.2.5',
+      summary: '新增家谱人物男女视觉区分，并完善新成员性别必填与伴侣性别选择。'
+    },
+    {
       version: '1.2.4',
       summary: '优化添加亲属流程，支持一次补齐共同父母、共同子女和伴侣关系，提升连续录入效率。'
     },
