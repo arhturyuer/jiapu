@@ -4,6 +4,7 @@ const graphLayout = require('../../utils/graph-layout');
 const graphViewport = require('../../utils/graph-viewport');
 const kinship = require('../../utils/kinship');
 const personGender = require('../../utils/person-gender');
+const childRank = require('../../utils/child-rank');
 const shareInvite = require('../../utils/share-invite');
 const shareCard = require('../../utils/share-card');
 
@@ -21,6 +22,7 @@ Page({
     canEdit: false,
     rawPersons: [],
     rawRelations: [],
+    relationRevision: 0,
     nodes: [],
     lines: [],
     junctions: [],
@@ -38,6 +40,9 @@ Page({
     graphZoomClass: 'zoom-detail',
     graphScaleMin: 0.32,
     nameLayout: 'horizontal',
+    showChildRankBadge: true,
+    showGenderBadge: true,
+    showGenderColors: true,
     viewMode: 'full',
     viewpointId: '',
     viewpointName: '',
@@ -47,6 +52,11 @@ Page({
     showFamilySheet: false,
     showPerspectiveSheet: false,
     showRelationSheet: false,
+    showChildOrderSheet: false,
+    childOrderParent: null,
+    childOrderItems: [],
+    childOrderDirty: false,
+    childOrderSaving: false,
     showShareSheet: false,
     perspectiveKeyword: '',
     perspectiveResults: [],
@@ -138,7 +148,8 @@ Page({
           });
           self._autoCollapseFamilyId = data.family._id;
         }
-        const nameLayout = data.preference && data.preference.nameLayout === 'vertical' ? 'vertical' : 'horizontal';
+        const preference = data.preference || {};
+        const nameLayout = preference.nameLayout === 'vertical' ? 'vertical' : 'horizontal';
         self.setData({
           currentFamily: data.family,
           currentRole: data.currentRole,
@@ -146,8 +157,12 @@ Page({
           showShareReminder: self.shouldShowShareReminder(data.family),
           rawPersons: persons,
           rawRelations: data.relations || [],
+          relationRevision: Number(data.relationRevision || 0),
           loading: false,
           nameLayout: nameLayout,
+          showChildRankBadge: preference.showChildRankBadge !== false,
+          showGenderBadge: preference.showGenderBadge !== false,
+          showGenderColors: preference.showGenderColors !== false,
           viewMode: mode,
           viewpointId: personId,
           collapsedPersonIds: collapsedPersonIds,
@@ -329,14 +344,10 @@ Page({
     this.changeGraphScale(-0.15);
   },
 
-  toggleNameLayout: function () {
+  openDisplaySettings: function () {
     const family = this.data.currentFamily;
-    const nameLayout = this.data.nameLayout === 'vertical' ? 'horizontal' : 'vertical';
-    this.renderGraph(this.data.viewMode, this.data.viewpointId, {
-      nameLayout: nameLayout,
-      statePatch: { nameLayout: nameLayout }
-    });
-    if (family) this.saveGraphPreference(family, nameLayout, this.data.viewMode, this.data.viewpointId);
+    if (!family) return;
+    wx.navigateTo({ url: '/pages/display-settings/index?familyId=' + encodeURIComponent(family._id) });
   },
 
   saveGraphPreference: function (family, nameLayout, viewMode, personId) {
@@ -460,9 +471,7 @@ Page({
       selectedPersonId: personId,
       statePatch: {
         selectedPersonId: personId,
-        selectedPerson: Object.assign({}, person, {
-          isCollapsed: this.data.collapsedPersonIds.indexOf(personId) >= 0
-        }),
+        selectedPerson: this.decorateSelectedPerson(person),
         showMemberSheet: false
       }
     });
@@ -475,10 +484,26 @@ Page({
     this.setData({
       selectedKinship: this.data.viewMode === 'perspective' ? kinship.memberKinshipCard(this._lastLayout && this._lastLayout.kinshipDetails, personId, this.data.viewpointName, this.data.rawPersons) : null,
       selectedPersonId: personId,
-      selectedPerson: Object.assign({}, person, {
-        isCollapsed: this.data.collapsedPersonIds.indexOf(personId) >= 0
-      }),
+      selectedPerson: this.decorateSelectedPerson(person),
       showMemberSheet: true
+    });
+  },
+
+  decorateSelectedPerson: function (person) {
+    const node = (this._lastLayout && this._lastLayout.nodes || []).find(function (item) {
+      return item._id === person._id;
+    });
+    const childCount = this.data.rawRelations.filter(function (relation) {
+      return relation.type === 'parent_child' && relation.fromPersonId === person._id && relation.status !== 'deleted';
+    }).length;
+    return Object.assign({}, person, node ? {
+      childRankLabel: node.childRankLabel || '',
+      childRankBasisText: node.childRankBasisText || '',
+      childRankConflict: Boolean(node.childRankConflict)
+    } : {}, {
+      childCount: childCount,
+      hasMultipleChildren: childCount >= 2,
+      isCollapsed: this.data.collapsedPersonIds.indexOf(person._id) >= 0
     });
   },
 
@@ -493,6 +518,118 @@ Page({
 
   closeMemberSheet: function () {
     this.setData({ showMemberSheet: false, selectedKinship: null });
+  },
+
+  childOrderRows: function (orderedIds) {
+    const self = this;
+    const relationsByChild = {};
+    this.data.rawRelations.forEach(function (relation) {
+      if (relation.type === 'parent_child' && self.data.childOrderParent && relation.fromPersonId === self.data.childOrderParent._id) {
+        relationsByChild[relation.toPersonId] = relation;
+      }
+    });
+    const rows = orderedIds.map(function (personId) {
+      const person = self.data.rawPersons.find(function (item) { return item._id === personId; });
+      return person ? { person: person, relation: relationsByChild[personId] || {} } : null;
+    }).filter(Boolean);
+    const genderCounts = { male: 0, female: 0 };
+    return rows.map(function (row, index) {
+      const gender = row.person.gender;
+      let label = '排行待确认';
+      if (gender === 'male' || gender === 'female') {
+        genderCounts[gender] += 1;
+        label = childRank.rankLabel(gender, genderCounts[gender]);
+      }
+      return Object.assign({}, personGender.decorate(row.person), {
+        initial: (row.person.name || '家').slice(0, 1),
+        rankLabel: label,
+        canMoveUp: index > 0 && childRank.canSwap(row, rows[index - 1]),
+        canMoveDown: index < rows.length - 1 && childRank.canSwap(row, rows[index + 1])
+      });
+    });
+  },
+
+  openChildOrderSheet: function () {
+    const parent = this.data.selectedPerson;
+    if (!parent || !this.data.canEdit) return;
+    const rankData = childRank.build(this.data.rawPersons, this.data.rawRelations);
+    const orderedIds = rankData.parentOrders[parent._id] || [];
+    if (orderedIds.length < 2) {
+      wx.showToast({ title: '至少有两个孩子才需要排行', icon: 'none' });
+      return;
+    }
+    this.setData({
+      showMemberSheet: false,
+      showChildOrderSheet: true,
+      childOrderParent: parent,
+      childOrderItems: []
+    });
+    this._childOrderOriginalIds = orderedIds.slice();
+    this._childOrderIds = orderedIds.slice();
+    this.setData({ childOrderItems: this.childOrderRows(this._childOrderIds), childOrderDirty: false });
+  },
+
+  closeChildOrderSheet: function () {
+    if (this.data.childOrderSaving) return;
+    this._childOrderIds = [];
+    this._childOrderOriginalIds = [];
+    this.setData({
+      showChildOrderSheet: false,
+      childOrderParent: null,
+      childOrderItems: [],
+      childOrderDirty: false
+    });
+  },
+
+  moveChildOrder: function (event) {
+    if (this.data.childOrderSaving) return;
+    const personId = event.currentTarget.dataset.id;
+    const direction = event.currentTarget.dataset.direction;
+    const ids = (this._childOrderIds || []).slice();
+    const index = ids.indexOf(personId);
+    const target = direction === 'up' ? index - 1 : index + 1;
+    if (index < 0 || target < 0 || target >= ids.length) return;
+    const rows = this.childOrderRows(ids);
+    if (!childRank.canSwap(
+      { person: rows[index], relation: {} },
+      { person: rows[target], relation: {} }
+    )) {
+      wx.showToast({ title: '两人出生日期已确定先后', icon: 'none' });
+      return;
+    }
+    const swap = ids[index];
+    ids[index] = ids[target];
+    ids[target] = swap;
+    this._childOrderIds = ids;
+    this.setData({
+      childOrderItems: this.childOrderRows(ids),
+      childOrderDirty: ids.join('|') !== (this._childOrderOriginalIds || []).join('|')
+    });
+  },
+
+  saveChildOrder: function () {
+    const self = this;
+    const parent = this.data.childOrderParent;
+    if (!parent || !this.data.childOrderDirty || this.data.childOrderSaving) return;
+    this.setData({ childOrderSaving: true });
+    return api.call('relation.reorderChildren', {
+      familyId: this.data.currentFamily._id,
+      parentPersonId: parent._id,
+      orderedChildIds: (this._childOrderIds || []).slice(),
+      relationRevision: this.data.relationRevision
+    }).then(function (data) {
+      wx.showToast({ title: data.pending ? '已提交管理员审核' : '子女排行已更新', icon: data.pending ? 'none' : 'success' });
+      self.setData({ childOrderSaving: false });
+      self.closeChildOrderSheet();
+      if (!data.pending) {
+        app.invalidateFamilyData(self.data.currentFamily._id);
+        return self.loadPage(null, { force: true });
+      }
+      return data;
+    }).catch(function (error) {
+      self.setData({ childOrderSaving: false });
+      wx.showToast({ title: error.code === 'GRAPH_CHANGED' ? '家谱刚有变化，请刷新后重试' : error.message || '排行保存失败', icon: 'none' });
+    });
   },
 
   useSelectedPerspective: function () {

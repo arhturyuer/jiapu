@@ -120,6 +120,10 @@ test('关于页使用正式版实际版本并按最新在前展示受控更新�
   const verifier = fs.readFileSync(path.join(root, 'deployment/verify-release-note.mjs'), 'utf8');
   assert.deepEqual(releaseInfo.validateReleaseNotes(releaseNotes), [
     {
+      version: '1.2.6',
+      summary: '新增子女排行标识与手动调整功能，支持按出生日期自动区分长子、次子、长女、次女。'
+    },
+    {
       version: '1.2.5',
       summary: '新增家谱人物男女视觉区分，并完善新成员性别必填与伴侣性别选择。'
     },
@@ -543,20 +547,34 @@ test('冻结、注销重试、运营账号和完整审计只属于超级管理�
   });
 });
 
-test('家谱图排版偏好受控保存，并由正式页和示例页提供竖排切换', function () {
+test('家谱显示偏好集中设置，正式家谱按个人偏好展示且示例保留独立切换', function () {
   const userApi = fs.readFileSync(path.join(root, 'cloudfunctions/youpuUserApi/index.js'), 'utf8');
   const tree = fs.readFileSync(path.join(root, 'miniprogram/pages/tree/index.js'), 'utf8');
   const treeTemplate = fs.readFileSync(path.join(root, 'miniprogram/pages/tree/index.wxml'), 'utf8');
+  const members = fs.readFileSync(path.join(root, 'miniprogram/pages/members/index.wxml'), 'utf8');
+  const settings = fs.readFileSync(path.join(root, 'miniprogram/pages/display-settings/index.js'), 'utf8');
+  const settingsTemplate = fs.readFileSync(path.join(root, 'miniprogram/pages/display-settings/index.wxml'), 'utf8');
   const example = fs.readFileSync(path.join(root, 'miniprogram/pages/example/index.js'), 'utf8');
   const exampleTemplate = fs.readFileSync(path.join(root, 'miniprogram/pages/example/index.wxml'), 'utf8');
-  assert.match(userApi, /nameLayout: event\.nameLayout === 'vertical' \? 'vertical' : 'horizontal'/);
-  assert.match(userApi, /preference: \{\s*nameLayout:/);
-  assert.match(tree, /toggleNameLayout/);
+  assert.match(userApi, /function normalizeFamilyPreference/);
+  assert.match(userApi, /showChildRankBadge: preference\.showChildRankBadge !== false/);
+  assert.match(userApi, /'family\.getPreference': familyGetPreference/);
+  assert.match(userApi, /Object\.prototype\.hasOwnProperty\.call\(event, field\)/);
   assert.match(tree, /saveGraphPreference/);
-  assert.match(tree, /nameLayout: nameLayout/);
-  assert.match(treeTemplate, /bindtap="toggleNameLayout"/);
+  assert.match(tree, /openDisplaySettings/);
+  assert.doesNotMatch(tree, /toggleNameLayout/);
+  assert.match(treeTemplate, /bindtap="openDisplaySettings">设置/);
+  assert.match(members, /bindtap="openDisplaySettings">家谱显示设置/);
+  assert.match(settings, /api\.call\('family\.getPreference'/);
+  assert.match(settings, /api\.call\('family\.setPreference'/);
+  assert.match(settingsTemplate, /data-field="showChildRankBadge"/);
+  assert.match(settingsTemplate, /data-field="showGenderBadge"/);
+  assert.match(settingsTemplate, /data-field="showGenderColors"/);
   assert.match(treeTemplate, /node-name-vertical/);
   assert.match(treeTemplate, /wx:if="\{\{nameLayout === 'vertical'\}\}"/);
+  assert.match(treeTemplate, /showChildRankBadge && item\.childRankLabel/);
+  assert.match(treeTemplate, /wx:if="\{\{showGenderBadge\}\}"/);
+  assert.match(treeTemplate, /showGenderColors \? item\.genderClass : 'gender-neutral'/);
   assert.match(example, /EXAMPLE_NAME_LAYOUT_KEY_PREFIX/);
   assert.match(example, /wx\.setStorageSync\(EXAMPLE_NAME_LAYOUT_KEY_PREFIX/);
   assert.match(exampleTemplate, /bindtap="toggleNameLayout"/);

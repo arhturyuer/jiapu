@@ -52,6 +52,7 @@ const MUTATION_TYPES = new Set([
   'membership.leave',
   'person.createRelated',
   'relation.linkExisting',
+  'relation.reorderChildren',
   'relation.remove',
   'person.update',
   'person.delete',
@@ -293,6 +294,18 @@ function membershipId(familyId, openid) {
 
 function preferenceId(familyId, openid) {
   return 'fp_' + hash(familyId + ':' + openid, 32);
+}
+
+function normalizeFamilyPreference(value) {
+  const preference = value || {};
+  return {
+    viewMode: preference.viewMode === 'perspective' ? 'perspective' : 'full',
+    lastViewPersonId: cleanText(preference.lastViewPersonId, 80),
+    nameLayout: preference.nameLayout === 'vertical' ? 'vertical' : 'horizontal',
+    showChildRankBadge: preference.showChildRankBadge !== false,
+    showGenderBadge: preference.showGenderBadge !== false,
+    showGenderColors: preference.showGenderColors !== false
+  };
 }
 
 function relationId(familyId, type, firstId, secondId) {
@@ -1243,18 +1256,42 @@ async function familySetPreference(event) {
   return mutate('family.setPreference', event, openid, async function (transaction) {
     await requireMembership(event.familyId, ACTIVE_ROLES, transaction, openid);
     const id = preferenceId(event.familyId, openid);
+    const existing = await maybeGet(transaction, 'user_family_preferences', id);
+    const preference = normalizeFamilyPreference(existing);
+    if (Object.prototype.hasOwnProperty.call(event, 'viewMode')) {
+      preference.viewMode = event.viewMode === 'perspective' ? 'perspective' : 'full';
+    }
+    if (Object.prototype.hasOwnProperty.call(event, 'personId')) {
+      preference.lastViewPersonId = cleanText(event.personId, 80);
+    }
+    if (Object.prototype.hasOwnProperty.call(event, 'nameLayout')) {
+      preference.nameLayout = event.nameLayout === 'vertical' ? 'vertical' : 'horizontal';
+    }
+    ['showChildRankBadge', 'showGenderBadge', 'showGenderColors'].forEach(function (field) {
+      if (!Object.prototype.hasOwnProperty.call(event, field)) return;
+      assert(typeof event[field] === 'boolean', 'INVALID_PREFERENCE', '显示设置格式不正确');
+      preference[field] = event[field];
+    });
     await transaction.collection('user_family_preferences').doc(id).set({
-      data: {
+      data: Object.assign({}, preference, {
         familyId: event.familyId,
         userId: userId(openid),
-        viewMode: event.viewMode === 'perspective' ? 'perspective' : 'full',
-        lastViewPersonId: cleanText(event.personId, 80),
-        nameLayout: event.nameLayout === 'vertical' ? 'vertical' : 'horizontal',
         updatedAt: db.serverDate()
-      }
+      })
     });
-    return { saved: true };
+    return { saved: true, preference: preference };
   });
+}
+
+async function familyGetPreference(event) {
+  const openid = getOpenid();
+  await requireActiveUser(openid);
+  const access = await requireMembership(event.familyId, ACTIVE_ROLES, db, openid);
+  const preference = await maybeGet(db, 'user_family_preferences', preferenceId(event.familyId, openid));
+  return {
+    family: publicFamily(access.family, access.membership.role),
+    preference: normalizeFamilyPreference(preference)
+  };
 }
 
 async function graphGet(event) {
@@ -1288,12 +1325,15 @@ async function graphGet(event) {
         _id: relation._id,
         type: relation.type,
         fromPersonId: relation.fromPersonId,
-        toPersonId: relation.toPersonId
+        toPersonId: relation.toPersonId,
+        childOrder: relation.type === 'parent_child' && relation.childOrder !== undefined && relation.childOrder !== null && Number.isFinite(Number(relation.childOrder)) ? Number(relation.childOrder) : null,
+        childOrderUpdatedAt: relation.type === 'parent_child' ? relation.childOrderUpdatedAt || null : null,
+        createdAt: relation.createdAt || null,
+        updatedAt: relation.updatedAt || null
       };
     }),
-    preference: {
-      nameLayout: preference && preference.nameLayout === 'vertical' ? 'vertical' : 'horizontal'
-    },
+    relationRevision: Number(family.relationRevision || 0),
+    preference: normalizeFamilyPreference(preference),
     currentRole: access.membership.role
   };
 }
@@ -1716,6 +1756,84 @@ async function relationLinkExisting(event) {
   });
 }
 
+function validateChildOrder(parentPersonId, orderedChildIds, relations) {
+  const currentIds = (relations || []).filter(function (relation) {
+    return relation.status === 'active' && relation.type === 'parent_child' && relation.fromPersonId === parentPersonId;
+  }).map(function (relation) { return relation.toPersonId; }).sort();
+  const submittedIds = orderedChildIds.slice().sort();
+  assert(currentIds.length >= 2, 'CHILD_ORDER_NOT_NEEDED', '至少有两个孩子才需要调整排行');
+  assert(currentIds.length === submittedIds.length && currentIds.every(function (id, index) {
+    return id === submittedIds[index];
+  }), 'GRAPH_CHANGED', '子女关系刚有变化，请刷新后重试');
+}
+
+async function applyChildOrderTx(transaction, familyId, parentPersonId, orderedChildIds) {
+  for (let index = 0; index < orderedChildIds.length; index += 1) {
+    const id = relationId(familyId, 'parent_child', parentPersonId, orderedChildIds[index]);
+    const relation = await mustGet(transaction, 'relations', id, 'RELATION_NOT_FOUND', '亲子关系不存在或已被移除');
+    assert(relation.familyId === familyId && relation.status === 'active' && relation.type === 'parent_child'
+      && relation.fromPersonId === parentPersonId && relation.toPersonId === orderedChildIds[index],
+    'GRAPH_CHANGED', '子女关系刚有变化，请刷新后重试');
+    await transaction.collection('relations').doc(id).update({
+      data: { childOrder: index, childOrderUpdatedAt: db.serverDate(), updatedAt: db.serverDate() }
+    });
+  }
+}
+
+async function relationReorderChildren(event) {
+  const openid = getOpenid();
+  await requireActiveUser(openid);
+  const familyId = cleanText(event.familyId, 80);
+  const parentPersonId = cleanText(event.parentPersonId, 80);
+  const rawIds = Array.isArray(event.orderedChildIds) ? event.orderedChildIds : [];
+  const orderedChildIds = cleanPersonIds(rawIds, GRAPH_PERSON_LIMIT);
+  assert(rawIds.length === orderedChildIds.length, 'INVALID_CHILD_ORDER', '子女排行不完整或包含重复成员');
+  const requestedRevision = Number(event.relationRevision);
+  assert(Number.isInteger(requestedRevision) && requestedRevision >= 0, 'GRAPH_REVISION_REQUIRED', '请刷新家谱后再调整排行');
+  const snapshotAccess = await requireMembership(familyId, ['admin', 'member'], db, openid);
+  const parent = await mustGet(db, 'persons', parentPersonId, 'PERSON_NOT_FOUND', '家长成员不存在');
+  assert(parent.familyId === familyId && parent.status === 'active', 'CROSS_FAMILY_RELATION', '家长成员不属于当前家谱');
+  const relations = await listAll('relations', { familyId: familyId, status: 'active' }, GRAPH_RELATION_LIMIT);
+  validateChildOrder(parentPersonId, orderedChildIds, relations);
+  assert(Number(snapshotAccess.family.relationRevision || 0) === requestedRevision, 'GRAPH_CHANGED', '家谱关系刚有变化，请刷新后重试');
+  return mutate('relation.reorderChildren', event, openid, async function (transaction) {
+    const access = await requireMembership(familyId, ['admin', 'member'], transaction, openid);
+    if (access.membership.role === 'member') {
+      const result = await transaction.collection('change_requests').add({
+        data: {
+          familyId: familyId,
+          type: 'reorder_children',
+          title: '调整“' + parent.name + '”的子女排行',
+          relationSummary: '按出生日期和已确认顺序重排 ' + orderedChildIds.length + ' 位子女',
+          payload: { parentPersonId: parentPersonId, orderedChildIds: orderedChildIds, relationRevision: requestedRevision },
+          status: 'pending',
+          createdBy: userId(openid),
+          requesterName: access.membership.displayName || '家人',
+          createdAt: db.serverDate(),
+          updatedAt: db.serverDate()
+        }
+      });
+      return { pending: true, requestId: result._id };
+    }
+    assert(Number(access.family.relationRevision || 0) === requestedRevision, 'GRAPH_CHANGED', '家谱关系刚有变化，请刷新后重试');
+    await applyChildOrderTx(transaction, familyId, parentPersonId, orderedChildIds);
+    await transaction.collection('families').doc(familyId).update({
+      data: { relationRevision: _.inc(1), updatedAt: db.serverDate() }
+    });
+    await audit(transaction, {
+      familyId: familyId,
+      openid: openid,
+      actorName: access.membership.displayName,
+      action: 'relation.reorder_children',
+      objectType: 'person',
+      objectId: parentPersonId,
+      summary: '调整子女排行',
+      requestId: event.requestId
+    });
+    return { pending: false, parentPersonId: parentPersonId, relationRevision: requestedRevision + 1 };
+  });
+}
+
 async function relationRemove(event) {
   const openid = getOpenid();
   await requireActiveUser(openid);
@@ -1875,7 +1993,7 @@ async function changeReview(event) {
   const snapshotRequest = await mustGet(db, 'change_requests', changeRequestId, 'REQUEST_NOT_FOUND', '修改申请不存在');
   const snapshotAccess = await requireMembership(snapshotRequest.familyId, ['admin'], db, openid);
   let graphSnapshot = null;
-  if (event.decision === 'approve' && ['create_related', 'link_existing_relation'].includes(snapshotRequest.type)) {
+  if (event.decision === 'approve' && ['create_related', 'link_existing_relation', 'reorder_children'].includes(snapshotRequest.type)) {
     graphSnapshot = {
       relationRevision: Number(snapshotAccess.family.relationRevision || 0),
       relations: await listAll('relations', { familyId: snapshotRequest.familyId, status: 'active' }, GRAPH_RELATION_LIMIT)
@@ -1937,6 +2055,21 @@ async function changeReview(event) {
       if (request.payload.changes.gender !== undefined) assertGenderChangeAllowed(person.gender, request.payload.changes.gender);
       await transaction.collection('persons').doc(person._id).update({
         data: Object.assign({}, request.payload.changes, { updatedAt: db.serverDate() })
+      });
+    }
+    if (approved && request.type === 'reorder_children') {
+      const requestedIds = request.payload && Array.isArray(request.payload.orderedChildIds) ? request.payload.orderedChildIds : [];
+      assert(graphSnapshot && Number(access.family.relationRevision || 0) === graphSnapshot.relationRevision
+        && request.payload && Number(request.payload.relationRevision) === graphSnapshot.relationRevision,
+        'GRAPH_CHANGED', '家谱关系刚有变化，请让提交人刷新后重试');
+      const parent = await mustGet(transaction, 'persons', request.payload.parentPersonId, 'PERSON_NOT_FOUND', '家长成员不存在');
+      assert(parent.familyId === request.familyId && parent.status === 'active', 'CROSS_FAMILY_RELATION', '申请数据异常');
+      const orderedChildIds = cleanPersonIds(requestedIds, GRAPH_PERSON_LIMIT);
+      assert(orderedChildIds.length === requestedIds.length, 'INVALID_CHILD_ORDER', '子女排行不完整');
+      validateChildOrder(parent._id, orderedChildIds, graphSnapshot.relations);
+      await applyChildOrderTx(transaction, request.familyId, parent._id, orderedChildIds);
+      await transaction.collection('families').doc(request.familyId).update({
+        data: { relationRevision: _.inc(1), updatedAt: db.serverDate() }
       });
     }
     await transaction.collection('change_requests').doc(request._id).update({
@@ -3148,6 +3281,7 @@ const handlers = {
   'family.archive': familyArchive,
   'family.restore': familyRestore,
   'family.dashboard': familyDashboard,
+  'family.getPreference': familyGetPreference,
   'family.setPreference': familySetPreference,
   'family.markOnboardingShared': familyMarkOnboardingShared,
   'family.dismissShareReminder': familyDismissShareReminder,
@@ -3163,6 +3297,7 @@ const handlers = {
   'person.get': personGet,
   'person.createRelated': personCreateRelated,
   'relation.linkExisting': relationLinkExisting,
+  'relation.reorderChildren': relationReorderChildren,
   'relation.remove': relationRemove,
   'person.update': personUpdate,
   'person.delete': personDelete,

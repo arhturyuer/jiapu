@@ -117,6 +117,11 @@ Page({
     wx.switchTab({ url: '/pages/tree/index' });
   },
 
+  openDisplaySettings: function () {
+    if (!this.data.currentFamily) return;
+    wx.navigateTo({ url: '/pages/display-settings/index?familyId=' + encodeURIComponent(this.data.currentFamily._id) });
+  },
+
   openCollaborators: function () {
     if (!this.data.currentFamily) return;
     wx.navigateTo({ url: '/pages/family-manage/index?familyId=' + this.data.currentFamily._id + '&section=collaborators' });

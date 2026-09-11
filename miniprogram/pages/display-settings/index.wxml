@@ -1,0 +1,27 @@
+<view class="loading-panel" wx:if="{{loading}}"><view class="loading-dot"></view><text>正在读取显示设置...</text></view>
+<view class="page-shell" wx:elif="{{error}}"><view class="empty-panel"><view class="empty-mark">!</view><text class="empty-title">暂时无法打开显示设置</text><text class="empty-description">{{error}}</text><button class="primary-button empty-action" bindtap="loadPreference">重新加载</button></view></view>
+<view class="settings-page page-shell" wx:else>
+  <view class="settings-intro surface-card">
+    <text class="settings-family">{{family.name}}</text>
+    <text class="settings-copy">这些设置只影响你查看这份家谱，不会改变其他家人的显示方式。</text>
+  </view>
+
+  <view class="section-block">
+    <view class="section-heading"><text class="section-title">姓名排列</text></view>
+    <view class="layout-picker surface-card {{saving ? 'is-disabled' : ''}}">
+      <view class="layout-option {{nameLayout === 'horizontal' ? 'selected' : ''}}" data-layout="horizontal" bindtap="chooseNameLayout"><text class="layout-title">横排</text><text class="layout-example">张建国</text></view>
+      <view class="layout-option {{nameLayout === 'vertical' ? 'selected' : ''}}" data-layout="vertical" bindtap="chooseNameLayout"><text class="layout-title">竖排</text><view class="layout-example layout-example-vertical"><text>张</text><text>建</text><text>国</text></view></view>
+    </view>
+  </view>
+
+  <view class="section-block">
+    <view class="section-heading"><text class="section-title">节点标识</text></view>
+    <view class="setting-list surface-card">
+      <view class="setting-row"><view class="setting-copy"><text class="setting-title">显示子女排行</text><text class="setting-desc">在节点上显示长子、次子、长女等标识</text></view><switch color="#245C4A" checked="{{showChildRankBadge}}" disabled="{{saving}}" data-field="showChildRankBadge" bindchange="togglePreference" /></view>
+      <view class="setting-row"><view class="setting-copy"><text class="setting-title">显示性别标识</text><text class="setting-desc">在节点上显示男、女文字标识</text></view><switch color="#245C4A" checked="{{showGenderBadge}}" disabled="{{saving}}" data-field="showGenderBadge" bindchange="togglePreference" /></view>
+      <view class="setting-row"><view class="setting-copy"><text class="setting-title">使用性别配色</text><text class="setting-desc">用不同颜色区分男女人物节点</text></view><switch color="#245C4A" checked="{{showGenderColors}}" disabled="{{saving}}" data-field="showGenderColors" bindchange="togglePreference" /></view>
+    </view>
+  </view>
+
+  <text class="save-state">{{saving ? '正在保存...' : '修改后自动保存'}}</text>
+</view>

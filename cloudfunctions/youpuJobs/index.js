@@ -714,8 +714,8 @@ async function familyBackupDataset(task) {
     { name: '人物.csv', content: Buffer.from(toCsv(persons.map(function (item) { return { id: item._id, name: item.name, gender: item.gender, lifeStatus: item.lifeStatus, birthDate: item.birthDate, deathDate: item.deathDate, birthPlace: item.birthPlace, bio: item.bio, status: item.status }; }), [
       { key: 'id', label: '人物ID' }, { key: 'name', label: '姓名' }, { key: 'gender', label: '性别' }, { key: 'lifeStatus', label: '生存状态' }, { key: 'birthDate', label: '出生日期' }, { key: 'deathDate', label: '离世日期' }, { key: 'birthPlace', label: '出生地' }, { key: 'bio', label: '生平' }, { key: 'status', label: '状态' }
     ]), 'utf8') },
-    { name: '关系.csv', content: Buffer.from(toCsv(relations.map(function (item) { return { id: item._id, type: item.type, from: item.fromPersonId, to: item.toPersonId, status: item.status }; }), [
-      { key: 'id', label: '关系ID' }, { key: 'type', label: '关系类型' }, { key: 'from', label: '人物一' }, { key: 'to', label: '人物二' }, { key: 'status', label: '状态' }
+    { name: '关系.csv', content: Buffer.from(toCsv(relations.map(function (item) { return { id: item._id, type: item.type, from: item.fromPersonId, to: item.toPersonId, childOrder: item.childOrder, childOrderUpdatedAt: item.childOrderUpdatedAt, status: item.status }; }), [
+      { key: 'id', label: '关系ID' }, { key: 'type', label: '关系类型' }, { key: 'from', label: '人物一' }, { key: 'to', label: '人物二' }, { key: 'childOrder', label: '子女排行顺序' }, { key: 'childOrderUpdatedAt', label: '排行更新时间' }, { key: 'status', label: '状态' }
     ]), 'utf8') },
     { name: '协作者.csv', content: Buffer.from(toCsv(memberships.map(function (item) { return { name: userNames[item.userId] || '一位家人', role: item.role, status: item.status, joinedAt: item.joinedAt }; }), [
       { key: 'name', label: '昵称' }, { key: 'role', label: '角色' }, { key: 'status', label: '状态' }, { key: 'joinedAt', label: '加入时间' }

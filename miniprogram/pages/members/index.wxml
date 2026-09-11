@@ -55,6 +55,7 @@
   </view>
 
   <button class="secondary-button graph-button" bindtap="openGraph">查看完整家谱</button>
+  <button class="secondary-button graph-button display-settings-button" bindtap="openDisplaySettings">家谱显示设置</button>
   <button class="secondary-button graph-button" wx:if="{{isAdmin}}" bindtap="openFamilyBackup">生成完整家庭备份</button>
   <view class="family-upgrade" wx:if="{{!membershipActive}}" bindtap="openMembership"><text>解锁完整历史、家庭备份与去广告</text><text>升级家庭会员 ›</text></view>
   <button class="secondary-button graph-button" bindtap="openFamilyManage">家庭与权限管理</button>

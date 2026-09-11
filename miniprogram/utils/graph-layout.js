@@ -26,6 +26,7 @@ const MAX_ANIMATED_CHILDREN = 12;
 const FAMILY_RAIL_CLEARANCE = 24;
 const kinship = require('./kinship');
 const personGenderDisplay = require('./person-gender');
+const childRank = require('./child-rank');
 
 function metricsForNameLayout(nameLayout) {
   return nameLayout === 'vertical' ? VERTICAL_METRICS : HORIZONTAL_METRICS;
@@ -417,7 +418,7 @@ function sortPersonsByName(persons) {
   return (persons || []).slice().sort(comparePeopleByName);
 }
 
-function buildUnits(persons, relations, components, generations, metrics) {
+function buildUnits(persons, relations, components, generations, metrics, childRanks) {
   const units = [];
   const unitsById = {};
   Object.keys(components.membersByRoot).forEach(function (root) {
@@ -526,7 +527,20 @@ function buildUnits(persons, relations, components, generations, metrics) {
     primaryChildrenByRoot[root].sort(function (firstRoot, secondRoot) {
       const firstSource = familySourceByChildRoot[firstRoot];
       const secondSource = familySourceByChildRoot[secondRoot];
+      const firstSequence = unitsById[firstRoot].members.reduce(function (result, person) {
+        const rank = childRanks[person._id];
+        return rank && rank.childRankParentId && components.componentByPerson[rank.childRankParentId] === root
+          ? Math.min(result, rank.childSequenceIndex)
+          : result;
+      }, Infinity);
+      const secondSequence = unitsById[secondRoot].members.reduce(function (result, person) {
+        const rank = childRanks[person._id];
+        return rank && rank.childRankParentId && components.componentByPerson[rank.childRankParentId] === root
+          ? Math.min(result, rank.childSequenceIndex)
+          : result;
+      }, Infinity);
       return firstSource.order - secondSource.order || firstSource.key.localeCompare(secondSource.key) ||
+        firstSequence - secondSequence ||
         comparePeople(unitsById[firstRoot].sortPerson, unitsById[secondRoot].sortPerson);
     });
   });
@@ -889,12 +903,13 @@ function layoutGraph(personsInput, relationsInput, options) {
   if (nameLayout === 'vertical' && optionsValue.mode === 'perspective') metrics.nodeWidth = 112;
   const activePersons = (personsInput || []).filter(function (person) { return person.status !== 'deleted'; });
   const active = activeRelations(relationsInput);
+  const childRanks = childRank.build(activePersons, active);
   const filtered = filterCollapsed(activePersons, active, optionsValue.collapsedIds || []);
   const persons = filtered.persons;
   const relations = filtered.relations;
   const components = createSpouseComponents(persons, relations);
   const generations = assignGenerations(persons, relations, components);
-  const unitGraph = buildUnits(persons, relations, components, generations, metrics);
+  const unitGraph = buildUnits(persons, relations, components, generations, metrics, childRanks.byPerson);
   const unitsByGeneration = unitGraph.unitsByGeneration;
   const generationKeys = Object.keys(unitsByGeneration).map(Number).sort(function (a, b) { return a - b; });
   const maxGeneration = generationKeys.length ? Math.max.apply(null, generationKeys) : 0;
@@ -914,7 +929,7 @@ function layoutGraph(personsInput, relationsInput, options) {
       unit.members.forEach(function (person, memberIndex) {
         const x = unit.x + memberIndex * (metrics.nodeWidth + metrics.coupleGap);
         const y = metrics.marginY + generation * metrics.gapY;
-        const node = Object.assign({}, personGenderDisplay.decorate(person), {
+        const node = Object.assign({}, personGenderDisplay.decorate(person), childRanks.byPerson[person._id] || {}, {
           x: x,
           y: y,
           style: 'left:' + x + 'rpx;top:' + y + 'rpx;width:' + metrics.nodeWidth + 'rpx;height:' + metrics.nodeHeight + 'rpx;',

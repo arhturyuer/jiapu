@@ -91,24 +91,25 @@
         <view
           wx:for="{{nodes}}"
           wx:key="_id"
-          class="person-node gender-surface {{item.genderClass}} {{nameLayout === 'vertical' ? 'node-vertical' : ''}} {{item.isViewpoint ? 'is-viewpoint' : ''}} {{item.isSelected ? 'is-selected' : ''}}"
+          class="person-node gender-surface {{showGenderColors ? item.genderClass : 'gender-neutral'}} {{nameLayout === 'vertical' ? 'node-vertical' : ''}} {{item.isViewpoint ? 'is-viewpoint' : ''}} {{item.isSelected ? 'is-selected' : ''}}"
           style="{{item.style}}"
           data-id="{{item._id}}"
           catchtap="showPerson"
         >
-          <text class="gender-badge gender-node-badge {{item.genderClass}}">{{item.genderText}}</text>
+          <text class="gender-badge gender-node-badge {{showGenderColors ? item.genderClass : 'gender-neutral'}}" wx:if="{{showGenderBadge}}">{{item.genderText}}</text>
           <block wx:if="{{nameLayout === 'vertical'}}">
             <text class="node-name node-name-vertical">{{item.verticalName}}</text>
             <text class="node-meta node-kinship" wx:if="{{viewMode === 'perspective' && item.relationLabel}}">{{item.relationLabel}}</text>
           </block>
           <block wx:else>
-            <image class="node-avatar gender-avatar {{item.genderClass}}" wx:if="{{item.avatar}}" src="{{item.avatar}}" mode="aspectFill"></image>
-            <view class="node-avatar node-placeholder gender-avatar {{item.genderClass}}" wx:else>{{item.initial}}</view>
+            <image class="node-avatar gender-avatar {{showGenderColors ? item.genderClass : 'gender-neutral'}}" wx:if="{{item.avatar}}" src="{{item.avatar}}" mode="aspectFill"></image>
+            <view class="node-avatar node-placeholder gender-avatar {{showGenderColors ? item.genderClass : 'gender-neutral'}}" wx:else>{{item.initial}}</view>
             <text class="node-name">{{item.name}}</text>
             <text class="node-meta" wx:if="{{viewMode === 'perspective' && item.relationLabel}}">{{item.relationLabel}}</text>
             <text class="node-meta" wx:elif="{{item.metaText}}">{{item.metaText}}</text>
           </block>
           <text class="node-kinship-multiple" wx:if="{{viewMode === 'perspective' && item.hasMultipleKinships}}">多重关系</text>
+          <text class="child-rank-badge" wx:if="{{showChildRankBadge && item.childRankLabel}}">{{item.childRankLabel}}</text>
           <view class="node-action-trigger" wx:if="{{item.isSelected}}" data-id="{{item._id}}" catchtap="openMemberActions">•••</view>
           <view class="branch-count" wx:if="{{item.hiddenDescendantCount > 0}}" data-id="{{item._id}}" catchtap="expandBranch">+{{item.hiddenDescendantCount}} 人</view>
         </view>
@@ -119,7 +120,7 @@
     <view class="graph-controls" wx:if="{{nodes.length > 0}}">
       <view class="graph-control" bindtap="zoomGraphIn">＋</view>
       <view class="graph-control" bindtap="zoomGraphOut">－</view>
-      <view class="graph-control graph-control-text" bindtap="toggleNameLayout">{{nameLayout === 'vertical' ? '横排' : '竖排'}}</view>
+      <view class="graph-control graph-control-text" bindtap="openDisplaySettings">设置</view>
       <view class="graph-control graph-control-text" bindtap="fitWholeGraph">全谱</view>
       <view class="graph-control graph-control-text" bindtap="locateGraphFocus">定位</view>
       <view class="graph-control graph-control-text" wx:if="{{canExpandAll}}" bindtap="expandAllBranches">展开</view>
@@ -152,11 +153,12 @@
     <view class="bottom-sheet person-sheet" catchtap="stopEvent">
       <view class="sheet-handle"></view>
       <view class="person-sheet-head">
-        <image class="person-sheet-avatar gender-avatar {{selectedPerson.genderClass}}" wx:if="{{selectedPerson.avatar}}" src="{{selectedPerson.avatar}}" mode="aspectFill"></image>
-        <view class="person-sheet-avatar person-sheet-placeholder gender-avatar {{selectedPerson.genderClass}}" wx:else>{{selectedPerson.initial}}</view>
+        <image class="person-sheet-avatar gender-avatar {{showGenderColors ? selectedPerson.genderClass : 'gender-neutral'}}" wx:if="{{selectedPerson.avatar}}" src="{{selectedPerson.avatar}}" mode="aspectFill"></image>
+        <view class="person-sheet-avatar person-sheet-placeholder gender-avatar {{showGenderColors ? selectedPerson.genderClass : 'gender-neutral'}}" wx:else>{{selectedPerson.initial}}</view>
         <view class="person-sheet-copy">
-          <view class="person-sheet-name-row"><text class="person-sheet-name">{{selectedPerson.name}}</text><text class="gender-badge {{selectedPerson.genderClass}}">{{selectedPerson.genderText}}</text></view>
+          <view class="person-sheet-name-row"><text class="person-sheet-name">{{selectedPerson.name}}</text><text class="gender-badge {{showGenderColors ? selectedPerson.genderClass : 'gender-neutral'}}" wx:if="{{showGenderBadge}}">{{selectedPerson.genderText}}</text></view>
           <text class="muted-text">{{selectedPerson.birthDate || '家庭成员'}}</text>
+          <text class="person-rank-basis" wx:if="{{showChildRankBadge && selectedPerson.childRankLabel}}">{{selectedPerson.childRankLabel}} · {{selectedPerson.childRankBasisText}}</text>
         </view>
       </view>
       <template is="kinship-card" data="{{card: selectedKinship}}" />
@@ -177,6 +179,10 @@
           <text class="action-title">添加亲属</text>
           <text class="action-desc">从此人继续补全</text>
         </view>
+        <view class="action-cell" bindtap="openChildOrderSheet" wx:if="{{canEdit && selectedPerson.hasMultipleChildren}}">
+          <text class="action-title">调整子女排行</text>
+          <text class="action-desc">按出生日期与已确认顺序排列</text>
+        </view>
         <view class="action-cell" bindtap="openEditMember" wx:if="{{canEdit}}">
           <text class="action-title">编辑资料</text>
           <text class="action-desc">补充或纠正信息</text>
@@ -186,6 +192,28 @@
           <text class="action-desc">家人打开后直接看到此人视角</text>
         </view>
       </view>
+    </view>
+  </view>
+
+  <view class="sheet-mask" wx:if="{{showChildOrderSheet}}" bindtap="closeChildOrderSheet">
+    <view class="bottom-sheet child-order-sheet" catchtap="stopEvent">
+      <view class="sheet-handle"></view>
+      <view class="sheet-title">调整{{childOrderParent.name}}的子女排行</view>
+      <text class="child-order-help">男女分别计算长幼。出生日期能明确先后时不可互换；日期缺失、相同或精度不足时可手动调整。</text>
+      <scroll-view class="child-order-list" scroll-y>
+        <view class="child-order-row" wx:for="{{childOrderItems}}" wx:key="_id">
+          <view class="small-avatar gender-avatar {{item.genderClass}}">{{item.initial}}</view>
+          <view class="child-order-copy">
+            <view class="child-order-name-row"><text class="child-order-name">{{item.name}}</text><text class="child-order-rank">{{item.rankLabel}}</text></view>
+            <text class="child-order-date">{{item.birthDate || '出生日期待补充'}}</text>
+          </view>
+          <view class="child-order-actions">
+            <view class="child-order-button {{(!item.canMoveUp || childOrderSaving) ? 'is-disabled' : ''}}" data-id="{{item._id}}" data-direction="up" catchtap="moveChildOrder">上移</view>
+            <view class="child-order-button {{(!item.canMoveDown || childOrderSaving) ? 'is-disabled' : ''}}" data-id="{{item._id}}" data-direction="down" catchtap="moveChildOrder">下移</view>
+          </view>
+        </view>
+      </scroll-view>
+      <button class="primary-button child-order-save" loading="{{childOrderSaving}}" disabled="{{!childOrderDirty || childOrderSaving}}" bindtap="saveChildOrder">{{childOrderDirty ? '保存排行' : '排行未变更'}}</button>
     </view>
   </view>
 

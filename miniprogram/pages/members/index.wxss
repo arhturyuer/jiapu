@@ -50,6 +50,7 @@
 .activity-time { margin-top: 6rpx; color: #65706A; font-size: 24rpx; }
 .empty-activity { padding: 40rpx; color: #65706A; text-align: center; }
 .graph-button { width: 100%; margin-top: 40rpx; }
+.display-settings-button { margin-top: 16rpx; }
 .share-help { margin-bottom: 24rpx; display: block; color: #65706A; line-height: 1.6; }
 .share-role { margin-bottom: 16rpx; padding: 24rpx; display: flex; flex-direction: column; border: 2rpx solid #D8DED9; border-radius: 22rpx; }
 .share-role.selected { background: #E4EFEA; border-color: #245C4A; }

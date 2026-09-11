@@ -65,19 +65,18 @@ test('重绘图谱一次提交完整节点和关系，不先清空再分批追�
   assert.equal(instance.setDataCalls[0].renderedCount, 2);
 });
 
-test('切换竖排会重绘窄节点并保存当前家谱偏好', function () {
+test('家谱显示设置入口替代横竖排快捷切换', function () {
   const instance = createPage();
   instance.page.data.currentFamily = { _id: 'family-1' };
-  instance.page.data.nameLayout = 'horizontal';
-  instance.page.data.viewMode = 'full';
-  instance.page.data.viewpointId = '';
-  instance.page.fitGraph = function () {};
-  let saved = null;
-  instance.page.saveGraphPreference = function () { saved = Array.from(arguments); };
-  instance.page.toggleNameLayout();
-  assert.equal(instance.page.data.nameLayout, 'vertical');
-  assert.equal(instance.page._lastLayout.nodeWidth, 88);
-  assert.deepEqual(saved, [{ _id: 'family-1' }, 'vertical', 'full', '']);
+  const previousWx = global.wx;
+  let target = '';
+  global.wx = { navigateTo: function (options) { target = options.url; } };
+  try {
+    instance.page.openDisplaySettings();
+    assert.equal(target, '/pages/display-settings/index?familyId=family-1');
+  } finally {
+    global.wx = previousWx;
+  }
 });
 
 test('方向流光只使用 transform 和 opacity，不触发布局属性动画', function () {

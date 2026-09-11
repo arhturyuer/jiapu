@@ -273,6 +273,22 @@
   border-radius: 24rpx;
 }
 
+.person-node.gender-neutral {
+  background: #ECEFED;
+  border-color: #65706A;
+}
+
+.gender-avatar.gender-neutral {
+  color: #65706A;
+  background: #ECEFED;
+  border-color: #65706A;
+}
+
+.gender-badge.gender-neutral {
+  color: #FFFFFF;
+  background: #65706A;
+}
+
 .person-node.is-viewpoint {
   border: 5rpx solid #245C4A;
   box-shadow: 0 0 0 8rpx rgba(36, 92, 74, 0.12);
@@ -339,6 +355,27 @@
   line-height: 1.14;
   white-space: pre-line;
   word-break: break-all;
+}
+
+.child-rank-badge {
+  position: absolute;
+  bottom: -20rpx;
+  left: -12rpx;
+  z-index: 6;
+  min-width: 66rpx;
+  height: 36rpx;
+  padding: 0 12rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #704A16;
+  background: #FFF0CA;
+  border: 3rpx solid #F7F4EC;
+  border-radius: 20rpx;
+  font-size: 20rpx;
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .branch-count {
@@ -537,6 +574,12 @@
   white-space: nowrap;
 }
 
+.person-rank-basis {
+  margin-top: 6rpx;
+  color: #765E3A;
+  font-size: 24rpx;
+}
+
 .action-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -570,6 +613,105 @@
 
 .perspective-sheet {
   height: 72vh;
+}
+
+.child-order-sheet {
+  height: 76vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.child-order-help {
+  margin-top: 12rpx;
+  color: #65706A;
+  font-size: 24rpx;
+  line-height: 1.55;
+}
+
+.child-order-list {
+  min-height: 0;
+  margin-top: 18rpx;
+  flex: 1;
+}
+
+.child-order-row {
+  min-height: 144rpx;
+  padding: 14rpx 0;
+  display: grid;
+  grid-template-columns: 64rpx minmax(0, 1fr) 94rpx;
+  column-gap: 14rpx;
+  align-items: center;
+  border-bottom: 2rpx solid #EEF0ED;
+}
+
+.child-order-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.child-order-name-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  min-width: 0;
+}
+
+.child-order-name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.child-order-rank {
+  padding: 5rpx 12rpx;
+  color: #704A16;
+  background: #FFF0CA;
+  border-radius: 999rpx;
+  font-size: 22rpx;
+  white-space: nowrap;
+}
+
+.child-order-date {
+  margin-top: 6rpx;
+  display: block;
+  color: #65706A;
+  font-size: 23rpx;
+}
+
+.child-order-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.child-order-button {
+  width: 94rpx;
+  height: 52rpx;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #245C4A;
+  background: #E4EFEA;
+  border-radius: 15rpx;
+  font-size: 22rpx;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.child-order-button.is-disabled {
+  color: #9AA39E;
+  background: #EEF0ED;
+}
+
+.child-order-save {
+  width: 100%;
+  margin-top: 20rpx;
+  flex: none;
 }
 
 .person-search {

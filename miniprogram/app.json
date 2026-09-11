@@ -3,6 +3,7 @@
     "pages/tree/index",
     "pages/members/index",
     "pages/profile/index",
+    "pages/display-settings/index",
     "pages/create-family/index",
     "pages/examples/index",
     "pages/example/index",
