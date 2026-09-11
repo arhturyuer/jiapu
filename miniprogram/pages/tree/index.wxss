@@ -416,35 +416,6 @@
   letter-spacing: -2rpx;
 }
 
-.graph-movable.zoom-compact .node-meta {
-  display: none;
-}
-
-.graph-movable.zoom-overview .node-avatar,
-.graph-movable.zoom-overview .node-meta {
-  display: none;
-}
-
-.graph-movable.zoom-overview .person-node {
-  justify-content: center;
-  padding: 12rpx;
-  background: #FFFEFA;
-  border-width: 4rpx;
-  box-shadow: none;
-}
-
-.graph-movable.zoom-overview .node-name {
-  font-size: 32rpx;
-}
-
-.graph-movable.zoom-overview .node-name-vertical {
-  font-size: 28rpx;
-}
-
-.graph-movable.zoom-overview .relation-line:not(.relation-flow) {
-  opacity: 0.72;
-}
-
 .graph-help {
   position: fixed;
   left: 50%;
