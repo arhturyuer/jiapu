@@ -6,6 +6,7 @@ import FeedbackGroupManager from './components/FeedbackGroupManager.vue';
 
 type ModuleKey = 'dashboard' | 'commerce' | 'users' | 'families' | 'examples' | 'feedbackGroup' | 'reports' | 'moderation' | 'deletions' | 'audits' | 'operators';
 type ModerationScope = 'pending' | 'reviewed';
+type ModerationMode = 'strict' | 'review';
 type ParticipationFilter = 'all' | 'visitor' | 'creator' | 'member' | 'creator_member' | 'participating';
 type Row = Record<string, any>;
 
@@ -75,6 +76,7 @@ const authenticated = ref(false);
 const operator = ref<Operator | null>(null);
 const activeModule = ref<ModuleKey>('dashboard');
 const moderationScope = ref<ModerationScope>('pending');
+const moderationMode = ref<ModerationMode>('strict');
 const userParticipationFilter = ref<ParticipationFilter>('all');
 const listScope = ref('');
 const listStatus = ref('');
@@ -113,7 +115,7 @@ const visibleNav = computed(() => navItems.filter((item) => !['operators', 'audi
 const currentNav = computed(() => navItems.find((item) => item.key === activeModule.value) || navItems[0]);
 const dialogNeedsReason = computed(() => dialog.action === 'reports.resolve' || (
   dialog.action === 'moderation.review' && dialog.payload.decision === 'reject'
-));
+) || dialog.action === 'moderation.violate');
 
 function formatDate(value: unknown): string {
   if (!value) return '—';
@@ -168,7 +170,19 @@ function moderationStatusLabel(value: string): string {
 }
 
 function reviewSourceLabel(value: string): string {
-  return value === 'manual' ? '人工复核' : '机器审核';
+  if (value === 'manual') return '人工复核';
+  if (value === 'review_mode') return '复核模式默认通过';
+  return '机器审核';
+}
+
+function machineDecisionLabel(value: string): string {
+  const labels: Record<string, string> = { pending: '机审结果待回传', pass: '机审通过', risky: '机审提示风险', review: '机审建议复核', skipped: '未调用机审', unavailable: '机审结果不可用' };
+  return labels[value] || value || '暂无机审结论';
+}
+
+async function loadModerationMode(): Promise<void> {
+  const data = await callOps<{ mode: ModerationMode }>('moderation.mode.get');
+  moderationMode.value = data.mode === 'review' ? 'review' : 'strict';
 }
 
 function roleLabel(value: string): string {
@@ -316,7 +330,10 @@ async function loadModule(module: ModuleKey, direction: 'reset' | 'next' | 'prev
       pageSize: 25,
       cursor: pageCursors.value[pageNumber.value - 1] || ''
     };
-    if (module === 'moderation') params.scope = moderationScope.value;
+    if (module === 'moderation') {
+      params.scope = moderationScope.value;
+      await loadModerationMode();
+    }
     if (['users', 'families'].includes(module) && listStatus.value) params.status = listStatus.value;
     if (['reports', 'deletions'].includes(module) && listScope.value) params.scope = listScope.value;
     if (module === 'users' && userParticipationFilter.value !== 'all') params.participationType = userParticipationFilter.value;
@@ -415,11 +432,22 @@ async function confirmAction(): Promise<void> {
     if (dialog.action === 'moderation.review' && dialog.payload.decision === 'reject') {
       payload.reason = dialog.reason.trim();
     }
+    if (dialog.action === 'moderation.violate') {
+      payload.reason = dialog.reason.trim();
+    }
     await callOps(dialog.action, payload);
     if (dialog.action === 'moderation.review') {
       notice.value = dialog.payload.decision === 'approve'
         ? '内容已通过，审核结果已写入审核记录。'
         : '内容已拒绝，审核结果和原因已写入审核记录。';
+      mediaPreview.value = null;
+    }
+    if (dialog.action === 'moderation.mode.set') {
+      moderationMode.value = dialog.payload.mode === 'review' ? 'review' : 'strict';
+      notice.value = moderationMode.value === 'review' ? '已切换为复核模式，新上传图片会默认通过并记录机审结论。' : '已切换为审核模式，新上传图片将按机器审核流程处理。';
+    }
+    if (dialog.action === 'moderation.violate') {
+      notice.value = '图片已标记违规并停止向用户展示，原文件已保留供调查。';
       mediaPreview.value = null;
     }
     dialog.open = false;
@@ -607,15 +635,24 @@ onMounted(bootstrap);
           <button role="tab" :aria-selected="moderationScope === 'pending'" :class="{ active: moderationScope === 'pending' }" :disabled="loading" @click="switchModerationScope('pending')">待复核</button>
           <button role="tab" :aria-selected="moderationScope === 'reviewed'" :class="{ active: moderationScope === 'reviewed' }" :disabled="loading" @click="switchModerationScope('reviewed')">审核记录</button>
         </div>
+        <div v-if="activeModule === 'moderation'" class="moderation-mode">
+          <div><strong>图片{{ moderationMode === 'review' ? '复核模式' : '审核模式' }}</strong><small>{{ moderationMode === 'review' ? '新上传图片会默认通过；机审结论仅记录，不会自动下架。' : '新上传图片需等待机器审核或人工复核后展示。' }}</small></div>
+          <div v-if="operator?.role === 'super_admin'" class="mode-switch" role="group" aria-label="图片审核模式">
+            <button :class="{ active: moderationMode === 'strict' }" :disabled="loading || moderationMode === 'strict'" @click="openAction('切换为审核模式', '仅影响之后的新上传图片；既有待审任务将继续按原流程处理。', 'moderation.mode.set', { mode: 'strict' })">审核模式</button>
+            <button :class="{ active: moderationMode === 'review' }" :disabled="loading || moderationMode === 'review'" @click="openAction('切换为复核模式', '仅影响之后的新上传图片。图片会默认通过，机审结论只会记录在审核历史中。', 'moderation.mode.set', { mode: 'review' }, true, '确认切换')">复核模式</button>
+          </div>
+          <small v-else>仅超级管理员可切换模式。</small>
+        </div>
         <div v-if="loading && !rows.length" class="loading-state"><div class="spinner"></div><p>正在读取数据...</p></div>
         <div v-else-if="!rows.length" class="empty-state"><div>空</div><h3>{{ activeModule === 'moderation' && moderationScope === 'pending' ? '当前没有待复核内容' : '当前没有记录' }}</h3><p>{{ activeModule === 'moderation' && moderationScope === 'reviewed' ? '人工复核和机器审核完成后会显示在这里。' : '新的数据会自动显示在这里。' }}</p></div>
         <div v-else class="table-wrap">
           <table>
-            <thead><tr><th>标识 / 名称</th><th>类型 / 角色</th><th v-if="activeModule === 'families'">用户数</th><th v-if="activeModule === 'families'">成员数</th><th v-if="activeModule === 'users'">家谱参与</th><th>状态</th><th>{{ timeColumnLabel() }}</th><th>操作</th></tr></thead>
+            <thead><tr><th>标识 / 名称</th><th>类型 / 角色</th><th v-if="activeModule === 'moderation' && moderationScope === 'reviewed'">预览</th><th v-if="activeModule === 'families'">用户数</th><th v-if="activeModule === 'families'">成员数</th><th v-if="activeModule === 'users'">家谱参与</th><th>状态</th><th>{{ timeColumnLabel() }}</th><th>操作</th></tr></thead>
             <tbody>
               <tr v-for="row in rows" :key="row._id">
                 <td><strong>{{ row.name || row.nickName || row.displayName || row.actorName || row.identity || row.targetType || row.action || row._id }}</strong><small>{{ row.email || row.actorId || row.reason || row.summary || row.familyId || row._id }}</small></td>
                 <td><template v-if="activeModule === 'moderation'"><span>{{ row.kind }}</span><small v-if="moderationScope === 'reviewed'" class="source-tag" :class="row.reviewSource">{{ reviewSourceLabel(row.reviewSource) }}</small></template><template v-else>{{ row.role || row.kind || row.objectType || row.targetType || '—' }}</template></td>
+                <td v-if="activeModule === 'moderation' && moderationScope === 'reviewed'" class="moderation-thumbnail"><button v-if="row.thumbnailUrl" :aria-label="'查看图片大图'" @click="previewMedia(row)"><img :src="row.thumbnailUrl" alt="审核图片预览" /></button><span v-else>无预览</span></td>
                 <td v-if="activeModule === 'families'"><strong>{{ row.userCount || 0 }}</strong><small>已加入用户</small></td>
                 <td v-if="activeModule === 'families'"><strong>{{ row.memberCount || 0 }}</strong><small>谱内成员</small></td>
                 <td v-if="activeModule === 'users'"><strong>{{ participationLabel(row.participationType) }}</strong><small>{{ participationSummary(row) }}</small></td>
@@ -633,6 +670,7 @@ onMounted(bootstrap);
                   <button v-if="activeModule === 'moderation'" @click="previewMedia(row)">{{ moderationScope === 'reviewed' ? '查看记录' : '受控预览' }}</button>
                   <button v-if="activeModule === 'moderation' && moderationScope === 'pending'" @click="openAction('通过内容', '确认内容符合产品规范。', 'moderation.review', { taskId: row._id, decision: 'approve' })">通过</button>
                   <button v-if="activeModule === 'moderation' && moderationScope === 'pending'" class="danger" @click="openAction('拒绝内容', '拒绝后内容不会向家庭成员展示，请填写人工复核原因。', 'moderation.review', { taskId: row._id, decision: 'reject' }, true, '拒绝')">拒绝</button>
+                  <button v-if="activeModule === 'moderation' && moderationScope === 'reviewed' && row.canViolate" class="danger" @click="openAction('违规并删除', '图片将立即停止向用户展示，原文件将保留供调查。请填写违规原因。', 'moderation.violate', { taskId: row._id }, true, '违规并删除')">违规并删除</button>
                   <button v-if="activeModule === 'deletions' && row.status === 'failed' && operator?.role === 'super_admin'" @click="openAction('重试注销', '任务会由后台维护函数重新执行。', 'deletions.retry', { deletionId: row._id }, true, '重试')">重试</button>
                   <button v-if="activeModule === 'operators' && row.status === 'active'" class="danger" @click="openAction('停用运营账号', '该账号将立即失去运营后台访问权限。', 'operators.disable', { operatorId: row._id }, true, '停用')">停用</button>
                 </td>
@@ -811,7 +849,7 @@ onMounted(bootstrap);
       </section>
     </main>
 
-    <div v-if="dialog.open" class="modal-mask" @click.self="dialog.open = false"><section class="modal"><p class="eyebrow">二次确认</p><h2>{{ dialog.title }}</h2><p>{{ dialog.message }}</p><label v-if="dialogNeedsReason">{{ dialog.action === 'reports.resolve' ? '处理结论' : '拒绝原因' }}<textarea v-model="dialog.reason" :maxlength="dialog.action === 'reports.resolve' ? 300 : 200" :placeholder="dialog.action === 'reports.resolve' ? '填写给举报用户查看的处理结果' : '填写内容不符合规范的具体原因'"></textarea></label><div class="modal-actions"><button class="secondary" @click="dialog.open = false">取消</button><button :class="dialog.danger ? 'danger-button' : 'primary'" :disabled="dialogNeedsReason && !dialog.reason.trim()" @click="confirmAction">{{ dialog.confirmText }}</button></div></section></div>
+    <div v-if="dialog.open" class="modal-mask" @click.self="dialog.open = false"><section class="modal"><p class="eyebrow">二次确认</p><h2>{{ dialog.title }}</h2><p>{{ dialog.message }}</p><label v-if="dialogNeedsReason">{{ dialog.action === 'reports.resolve' ? '处理结论' : dialog.action === 'moderation.violate' ? '违规原因' : '拒绝原因' }}<textarea v-model="dialog.reason" :maxlength="dialog.action === 'reports.resolve' ? 300 : 200" :placeholder="dialog.action === 'reports.resolve' ? '填写给举报用户查看的处理结果' : dialog.action === 'moderation.violate' ? '填写图片违规的具体原因' : '填写内容不符合规范的具体原因'"></textarea></label><div class="modal-actions"><button class="secondary" @click="dialog.open = false">取消</button><button :class="dialog.danger ? 'danger-button' : 'primary'" :disabled="dialogNeedsReason && !dialog.reason.trim()" @click="confirmAction">{{ dialog.confirmText }}</button></div></section></div>
 
     <div v-if="mediaPreview" class="modal-mask" @click.self="mediaPreview = null">
       <section class="modal media-modal">
@@ -824,6 +862,7 @@ onMounted(bootstrap);
           <div><dt>审核来源</dt><dd>{{ reviewSourceLabel(mediaPreview.reviewSource) }}</dd></div>
           <div><dt>审核人</dt><dd>{{ mediaPreview.reviewerName || '系统审核' }}</dd></div>
           <div><dt>审核时间</dt><dd>{{ formatDate(mediaPreview.decidedAt) }}</dd></div>
+          <div><dt>机审结论</dt><dd>{{ machineDecisionLabel(mediaPreview.machineDecision) }}</dd></div>
           <div class="wide"><dt>审核结论</dt><dd>{{ mediaPreview.reviewReason || '未记录具体结论' }}</dd></div>
         </dl>
         <img v-if="mediaPreview.available && mediaPreview.type === 'image'" :src="mediaPreview.url" alt="受控查看的家庭图片" />

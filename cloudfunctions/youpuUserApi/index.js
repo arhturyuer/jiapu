@@ -10,6 +10,7 @@ const _ = db.command;
 const PAGE_SIZE = 50;
 const GRAPH_PERSON_LIMIT = 500;
 const GRAPH_RELATION_LIMIT = 2000;
+const MODERATION_CONFIG_ID = 'moderation';
 const ACTIVE_ROLES = domain.ACTIVE_ROLES;
 const RATE_LIMITS = {
   'auth.updateProfile': { max: 20, windowMs: 60 * 60 * 1000 },
@@ -359,6 +360,11 @@ async function maybeGet(scope, collectionName, id) {
   } catch (error) {
     return null;
   }
+}
+
+async function imageModerationMode() {
+  const setting = await maybeGet(db, 'system_config', MODERATION_CONFIG_ID);
+  return setting && setting.mode === 'review' ? 'review' : 'strict';
 }
 
 async function mustGet(scope, collectionName, id, code, message) {
@@ -2470,10 +2476,16 @@ async function mediaComplete(event) {
     }
   }
   assert(size <= 5 * 1024 * 1024, 'MEDIA_TOO_LARGE', '图片不能超过 5MB');
-  let moderationStatus = 'review';
+  // Capture the selected mode on the asset so later toggles never reinterpret
+  // an upload that is already waiting for its asynchronous callback.
+  const moderationMode = await imageModerationMode();
+  const reviewMode = moderationMode === 'review';
+  let moderationStatus = reviewMode ? 'approved' : 'review';
   let traceId = '';
+  let machineDecision = 'unavailable';
   if (process.env.CONTENT_MODERATION_MODE === 'off') {
-    moderationStatus = 'approved';
+    if (!reviewMode) moderationStatus = 'approved';
+    machineDecision = 'skipped';
   } else {
     try {
       const response = await cloud.openapi.security.mediaCheckAsync({
@@ -2484,9 +2496,10 @@ async function mediaComplete(event) {
         mediaUrl: inspected.url
       });
       traceId = response.traceId || response.trace_id || '';
-      moderationStatus = 'pending';
+      machineDecision = traceId ? 'pending' : 'unavailable';
+      if (!reviewMode) moderationStatus = 'pending';
     } catch (error) {
-      moderationStatus = 'review';
+      if (!reviewMode) moderationStatus = 'review';
     }
   }
   return mutate('media.complete', event, openid, async function (transaction) {
@@ -2498,12 +2511,14 @@ async function mediaComplete(event) {
         size: size,
         status: moderationStatus === 'approved' ? 'active' : 'pending',
         moderationStatus: moderationStatus,
+        moderationMode: moderationMode,
+        machineDecision: machineDecision,
         traceId: traceId,
         uploadedAt: db.serverDate(),
         updatedAt: db.serverDate()
       }
     });
-    if (moderationStatus === 'review' || moderationStatus === 'pending') {
+    if (reviewMode || moderationStatus === 'review' || moderationStatus === 'pending') {
       const taskId = 'mt_' + asset._id;
       await transaction.collection('moderation_tasks').doc(taskId).set({
         data: {
@@ -2512,6 +2527,10 @@ async function mediaComplete(event) {
           traceId: traceId,
           type: 'image',
           status: moderationStatus,
+          admissionMode: moderationMode,
+          reviewSource: reviewMode ? 'review_mode' : 'machine',
+          reviewReason: reviewMode ? '复核模式默认通过' : '',
+          machineDecision: machineDecision,
           createdAt: db.serverDate(),
           updatedAt: db.serverDate()
         }

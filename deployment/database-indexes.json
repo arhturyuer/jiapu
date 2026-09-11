@@ -65,6 +65,7 @@
       { "name": "owner_status", "fields": [{ "field": "ownerId", "order": "asc" }, { "field": "status", "order": "asc" }] },
       { "name": "trace_unique", "unique": true, "sparse": true, "fields": [{ "field": "traceId", "order": "asc" }] },
       { "name": "moderation_updated", "fields": [{ "field": "moderationStatus", "order": "asc" }, { "field": "updatedAt", "order": "asc" }] },
+      { "name": "moderation_retention_updated", "fields": [{ "field": "moderationStatus", "order": "asc" }, { "field": "retainForInvestigation", "order": "asc" }, { "field": "updatedAt", "order": "asc" }] },
       { "name": "family_file", "fields": [{ "field": "familyId", "order": "asc" }, { "field": "fileId", "order": "asc" }] }
     ],
     "moderation_tasks": [

@@ -85,8 +85,9 @@ Page({
           const item = presentation[user.avatarAssetId] || {};
           const freshUrl = item.url || '';
           if (freshUrl) cacheAvatarUrl(user.avatarAssetId, freshUrl);
-          else if (item.status === 'rejected' || item.status === 'deleted') clearCachedAvatarUrl(user.avatarAssetId);
-          pageData.avatarUrl = freshUrl || cachedUrl;
+          const unavailable = item.status === 'rejected' || item.status === 'deleted';
+          if (unavailable) clearCachedAvatarUrl(user.avatarAssetId);
+          pageData.avatarUrl = unavailable ? '' : (freshUrl || cachedUrl);
           return pageData;
         }).catch(function () {
           return pageData;

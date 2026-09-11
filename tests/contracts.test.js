@@ -509,6 +509,31 @@ test('内容复核提供待办与历史视图并完整记录人工结论', funct
   assert.match(adminApp, /原内容已不可查看/);
 });
 
+test('图片复核模式支持默认通过、受控缩略图与违规隐藏', function () {
+  const userApi = fs.readFileSync(path.join(root, 'cloudfunctions/youpuUserApi/index.js'), 'utf8');
+  const opsApi = fs.readFileSync(path.join(root, 'cloudfunctions/youpuOpsApi/index.js'), 'utf8');
+  const jobs = fs.readFileSync(path.join(root, 'cloudfunctions/youpuJobs/index.js'), 'utf8');
+  const adminApp = fs.readFileSync(path.join(root, 'admin/src/App.vue'), 'utf8');
+  const profile = fs.readFileSync(path.join(root, 'miniprogram/pages/profile/index.js'), 'utf8');
+  assert.match(userApi, /imageModerationMode/);
+  assert.match(userApi, /moderationMode: moderationMode/);
+  assert.match(userApi, /reviewSource: reviewMode \? 'review_mode' : 'machine'/);
+  assert.match(jobs, /asset\.moderationMode === 'review'/);
+  assert.match(jobs, /machineDecision: suggest/);
+  assert.match(jobs, /retainForInvestigation/);
+  assert.match(opsApi, /'moderation\.mode\.get': moderationModeGet/);
+  assert.match(opsApi, /'moderation\.mode\.set': moderationModeSet/);
+  assert.match(opsApi, /'moderation\.violate': moderationViolate/);
+  assert.match(opsApi, /requireOperator\(context, \['super_admin'\]\)/);
+  assert.match(opsApi, /VIOLATION_REASON_REQUIRED/);
+  assert.match(opsApi, /thumbnailUrls/);
+  assert.match(opsApi, /ops\.moderation\.violate/);
+  assert.match(adminApp, /复核模式/);
+  assert.match(adminApp, /违规并删除/);
+  assert.match(adminApp, /thumbnailUrl/);
+  assert.match(profile, /const unavailable = item\.status === 'rejected'/);
+});
+
 test('运营详情使用结构化信息而不是原始 JSON', function () {
   const adminApp = fs.readFileSync(path.join(root, 'admin/src/App.vue'), 'utf8');
   assert.doesNotMatch(adminApp, /JSON\.stringify\(detail/);

@@ -79,6 +79,12 @@ header h1 { margin: 0; font: 650 40px/1.1 Georgia, "Noto Serif SC", serif; }
 .moderation-tabs { padding: 14px 18px; display: flex; flex-wrap: wrap; gap: 8px; background: #f8faf7; border-bottom: 1px solid #e5eae6; }
 .moderation-tabs button { min-width: 104px; padding: 9px 15px; color: #64736c; background: transparent; border: 1px solid transparent; border-radius: 10px; font-size: 13px; font-weight: 700; }
 .moderation-tabs button.active { color: #245c4a; background: white; border-color: #cfdcd6; box-shadow: 0 4px 12px rgba(36,92,74,.08); }
+.moderation-mode { padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; gap: 18px; color: #405149; background: #edf5f1; border-bottom: 1px solid #dbe9e1; }
+.moderation-mode strong, .moderation-mode small { display: block; }
+.moderation-mode small { margin-top: 4px; color: #6f7e76; font-size: 12px; line-height: 1.5; }
+.mode-switch { display: flex; flex: 0 0 auto; gap: 7px; }
+.mode-switch button { min-width: 84px; padding: 8px 11px; color: #53665d; background: white; border: 1px solid #b9cec4; border-radius: 9px; font-size: 12px; font-weight: 700; }
+.mode-switch button.active { color: #fff; background: #245c4a; border-color: #245c4a; }
 .table-wrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; }
 th { padding: 16px 20px; color: #718079; background: #f6f8f5; font-size: 12px; letter-spacing: .04em; text-align: left; }
@@ -89,6 +95,11 @@ td strong { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-s
 td small { max-width: 300px; margin-top: 5px; overflow: hidden; color: #849089; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .source-tag { width: fit-content; padding: 3px 7px; color: #6c5a35; background: #f5eddd; border-radius: 999px; font-weight: 700; }
 .source-tag.manual { color: #346352; background: #e7f0ec; }
+.source-tag.review_mode { color: #285a7b; background: #e7f1f7; }
+.moderation-thumbnail { min-width: 72px; }
+.moderation-thumbnail button { width: 64px; height: 64px; padding: 0; overflow: hidden; background: #f2f5f2; border: 1px solid #dce5df; border-radius: 10px; }
+.moderation-thumbnail img { width: 100%; height: 100%; display: block; object-fit: cover; }
+.moderation-thumbnail span { color: #89938e; font-size: 12px; }
 .status { padding: 5px 9px; color: #346352; background: #e7f0ec; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap; }
 .status.frozen, .status.rejected, .status.failed { color: #9f3030; background: #fae7e5; }
 .status.open, .status.pending, .status.review { color: #8c5a14; background: #fff1d8; }

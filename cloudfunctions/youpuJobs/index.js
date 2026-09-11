@@ -512,9 +512,13 @@ async function cleanTemporaryData() {
   const removedRateLimits = await removeMany('rate_limits', { expiresAt: _.lte(new Date()) }, 2000);
   const rejectedMedia = await db.collection('media_assets').where({
     moderationStatus: 'rejected',
+    retainForInvestigation: _.neq(true),
     updatedAt: _.lte(new Date(Date.now() - 24 * 60 * 60 * 1000))
   }).limit(100).get();
-  const fileIds = (rejectedMedia.data || []).map(function (item) { return item.fileId; }).filter(Boolean);
+  // Operator-enforced violations are retained for investigation, rather than
+  // being swept up by the normal 24-hour rejected-media cleanup.
+  const disposableRejectedMedia = rejectedMedia.data || [];
+  const fileIds = disposableRejectedMedia.map(function (item) { return item.fileId; }).filter(Boolean);
   let mediaCleanupSucceeded = true;
   if (fileIds.length) {
     try {
@@ -525,7 +529,7 @@ async function cleanTemporaryData() {
     }
   }
   if (mediaCleanupSucceeded) {
-    for (const asset of rejectedMedia.data || []) {
+    for (const asset of disposableRejectedMedia) {
       await db.collection('media_assets').doc(asset._id).update({
         data: { status: 'deleted', fileId: '', deletedAt: db.serverDate(), updatedAt: db.serverDate() }
       });
@@ -545,7 +549,7 @@ async function cleanTemporaryData() {
   return {
     removedIdempotency: removedIdempotency,
     removedRateLimits: removedRateLimits,
-    removedMedia: mediaCleanupSucceeded && rejectedMedia.data ? rejectedMedia.data.length : 0,
+    removedMedia: mediaCleanupSucceeded ? disposableRejectedMedia.length : 0,
     purgedTextBodies: (resolvedText.data || []).filter(function (item) { return Boolean(item.content); }).length
   };
 }
@@ -1022,6 +1026,28 @@ async function moderationCallback(event) {
   if (!result.data || !result.data.length) return { matched: false };
   const asset = result.data[0];
   const moderationStatus = suggest === 'pass' ? 'approved' : (suggest === 'risky' ? 'rejected' : 'review');
+  const taskId = 'mt_' + asset._id;
+  // Review-mode uploads are admitted immediately. The callback is retained as
+  // an audit signal, but must not change their visibility or recorded approval.
+  if (asset.moderationMode === 'review') {
+    await db.collection('media_assets').doc(asset._id).update({
+      data: {
+        machineDecision: suggest,
+        moderationResult: event.result || { suggest: suggest },
+        machineModeratedAt: db.serverDate(),
+        updatedAt: db.serverDate()
+      }
+    });
+    await db.collection('moderation_tasks').doc(taskId).update({
+      data: {
+        machineDecision: suggest,
+        result: event.result || { suggest: suggest },
+        machineModeratedAt: db.serverDate(),
+        updatedAt: db.serverDate()
+      }
+    });
+    return { matched: true, assetId: asset._id, status: asset.moderationStatus, reviewMode: true };
+  }
   await db.collection('media_assets').doc(asset._id).update({
     data: {
       moderationStatus: moderationStatus,
@@ -1031,7 +1057,6 @@ async function moderationCallback(event) {
       updatedAt: db.serverDate()
     }
   });
-  const taskId = 'mt_' + asset._id;
   await db.collection('moderation_tasks').doc(taskId).set({
     data: {
       familyId: asset.familyId || '',
@@ -1039,6 +1064,9 @@ async function moderationCallback(event) {
       traceId: traceId,
       type: 'image',
       status: moderationStatus,
+      admissionMode: asset.moderationMode || 'strict',
+      reviewSource: 'machine',
+      machineDecision: suggest,
       result: event.result || { suggest: suggest },
       createdAt: db.serverDate(),
       updatedAt: db.serverDate()

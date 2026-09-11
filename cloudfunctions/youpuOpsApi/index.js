@@ -7,6 +7,7 @@ cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 const _ = db.command;
 const FEEDBACK_GROUP_SETTINGS_ID = 'active';
+const MODERATION_CONFIG_ID = 'moderation';
 const FEEDBACK_QR_MAX_BYTES = 1024 * 1024;
 class OpsError extends Error {
   constructor(code, message) {
@@ -1302,7 +1303,7 @@ async function moderationList(event, context) {
   const where = { status: _.in(statuses) };
   const result = await page('moderation_tasks', where, event, scope === 'reviewed' ? 'updatedAt' : 'createdAt');
   const reviewerIds = Array.from(new Set(result.items.map(function (item) {
-    return item.reviewedBy;
+    return item.violatedBy || item.reviewedBy;
   }).filter(Boolean)));
   let reviewersById = {};
   if (reviewerIds.length) {
@@ -1312,13 +1313,35 @@ async function moderationList(event, context) {
       return map;
     }, {});
   }
+  const thumbnailUrls = {};
+  if (scope === 'reviewed') {
+    const assetIds = Array.from(new Set(result.items.filter(function (item) {
+      return item.type !== 'text' && item.assetId;
+    }).map(function (item) { return item.assetId; })));
+    if (assetIds.length) {
+      const assets = await db.collection('media_assets').where({ _id: _.in(assetIds) }).limit(assetIds.length).get();
+      const available = (assets.data || []).filter(function (asset) { return Boolean(asset.fileId); });
+      if (available.length) {
+        try {
+          const signed = await cloud.getTempFileURL({ fileList: available.map(function (asset) { return asset.fileId; }) });
+          available.forEach(function (asset, index) {
+            const item = signed.fileList && signed.fileList[index];
+            if (item && item.tempFileURL) thumbnailUrls[asset._id] = item.tempFileURL;
+          });
+        } catch (error) {
+          // The record remains usable when a temporary thumbnail cannot be issued.
+        }
+      }
+    }
+  }
   result.items = result.items.map(function (item) {
-    const reviewer = item.reviewedBy ? reviewersById[item.reviewedBy] || {} : {};
-    const reviewSource = item.reviewedBy ? 'manual' : 'machine';
+    const actorId = item.violatedBy || item.reviewedBy;
+    const reviewer = actorId ? reviewersById[actorId] || {} : {};
+    const reviewSource = item.reviewSource || (item.admissionMode === 'review' ? 'review_mode' : (item.reviewedBy ? 'manual' : 'machine'));
     const machineDecision = item.machineDecision || (item.result && item.result.suggest) || '';
-    const reviewReason = item.reviewReason || (
+    const reviewReason = item.violationReason || item.reviewReason || (
       item.status === 'approved'
-        ? '机器审核通过'
+        ? (item.admissionMode === 'review' ? '复核模式默认通过' : '机器审核通过')
         : item.status === 'rejected'
           ? '机器审核拒绝'
           : '等待人工复核'
@@ -1331,18 +1354,55 @@ async function moderationList(event, context) {
       moderationStatus: item.status,
       contentHash: item.contentHash || '',
       reviewSource: reviewSource,
-      reviewerId: item.reviewedBy || '',
-      reviewerName: item.reviewedByName || reviewer.displayName || reviewer.email || item.reviewedBy || '系统审核',
-      reviewerAccount: item.reviewedByAccount || reviewer.email || '',
+      admissionMode: item.admissionMode || 'strict',
+      reviewerId: actorId || '',
+      reviewerName: item.violatedByName || item.reviewedByName || reviewer.displayName || reviewer.email || actorId || '系统审核',
+      reviewerAccount: item.violatedByAccount || item.reviewedByAccount || reviewer.email || '',
       reviewReason: reviewReason,
       machineDecision: machineDecision,
-      decidedAt: item.reviewedAt || (scope === 'reviewed' ? item.updatedAt || item.createdAt || null : null),
+      violationReason: item.violationReason || '',
+      violatedAt: item.violatedAt || null,
+      canViolate: item.type !== 'text' && item.status === 'approved',
+      thumbnailUrl: thumbnailUrls[item.assetId] || '',
+      decidedAt: item.violatedAt || item.reviewedAt || (scope === 'reviewed' ? item.updatedAt || item.createdAt || null : null),
       createdAt: item.createdAt || null,
       updatedAt: item.updatedAt || null
     };
   });
   result.scope = scope;
   return result;
+}
+
+function moderationModePayload(setting) {
+  const source = setting || {};
+  return {
+    mode: source.mode === 'review' ? 'review' : 'strict',
+    updatedAt: source.updatedAt || null,
+    updatedBy: source.updatedBy || ''
+  };
+}
+
+async function moderationModeGet(event, context) {
+  await requireOperator(context, ['super_admin', 'operator']);
+  return moderationModePayload(await maybeGet('system_config', MODERATION_CONFIG_ID));
+}
+
+async function moderationModeSet(event, context) {
+  const operator = await requireOperator(context, ['super_admin']);
+  const mode = event.mode === 'review' ? 'review' : event.mode === 'strict' ? 'strict' : '';
+  assert(mode, 'INVALID_MODERATION_MODE', '请选择审核模式或复核模式');
+  return opsMutate(operator, 'moderation.mode.set', event, async function (transaction) {
+    await transaction.collection('system_config').doc(MODERATION_CONFIG_ID).set({
+      data: {
+        mode: mode,
+        updatedBy: operator._id,
+        updatedByName: cleanText(operator.displayName || operator.email || operator._id, 120),
+        updatedAt: db.serverDate()
+      }
+    });
+    await writeOpsAudit(transaction, operator, 'ops.moderation.mode.set', 'system_config', MODERATION_CONFIG_ID, mode, mode === 'review' ? '切换为图片复核模式' : '切换为图片审核模式', event.requestId);
+    return { mode: mode };
+  });
 }
 
 async function moderationGetUrl(event, context) {
@@ -1405,6 +1465,7 @@ async function moderationReview(event, context) {
           reviewedByName: reviewedByName,
           reviewedByAccount: reviewedByAccount,
           reviewReason: reason,
+          reviewSource: 'manual',
           reviewedAt: db.serverDate(),
           updatedAt: db.serverDate()
         }
@@ -1417,12 +1478,54 @@ async function moderationReview(event, context) {
         reviewedByName: reviewedByName,
         reviewedByAccount: reviewedByAccount,
         reviewReason: reason,
+        reviewSource: 'manual',
         reviewedAt: db.serverDate(),
         updatedAt: db.serverDate()
       }
     });
     await writeOpsAudit(transaction, operator, approved ? 'ops.moderation.approve' : 'ops.moderation.reject', 'moderation_task', task._id, reason, approved ? '通过内容复核' : '拒绝内容复核', event.requestId);
     return { taskId: task._id, status: moderationStatus };
+  });
+}
+
+async function moderationViolate(event, context) {
+  const operator = await requireOperator(context, ['super_admin', 'operator']);
+  const reason = cleanText(event.reason, 200);
+  assert(reason, 'VIOLATION_REASON_REQUIRED', '请填写违规原因');
+  const operatorName = cleanText(operator.displayName || operator.email || operator._id, 120);
+  const operatorAccount = cleanText(operator.email || '', 120);
+  return opsMutate(operator, 'moderation.violate', event, async function (transaction) {
+    const task = await maybeGet('moderation_tasks', event.taskId, transaction);
+    assert(task, 'MODERATION_TASK_NOT_FOUND', '复核任务不存在');
+    assert(task.type !== 'text' && task.status === 'approved', 'MEDIA_NOT_VIOLATABLE', '只有仍在展示的已通过图片可以标记违规');
+    const asset = await maybeGet('media_assets', task.assetId, transaction);
+    assert(asset && asset.fileId && asset.status === 'active' && asset.moderationStatus === 'approved', 'MEDIA_NOT_VIOLATABLE', '图片已不处于可展示状态');
+    await transaction.collection('media_assets').doc(asset._id).update({
+      data: {
+        moderationStatus: 'rejected',
+        status: 'disabled',
+        retainForInvestigation: true,
+        violationReason: reason,
+        violatedBy: operator._id,
+        violatedByName: operatorName,
+        violatedByAccount: operatorAccount,
+        violatedAt: db.serverDate(),
+        updatedAt: db.serverDate()
+      }
+    });
+    await transaction.collection('moderation_tasks').doc(task._id).update({
+      data: {
+        status: 'rejected',
+        violationReason: reason,
+        violatedBy: operator._id,
+        violatedByName: operatorName,
+        violatedByAccount: operatorAccount,
+        violatedAt: db.serverDate(),
+        updatedAt: db.serverDate()
+      }
+    });
+    await writeOpsAudit(transaction, operator, 'ops.moderation.violate', 'moderation_task', task._id, reason, '标记图片违规并停止展示', event.requestId, task.familyId || '');
+    return { taskId: task._id, status: 'rejected' };
   });
 }
 
@@ -1803,8 +1906,11 @@ const handlers = {
   'reports.assign': reportsAssign,
   'reports.resolve': reportsResolve,
   'moderation.list': moderationList,
+  'moderation.mode.get': moderationModeGet,
+  'moderation.mode.set': moderationModeSet,
   'moderation.getUrl': moderationGetUrl,
   'moderation.review': moderationReview,
+  'moderation.violate': moderationViolate,
   'deletions.list': deletionsList,
   'deletions.retry': deletionsRetry,
   'audits.list': auditsList,
