@@ -1,20 +1,28 @@
-<view class="loading-panel" wx:if="{{loading}}"><view class="loading-dot"></view><text>正在整理家庭动态...</text></view>
-<view class="page-shell" wx:elif="{{!currentFamily}}">
-  <view class="empty-panel"><view class="empty-mark">家</view><text class="empty-title">还没有家谱</text><text class="empty-description">创建一份家谱后，就可以邀请家人一起维护。</text><button class="primary-button empty-action" bindtap="createFamily">创建家谱</button></view>
-</view>
+<view class="loading-panel" wx:if="{{loading}}"><view class="loading-dot"></view><text>正在整理家庭信息...</text></view>
 <view class="family-page page-shell" wx:else>
+  <block wx:if="{{!currentFamily}}">
+    <view class="empty-panel family-empty"><view class="empty-mark">家</view><text class="empty-title">从第一位家人开始</text><text class="empty-description">几分钟建立第一张家谱，再邀请家人一起补完整。</text><view class="empty-guide-actions"><button class="primary-button empty-action" bindtap="createFamily">创建家谱</button><button class="secondary-button empty-action" bindtap="openExamples">浏览示例家谱</button><text class="invite-help" bindtap="explainInvitation">收到家人邀请，在微信中打开邀请卡片</text></view></view>
+    <view class="section-block" wx:if="{{archivedFamilies.length}}"><view class="section-heading"><text class="section-title">家谱回收站</text><text class="muted-text">到期前可恢复</text></view><view class="setting-list surface-card"><view class="setting-row" wx:for="{{archivedFamilies}}" wx:key="_id" data-id="{{item._id}}" bindtap="openArchivedFamily" hover-class="setting-row-active"><view><text class="setting-title">{{item.name}}</text><text class="setting-desc">{{item.archiveStatusText}}</text></view><text class="setting-arrow">›</text></view></view></view>
+  </block>
+
+  <block wx:else>
   <view class="family-hero surface-card">
-    <view class="family-hero-top"><view class="family-heading"><view class="family-title-row"><text class="family-name">{{currentFamily.name}}</text><view class="family-membership-badge {{membershipActive ? 'active' : ''}}" bindtap="openMembership" hover-class="family-membership-badge-pressed"><text>{{membershipTierText}}</text><text class="family-membership-arrow">›</text></view></view><text class="family-role">{{isAdmin ? '你是家谱管理员' : currentRole === 'member' ? '你是家庭成员' : '你是访客'}} · {{membershipDetailText}}</text></view><button class="invite-button" wx:if="{{isAdmin}}" bindtap="openShareSheet">邀请家人</button></view>
+    <view class="family-hero-top">
+      <view class="family-title-row"><text class="family-name">{{currentFamily.name}}</text><view class="family-membership-badge {{membershipActive ? 'active' : ''}}" bindtap="openMembership" hover-class="family-membership-badge-pressed"><text>{{membershipTierText}}</text><text class="family-membership-arrow">›</text></view></view>
+      <text class="family-role">{{isAdmin ? '你是家谱管理员' : currentRole === 'member' ? '你是家庭成员' : '你是访客'}} · {{membershipDetailText}}</text>
+    </view>
     <text class="family-description">{{currentFamily.description || '一家人，共修一份家谱'}}</text>
-    <view class="progress-track"><view class="progress-value" style="width:{{stats.completion}}%;"></view></view>
-    <text class="progress-text">资料完整度 {{stats.completion}}%</text>
+    <view class="family-progress-row">
+      <view class="family-progress-main"><view class="progress-track"><view class="progress-value" style="width:{{stats.completion}}%;"></view></view><text class="progress-text">资料完整度 {{stats.completion}}%</text></view>
+      <button class="invite-button" wx:if="{{isAdmin}}" bindtap="openShareSheet">邀请家人</button>
+    </view>
   </view>
 
   <view class="onboarding-card surface-card" wx:if="{{onboarding.isCreator && stats.collaboratorCount < 2}}">
     <view class="onboarding-heading"><view><text class="onboarding-title">让家谱活起来</text><text class="onboarding-copy">完成这些步骤，邀请第一位家人一起维护。</text></view><text class="onboarding-progress">{{(onboarding.sharedAt ? 2 : 1)}}/3</text></view>
     <view class="onboarding-row done"><text>✓</text><view><text>家谱已创建</text><text>你已经完成第一步</text></view></view>
     <view class="onboarding-row {{stats.personCount >= 3 ? 'done' : ''}}"><text>{{stats.personCount >= 3 ? '✓' : '2'}}</text><view><text>推荐补到 3 位家人</text><text>当前 {{stats.personCount}} 位，可先分享</text></view><button class="secondary-button mini-action" wx:if="{{stats.personCount < 3}}" bindtap="continueOnboardingAdd">继续添加</button></view>
-    <view class="onboarding-row {{onboarding.sharedAt ? 'done' : ''}}"><text>{{onboarding.sharedAt ? '✓' : '3'}}</text><view><text>发送到家庭群</text><text>{{onboarding.sharedAt ? '已完成首次分享' : '选择“邀请家人”生成分享卡'}}</text></view><button class="secondary-button mini-action" wx:if="{{!onboarding.sharedAt}}" bindtap="openShareSheet">去分享</button></view>
+    <view class="onboarding-row {{onboarding.sharedAt ? 'done' : ''}}"><text>{{onboarding.sharedAt ? '✓' : '3'}}</text><view><text>发送到家庭群</text><text>{{onboarding.sharedAt ? '已完成首次分享' : '选择“邀请家人”生成分享卡'}}</text></view><button class="secondary-button mini-action onboarding-share-button" wx:if="{{!onboarding.sharedAt}}" bindtap="openShareSheet">去分享</button></view>
     <view class="onboarding-wait"><text>等待第一位家人加入（当前 {{stats.collaboratorCount}} 人）</text></view>
   </view>
 
@@ -33,33 +41,20 @@
     </view>
   </view>
 
-  <view class="section-block">
-    <view class="section-heading"><text class="section-title">共同维护</text><text class="muted-text">{{collaborators.length}} 人</text></view>
-    <scroll-view class="collaborator-scroll" scroll-x enhanced show-scrollbar="{{false}}">
-      <view class="collaborator-row">
-        <view class="collaborator-card surface-card" wx:for="{{collaborators}}" wx:key="_id">
-          <image class="collaborator-avatar" wx:if="{{item.avatarUrl}}" src="{{item.avatarUrl}}" mode="aspectFill"></image>
-          <view class="collaborator-avatar collaborator-placeholder" wx:else>{{item.initial}}</view>
-          <text class="collaborator-name">{{item.displayName}}</text><text class="collaborator-role">{{item.roleText}}</text>
-        </view>
-      </view>
-    </scroll-view>
-  </view>
+  <view class="section-block"><view class="section-heading"><text class="section-title">家谱管理</text><text class="section-action" bindtap="createFamily">新建</text></view><view class="setting-list surface-card">
+    <view class="setting-row" bindtap="openFamilySheet" hover-class="setting-row-active"><view><text class="setting-title">切换家谱</text><text class="setting-desc">已加入 {{familyList.length}} 份家谱</text></view><text class="setting-arrow">›</text></view>
+    <view class="setting-row" bindtap="openActivity" hover-class="setting-row-active"><view><text class="setting-title">家谱变更历史</text><text class="setting-desc">{{membershipActive ? '查看自功能上线以来的完整记录' : '免费家庭可查看最近 20 条'}}</text></view><text class="setting-arrow">›</text></view>
+    <view class="setting-row" bindtap="openFamilyBackup" hover-class="setting-row-active"><view><text class="setting-title">完整家庭备份</text><text class="setting-desc">管理员可生成结构化资料与家庭图片 ZIP</text></view><text class="setting-arrow">›</text></view>
+    <view class="setting-row" bindtap="openDisplaySettings" hover-class="setting-row-active"><view><text class="setting-title">家谱显示设置</text><text class="setting-desc">调整家谱人物信息的显示方式</text></view><text class="setting-arrow">›</text></view>
+    <view class="setting-row" bindtap="openFamilyManage" hover-class="setting-row-active"><view><text class="setting-title">家庭与权限管理</text><text class="setting-desc">家谱资料、成员角色、邀请和归档</text></view><text class="setting-arrow">›</text></view>
+  </view></view>
 
-  <view class="section-block">
-    <view class="section-heading"><text class="section-title">最近动态</text><text class="section-action" bindtap="openActivity">完整历史</text></view>
-    <view class="activity-list surface-card" wx:if="{{recentActivities.length}}">
-      <view class="activity-row" wx:for="{{recentActivities}}" wx:key="_id"><view class="activity-dot"></view><view class="activity-copy"><text class="activity-summary">{{item.actorName || '一位家人'}} {{item.summary}}</text><text class="activity-time">{{item.timeText}}</text></view></view>
-    </view>
-    <view class="empty-activity surface-card" wx:else>家谱的修改记录会显示在这里</view>
-  </view>
-
-  <button class="secondary-button graph-button" bindtap="openGraph">查看完整家谱</button>
-  <button class="secondary-button graph-button display-settings-button" bindtap="openDisplaySettings">家谱显示设置</button>
-  <button class="secondary-button graph-button" wx:if="{{isAdmin}}" bindtap="openFamilyBackup">生成完整家庭备份</button>
   <view class="family-upgrade" wx:if="{{!membershipActive}}" bindtap="openMembership"><text>解锁完整历史、家庭备份与去广告</text><text>升级家庭会员 ›</text></view>
-  <button class="secondary-button graph-button" bindtap="openFamilyManage">家庭与权限管理</button>
+  <view class="section-block" wx:if="{{archivedFamilies.length}}"><view class="section-heading"><text class="section-title">家谱回收站</text><text class="muted-text">到期前可恢复</text></view><view class="setting-list surface-card"><view class="setting-row" wx:for="{{archivedFamilies}}" wx:key="_id" data-id="{{item._id}}" bindtap="openArchivedFamily" hover-class="setting-row-active"><view><text class="setting-title">{{item.name}}</text><text class="setting-desc">{{item.archiveStatusText}}</text></view><text class="setting-arrow">›</text></view></view></view>
   <ad class="banner-ad" wx:if="{{adVisible}}" unit-id="{{adUnitId}}" binderror="hideAd"></ad>
+  </block>
+
+  <view class="sheet-mask" wx:if="{{showFamilySheet}}" bindtap="closeFamilySheet"><view class="bottom-sheet" catchtap="stopEvent"><view class="sheet-handle"></view><view class="sheet-title">切换家谱</view><view class="family-option {{currentFamily && item._id === currentFamily._id ? 'selected' : ''}}" wx:for="{{familyList}}" wx:key="_id" data-id="{{item._id}}" bindtap="switchFamily"><view><text class="family-option-name">{{item.name}}</text><text class="family-option-role">{{item.currentRole === 'admin' ? '家谱管理员' : item.currentRole === 'member' ? '家庭成员' : '访客'}} · {{item.personCount}} 位成员</text></view><text class="selected-text" wx:if="{{currentFamily && item._id === currentFamily._id}}">当前</text></view><button class="secondary-button create-family-button" bindtap="createFamily">创建另一份家谱</button></view></view>
 
   <view class="sheet-mask" wx:if="{{showShareSheet}}" bindtap="closeShareSheet">
     <view class="bottom-sheet" catchtap="stopEvent"><view class="sheet-handle"></view><view class="sheet-title">邀请家人</view>

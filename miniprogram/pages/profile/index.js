@@ -2,9 +2,7 @@ const app = getApp();
 const api = require('../../utils/api');
 const privacy = require('../../utils/privacy');
 const formState = require('../../utils/form-state');
-const format = require('../../utils/format');
 const commerceConfig = require('../../config/commerce');
-const membershipDisplay = require('../../utils/membership-display');
 
 var AVATAR_CACHE_KEY = 'youpu_avatar_cache';
 
@@ -36,29 +34,6 @@ function clearCachedAvatarUrl(assetId) {
   } catch (e) { /* ignore */ }
 }
 
-function splitFamilies(items) {
-  const active = [];
-  const archived = [];
-  (items || []).forEach(function (item) {
-    if (item.status === 'archived') archived.push(Object.assign({}, item, {
-      archiveStatusText: item.currentRole === 'admin'
-        ? ('你可在 ' + format.dateText(item.purgeAt) + ' 前恢复')
-        : '仅管理员可恢复'
-    }));
-    else if (item.status === 'active') active.push(item);
-  });
-  return { active: active, archived: archived };
-}
-
-function reconcileCurrentFamily(families) {
-  const current = app.getCurrentFamily();
-  const matched = current && families.find(function (item) { return item._id === current._id; });
-  const next = matched || families[0] || null;
-  app.globalData.familyList = families;
-  app.setCurrentFamily(next);
-  return next;
-}
-
 Page({
   data: {
     loading: true,
@@ -72,15 +47,6 @@ Page({
     savingAvatar: false,
     savingProfile: false,
     hasNameChanges: false,
-    familyList: [],
-    archivedFamilies: [],
-    currentFamily: null,
-    currentRoleText: '',
-    currentFamilyUpdatedText: '',
-    showFamilySheet: false,
-    membershipTierText: '免费版',
-    membershipDetailText: '升级后全体家人共享会员权益',
-    membershipActive: false,
     adUnitId: '',
     adVisible: false
   },
@@ -94,34 +60,25 @@ Page({
     const config = options || {};
     const hasContent = this._hasLoaded && !this.data.loading;
     if (!config.force && hasContent && app.isCacheFresh('profile')) return Promise.resolve();
-    if (!hasContent) this.setData({ loading: true, error: '', showFamilySheet: false });
-    else this.setData({ error: '', showFamilySheet: false });
+    if (!hasContent) this.setData({ loading: true, error: '' });
+    else this.setData({ error: '' });
     return app.getProfileData(function () {
       return app.ensureLogin(config).then(function () {
-      const user = app.globalData.user || {};
-      const accountState = app.globalData.accountState || user.status || 'active';
-      const deletion = app.globalData.deletion || null;
-      if (accountState === 'pending_delete') {
-        return { pending: true, user: user, accountState: accountState, deletion: deletion };
-      }
-      // app.loadFamilyPages(true) remains the all-family source; the app cache deduplicates it.
-      return app.loadFamilyPages(true /* cached */, config).then(function (result) {
-        const grouped = splitFamilies(result.families);
-        const currentFamily = reconcileCurrentFamily(grouped.active);
-        const membershipPresentation = membershipDisplay.fromFamily(currentFamily);
+        const user = app.globalData.user || {};
+        const accountState = app.globalData.accountState || user.status || 'active';
+        const deletion = app.globalData.deletion || null;
+        if (accountState === 'pending_delete') {
+          return { pending: true, user: user, accountState: accountState, deletion: deletion };
+        }
+        const currentFamily = app.getCurrentFamily();
+        const adUnitId = commerceConfig.resolveBanner(app.globalData.environment, 'profile');
         self._initialNickName = user.nickName || '';
         const cachedUrl = getCachedAvatarUrl(user.avatarAssetId);
         const pageData = {
           pending: false, user: user, accountState: accountState, deletion: deletion,
           nickName: user.nickName || '', avatarUrl: cachedUrl, avatarAssetId: user.avatarAssetId || '',
-          familyList: grouped.active, archivedFamilies: grouped.archived, currentFamily: currentFamily,
-          currentRoleText: currentFamily ? format.roleText(currentFamily.currentRole) : '',
-          currentFamilyUpdatedText: currentFamily && currentFamily.updatedAt ? '最近更新 ' + format.relativeTime(currentFamily.updatedAt) : '',
-          membershipActive: membershipPresentation.active,
-          membershipTierText: membershipPresentation.tierText,
-          membershipDetailText: membershipPresentation.detailText,
-          adUnitId: commerceConfig.resolveBanner(app.globalData.environment, 'profile'),
-          adVisible: Boolean(currentFamily && !(currentFamily.membership && currentFamily.membership.active) && commerceConfig.resolveBanner(app.globalData.environment, 'profile'))
+          adUnitId: adUnitId,
+          adVisible: Boolean(currentFamily && !(currentFamily.membership && currentFamily.membership.active) && adUnitId)
         };
         if (!user.avatarAssetId) return pageData;
         return api.getMediaPresentation([user.avatarAssetId]).then(function (presentation) {
@@ -135,14 +92,13 @@ Page({
           return pageData;
         });
       });
-      });
     }, config).then(function (pageData) {
       if (pageData.pending) {
         const cachedUrl = getCachedAvatarUrl(pageData.user.avatarAssetId);
         self.setData({
           loading: false, accountState: pageData.accountState, deletion: pageData.deletion, user: pageData.user,
           nickName: pageData.user.nickName || '', avatarAssetId: pageData.user.avatarAssetId || '', avatarUrl: cachedUrl,
-          familyList: [], archivedFamilies: [], currentFamily: null
+          adUnitId: '', adVisible: false
         });
       } else {
         self.setData(Object.assign({ loading: false, savingAvatar: false, savingProfile: false }, pageData));
@@ -231,56 +187,9 @@ Page({
     });
   },
 
-  openFamilySheet: function () { this.setData({ showFamilySheet: true }); },
-  closeFamilySheet: function () { this.setData({ showFamilySheet: false }); },
-
-  switchFamily: function (event) {
-    const familyId = event.currentTarget.dataset.id;
-    const family = this.data.familyList.find(function (item) { return item._id === familyId; });
-    if (!family) return;
-    app.setCurrentFamily(family);
-    app.invalidateCache({ graph: family._id, dashboard: family._id });
-    wx.setStorageSync('youpu_pending_view', { mode: 'full', personId: '' });
-    const adUnitId = commerceConfig.resolveBanner(app.globalData.environment, 'profile');
-    const membershipPresentation = membershipDisplay.fromFamily(family);
-    this.setData({ currentFamily: family, currentRoleText: format.roleText(family.currentRole), currentFamilyUpdatedText: family.updatedAt ? '最近更新 ' + format.relativeTime(family.updatedAt) : '', showFamilySheet: false,
-      membershipActive: membershipPresentation.active,
-      membershipTierText: membershipPresentation.tierText,
-      membershipDetailText: membershipPresentation.detailText,
-      adUnitId: adUnitId, adVisible: Boolean(adUnitId && !(family.membership && family.membership.active)) });
-    wx.showModal({ title: '已切换到“' + family.name + '”', content: '现在去查看这份家谱吗？', confirmText: '去查看', cancelText: '留在这里' }).then(function (result) {
-      if (result.confirm) wx.switchTab({ url: '/pages/tree/index' });
-    });
-  },
-
-  createFamily: function () { this.closeFamilySheet(); wx.navigateTo({ url: '/pages/create-family/index' }); },
-  openExamples: function () { wx.navigateTo({ url: '/pages/examples/index' }); },
-  explainInvitation: function () { wx.showModal({ title: '接受家人邀请', content: '请从家人发给你的家谱邀请卡进入。这样我们才能确认你要加入的家谱和权限。', showCancel: false, confirmText: '知道了' }); },
   showPrivacy: function () { wx.navigateTo({ url: '/pages/privacy/index' }); },
   showFeedbackGroup: function () { wx.navigateTo({ url: '/pages/feedback-group/index' }); },
-
-  openFamilyManage: function () {
-    const family = this.data.currentFamily;
-    if (!family) return;
-    wx.navigateTo({ url: '/pages/family-manage/index?familyId=' + family._id });
-  },
-
-  openMembership: function () {
-    if (!this.data.currentFamily) return;
-    wx.navigateTo({ url: '/pages/membership/index?familyId=' + this.data.currentFamily._id });
-  },
-  openActivity: function () {
-    if (!this.data.currentFamily) return;
-    wx.navigateTo({ url: '/pages/activity/index?familyId=' + this.data.currentFamily._id });
-  },
-  openFamilyBackup: function () {
-    if (!this.data.currentFamily) return;
-    wx.navigateTo({ url: '/pages/family-backup/index?familyId=' + this.data.currentFamily._id });
-  },
   hideAd: function () { this.setData({ adVisible: false }); },
 
-  openArchivedFamily: function (event) { wx.navigateTo({ url: '/pages/family-manage/index?familyId=' + event.currentTarget.dataset.id }); },
-
-  showAbout: function () { wx.navigateTo({ url: '/pages/about/index' }); },
-  stopEvent: function () {}
+  showAbout: function () { wx.navigateTo({ url: '/pages/about/index' }); }
 });

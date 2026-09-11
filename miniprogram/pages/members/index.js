@@ -6,17 +6,41 @@ const shareCard = require('../../utils/share-card');
 const commerceConfig = require('../../config/commerce');
 const membershipDisplay = require('../../utils/membership-display');
 
+function splitFamilies(items) {
+  const active = [];
+  const archived = [];
+  (items || []).forEach(function (item) {
+    if (item.status === 'archived') archived.push(Object.assign({}, item, {
+      archiveStatusText: item.currentRole === 'admin'
+        ? ('你可在 ' + format.dateText(item.purgeAt) + ' 前恢复')
+        : '仅管理员可恢复'
+    }));
+    else if (item.status === 'active') active.push(item);
+  });
+  return { active: active, archived: archived };
+}
+
+function reconcileCurrentFamily(families) {
+  const current = app.getCurrentFamily();
+  const matched = current && families.find(function (item) { return item._id === current._id; });
+  const next = matched || families[0] || null;
+  app.globalData.familyList = families;
+  app.setCurrentFamily(next);
+  return next;
+}
+
 Page({
   data: {
     loading: true,
+    familyList: [],
+    archivedFamilies: [],
     currentFamily: null,
     currentRole: 'viewer',
     isAdmin: false,
     stats: { personCount: 0, relationCount: 0, collaboratorCount: 0, completion: 0, pendingCount: 0 },
-    collaborators: [],
     pendingChanges: [],
-    recentActivities: [],
     onboarding: { isCreator: false, sharedAt: null },
+    showFamilySheet: false,
     showShareSheet: false,
     shareRole: 'member',
     shareReady: false,
@@ -43,27 +67,44 @@ Page({
     const config = options || {};
     const hasContent = this._hasLoaded && !this.data.loading;
     const currentFamily = app.getCurrentFamily();
-    if (!config.force && hasContent && app.isCacheFresh('familyPages', false) && (!currentFamily || app.isCacheFresh('dashboard', currentFamily._id))) {
+    const displayedFamilyId = this.data.currentFamily && this.data.currentFamily._id;
+    const currentFamilyId = currentFamily && currentFamily._id;
+    const sameFamily = displayedFamilyId === currentFamilyId;
+    if (!config.force && hasContent && sameFamily && app.isCacheFresh('familyPages', true) && (!currentFamily || app.isCacheFresh('dashboard', currentFamily._id))) {
       return Promise.resolve();
     }
     if (!hasContent) this.setData({ loading: true });
-    return app.loadFamilies(config).then(function () {
-      const family = app.getCurrentFamily();
-      self.setData({ currentFamily: family, loading: false });
+    return app.ensureLogin(config).then(function () {
+      if (app.globalData.accountState === 'pending_delete') return { families: [] };
+      return app.loadFamilyPages(true, config);
+    }).then(function (listData) {
+      const grouped = splitFamilies(listData.families || []);
+      const family = reconcileCurrentFamily(grouped.active);
+      self.setData({
+        familyList: grouped.active,
+        archivedFamilies: grouped.archived,
+        currentFamily: family,
+        loading: false
+      });
       if (!family) {
+        self.setData({
+          currentRole: 'viewer',
+          isAdmin: false,
+          stats: { personCount: 0, relationCount: 0, collaboratorCount: 0, completion: 0, pendingCount: 0 },
+          pendingChanges: [],
+          onboarding: { isCreator: false, sharedAt: null },
+          showFamilySheet: false,
+          membershipActive: false,
+          membershipTierText: '免费版',
+          membershipDetailText: '升级后全体家人共享会员权益',
+          adVisible: false
+        });
         self._hasLoaded = true;
         return null;
       }
       return app.getDashboard(family._id, config);
     }).then(function (data) {
       if (!data) return;
-      const collaborators = (data.collaborators || []).map(function (item) {
-        return Object.assign({}, item, {
-          initial: (item.displayName || '家').slice(0, 1),
-          roleText: format.roleText(item.role),
-          avatarUrl: ''
-        });
-      });
       const membershipPresentation = membershipDisplay.fromFamily(data.family);
       self.setData({
         loading: false,
@@ -72,29 +113,18 @@ Page({
         isAdmin: data.family.currentRole === 'admin',
         stats: data.stats,
         onboarding: data.onboarding || { isCreator: false, sharedAt: null },
-        collaborators: collaborators,
         pendingChanges: data.pendingChanges || [],
         membershipActive: membershipPresentation.active,
         membershipTierText: membershipPresentation.tierText,
         membershipDetailText: membershipPresentation.detailText,
         adUnitId: commerceConfig.resolveBanner(app.globalData.environment, 'family'),
-        adVisible: Boolean(commerceConfig.resolveBanner(app.globalData.environment, 'family') && !(data.family.membership && data.family.membership.active)),
-        recentActivities: (data.recentActivities || []).map(function (item) {
-          return Object.assign({}, item, { timeText: format.relativeTime(item.createdAt) });
-        })
+        adVisible: Boolean(commerceConfig.resolveBanner(app.globalData.environment, 'family') && !(data.family.membership && data.family.membership.active))
       });
       shareCard.createAndRender(self, 'members-share-card', { kind: 'discovery' }).then(function (card) {
         self.setData({ systemShareCard: card });
       });
       app.setCurrentFamily(data.family);
       self._hasLoaded = true;
-      return api.getMediaUrls(collaborators.map(function (item) { return item.avatarAssetId; })).then(function (urls) {
-        self.setData({
-          collaborators: collaborators.map(function (item) {
-            return Object.assign({}, item, { avatarUrl: urls[item.avatarAssetId] || '' });
-          })
-        });
-      });
     }).catch(function (error) {
       if (!hasContent) {
         self.setData({ loading: false });
@@ -104,7 +134,37 @@ Page({
   },
 
   createFamily: function () {
+    this.closeFamilySheet();
     wx.navigateTo({ url: '/pages/create-family/index' });
+  },
+
+  openExamples: function () { wx.navigateTo({ url: '/pages/examples/index' }); },
+
+  explainInvitation: function () {
+    wx.showModal({
+      title: '接受家人邀请',
+      content: '请从家人发给你的家谱邀请卡进入。这样我们才能确认你要加入的家谱和权限。',
+      showCancel: false,
+      confirmText: '知道了'
+    });
+  },
+
+  openFamilySheet: function () { this.setData({ showFamilySheet: true }); },
+  closeFamilySheet: function () { this.setData({ showFamilySheet: false }); },
+
+  switchFamily: function (event) {
+    const familyId = event.currentTarget.dataset.id;
+    const family = this.data.familyList.find(function (item) { return item._id === familyId; });
+    if (!family) return;
+    app.setCurrentFamily(family);
+    app.invalidateCache({ profile: true });
+    wx.setStorageSync('youpu_pending_view', { mode: 'full', personId: '' });
+    this.setData({ currentFamily: family, showFamilySheet: false });
+    this.loadDashboard({ force: true });
+  },
+
+  openArchivedFamily: function (event) {
+    wx.navigateTo({ url: '/pages/family-manage/index?familyId=' + event.currentTarget.dataset.id });
   },
 
   openPersonList: function () {

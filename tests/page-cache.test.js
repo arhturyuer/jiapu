@@ -152,6 +152,9 @@ test('没有家谱的账号结束加载并展示空状态，重复切 Tab 不重
     globalData: { accountState: 'active' },
     getCurrentFamily: function () { return null; },
     loadFamilies: function () { this.calls = (this.calls || 0) + 1; return Promise.resolve([]); },
+    ensureLogin: function () { return Promise.resolve({ accountState: 'active' }); },
+    loadFamilyPages: function () { this.calls = (this.calls || 0) + 1; return Promise.resolve({ families: [] }); },
+    setCurrentFamily: function () {},
     isCacheFresh: function () { return this.calls > 0; },
     consumePendingView: function () { return null; }
   };
@@ -170,5 +173,64 @@ test('没有家谱的账号结束加载并展示空状态，重复切 Tab 不重
   await tree.loadPage();
   await members.loadDashboard();
   assert.equal(app.calls, callsAfterFirstLoad);
+  global.wx = previousWx;
+});
+
+test('家庭页切换家谱后留在当前页并强制刷新看板', async function () {
+  const first = { _id: 'family-1', name: '第一份家谱' };
+  const second = { _id: 'family-2', name: '第二份家谱' };
+  const invalidations = [];
+  const stored = [];
+  const app = {
+    globalData: { accountState: 'active', environment: 'staging' },
+    getCurrentFamily: function () { return this.currentFamily || first; },
+    setCurrentFamily: function (family) { this.currentFamily = family; },
+    invalidateCache: function (options) { invalidations.push(options); }
+  };
+  const previousWx = global.wx;
+  global.wx = { setStorageSync: function (key, value) { stored.push([key, value]); } };
+  const members = createPage(loadPage('../miniprogram/pages/members/index', app));
+  members.data.familyList = [first, second];
+  members.data.currentFamily = first;
+  members.data.showFamilySheet = true;
+  let refreshOptions = null;
+  members.loadDashboard = function (options) { refreshOptions = options; return Promise.resolve(); };
+
+  members.switchFamily({ currentTarget: { dataset: { id: second._id } } });
+
+  assert.equal(app.currentFamily._id, second._id);
+  assert.equal(members.data.currentFamily._id, second._id);
+  assert.equal(members.data.showFamilySheet, false);
+  assert.deepEqual(refreshOptions, { force: true });
+  assert.deepEqual(invalidations, [{ profile: true }]);
+  assert.deepEqual(stored, [['youpu_pending_view', { mode: 'full', personId: '' }]]);
+  global.wx = previousWx;
+});
+
+test('没有家谱的活跃账号仍可加载我的个人资料', async function () {
+  const app = {
+    globalData: {
+      user: { _id: 'user-1', nickName: '小明', avatarAssetId: '' },
+      accountState: 'active', deletion: null, environment: 'staging'
+    },
+    getCurrentFamily: function () { return null; },
+    isCacheFresh: function () { return false; },
+    ensureLogin: function () { return Promise.resolve({ accountState: 'active' }); },
+    getProfileData: function (loader) { return loader(); }
+  };
+  const previousWx = global.wx;
+  global.wx = {
+    getStorageSync: function () { return {}; },
+    setStorageSync: function () {},
+    removeStorageSync: function () {}
+  };
+  const profile = createPage(loadPage('../miniprogram/pages/profile/index', app));
+
+  await profile.loadPage();
+
+  assert.equal(profile.data.loading, false);
+  assert.equal(profile.data.accountState, 'active');
+  assert.equal(profile.data.nickName, '小明');
+  assert.equal(profile.data.adVisible, false);
   global.wx = previousWx;
 });

@@ -1358,7 +1358,6 @@ async function familyDashboard(event) {
     ? { familyId: event.familyId, status: 'pending' }
     : { familyId: event.familyId, status: 'pending', createdBy: userId(openid) };
   const pending = await listAll('change_requests', pendingWhere, 500);
-  const auditResult = await db.collection('audit_logs').where({ familyId: event.familyId }).orderBy('createdAt', 'desc').limit(20).get();
   return {
     family: publicFamily(family, access.membership.role),
     stats: {
@@ -1382,10 +1381,7 @@ async function familyDashboard(event) {
         joinedAt: item.joinedAt
       };
     }),
-    pendingChanges: pending.map(publicChangeRequest),
-    recentActivities: (auditResult.data || []).map(function (item) {
-      return { _id: item._id, action: item.action, summary: item.summary, createdAt: item.createdAt };
-    })
+    pendingChanges: pending.map(publicChangeRequest)
   };
 }
 

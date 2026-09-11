@@ -220,16 +220,14 @@ test('广告只在家庭和我的页预留且无 ID 或会员状态下隐藏', f
   });
 });
 
-test('会员状态合并到当前家谱卡并在家庭页顶部展示', function () {
+test('会员状态只在家庭页展示且我的页仅保留免广告判断', function () {
   const profile = fs.readFileSync(path.join(root, 'miniprogram/pages/profile/index.wxml'), 'utf8');
   const profileSource = fs.readFileSync(path.join(root, 'miniprogram/pages/profile/index.js'), 'utf8');
   const members = fs.readFileSync(path.join(root, 'miniprogram/pages/members/index.wxml'), 'utf8');
   const display = require('../miniprogram/utils/membership-display');
-  assert.doesNotMatch(profile, /openCurrentGraph|查看家谱|membership-card/);
-  assert.doesNotMatch(profileSource, /openCurrentGraph\s*:/);
-  assert.match(profile, /current-family-membership/);
-  assert.match(profile, /membershipTierText/);
-  assert.match(profile, /bindtap="openMembership"/);
+  assert.doesNotMatch(profile, /current-family-membership|membershipTierText|bindtap="openMembership"/);
+  assert.doesNotMatch(profileSource, /membershipDisplay|openMembership\s*:/);
+  assert.match(profileSource, /currentFamily[\s\S]*membership\.active[\s\S]*adVisible/);
   assert.match(members, /family-membership-badge[\s\S]*membershipTierText/);
   assert.deepEqual(display.fromFamily({ membership: { active: false } }), {
     active: false, tierText: '免费版', detailText: '升级后全体家人共享会员权益'

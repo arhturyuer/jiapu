@@ -632,14 +632,10 @@ async function familyDashboard(event) {
   }
   const memberships = await getAll('family_memberships', { familyId: event.familyId, status: 'active' });
   let changes = await getAll('change_requests', { familyId: event.familyId, status: 'pending' });
-  let audits = await getAll('audit_logs', { familyId: event.familyId });
 
   if (access.membership.role !== 'admin') {
     changes = changes.filter(function (item) { return item.createdBy === access.openid; });
   }
-  audits = audits.sort(function (a, b) {
-    return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
-  }).slice(0, 20);
 
   let completedFields = 0;
   persons.forEach(function (person) {
@@ -670,8 +666,7 @@ async function familyDashboard(event) {
     }),
     pendingChanges: changes.sort(function (a, b) {
       return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
-    }),
-    recentActivities: audits
+    })
   });
 }
 

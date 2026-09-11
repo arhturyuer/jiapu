@@ -120,6 +120,10 @@ test('关于页使用正式版实际版本并按最新在前展示受控更新�
   const verifier = fs.readFileSync(path.join(root, 'deployment/verify-release-note.mjs'), 'utf8');
   assert.deepEqual(releaseInfo.validateReleaseNotes(releaseNotes), [
     {
+      version: '1.2.7',
+      summary: '重构家庭与我的页面职责，集中家谱管理入口并优化多机型卡片与按钮布局。'
+    },
+    {
       version: '1.2.6',
       summary: '新增子女排行标识与手动调整功能，支持按出生日期自动区分长子、次子、长女、次女。'
     },
@@ -203,29 +207,28 @@ test('头像使用独立保存接口、只读审核状态且新增成员延迟�
   assert.match(addMember, /submitStage:\s*'正在上传头像…'/);
 });
 
-test('我的页具备账户三态、单次家谱加载和受控媒体展示', function () {
+test('我的页具备账户三态、独立个人资料和受控媒体展示', function () {
   const profile = fs.readFileSync(path.join(root, 'miniprogram/pages/profile/index.js'), 'utf8');
   const template = fs.readFileSync(path.join(root, 'miniprogram/pages/profile/index.wxml'), 'utf8');
   const clientApi = fs.readFileSync(path.join(root, 'miniprogram/utils/api.js'), 'utf8');
   const userApi = fs.readFileSync(path.join(root, 'cloudfunctions/youpuUserApi/index.js'), 'utf8');
   assert.match(profile, /accountState === 'pending_delete'/);
-  assert.match(profile, /app\.loadFamilyPages\(true\)/);
-  assert.doesNotMatch(profile, /app\.loadFamilies\(\)/);
+  assert.doesNotMatch(profile, /loadFamilyPages|loadFamilies|familyList|archivedFamilies/);
   assert.match(profile, /api\.getMediaPresentation/);
   assert.match(template, /账户正在注销冷静期/);
-  assert.match(template, />创建家谱</);
-  assert.doesNotMatch(template, /查看家谱/);
-  assert.match(template, /membershipTierText/);
+  assert.match(template, /profile-card/);
+  assert.match(template, /账户与隐私/);
+  assert.doesNotMatch(template, /创建家谱|当前家谱|切换家谱|家庭管理|家谱回收站|家谱变更历史|完整家庭备份|membershipTierText/);
   assert.match(template, /保存名字/);
   assert.match(clientApi, /function getMediaPresentation/);
   assert.match(userApi, /'media\.getPresentation':\s*mediaGetPresentation/);
   assert.match(userApi, /asset\.ownerId === userId\(openid\)/);
 });
 
-test('家谱页和我的页空状态使用一致的三级创建引导', function () {
+test('家谱页和家庭页空状态使用一致的三级创建引导', function () {
   const tree = fs.readFileSync(path.join(root, 'miniprogram/pages/tree/index.wxml'), 'utf8');
-  const profile = fs.readFileSync(path.join(root, 'miniprogram/pages/profile/index.wxml'), 'utf8');
-  [tree, profile].forEach(function (template) {
+  const members = fs.readFileSync(path.join(root, 'miniprogram/pages/members/index.wxml'), 'utf8');
+  [tree, members].forEach(function (template) {
     assert.match(template, />创建家谱</);
     assert.match(template, />浏览示例家谱</);
     assert.match(template, /收到家人邀请，在微信中打开邀请卡片/);
@@ -564,7 +567,7 @@ test('家谱显示偏好集中设置，正式家谱按个人偏好展示且示�
   assert.match(tree, /openDisplaySettings/);
   assert.doesNotMatch(tree, /toggleNameLayout/);
   assert.match(treeTemplate, /bindtap="openDisplaySettings">设置/);
-  assert.match(members, /bindtap="openDisplaySettings">家谱显示设置/);
+  assert.match(members, /bindtap="openDisplaySettings"[\s\S]{0,180}家谱显示设置/);
   assert.match(settings, /api\.call\('family\.getPreference'/);
   assert.match(settings, /api\.call\('family\.setPreference'/);
   assert.match(settingsTemplate, /data-field="showChildRankBadge"/);

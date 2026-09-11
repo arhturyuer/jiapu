@@ -1,17 +1,18 @@
 .family-page { padding-bottom: calc(56rpx + env(safe-area-inset-bottom)); }
 .empty-action { width: 360rpx; }
 .family-hero { padding: 32rpx; }
-.family-hero-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 20rpx; }
-.family-heading { min-width: 0; flex: 1; }
-.family-title-row { min-width:0; display:flex; align-items:center; gap:14rpx; }
+.family-hero-top { display: flex; flex-direction: column; }
+.family-title-row { width: 100%; min-width: 0; display: flex; align-items: flex-start; gap: 14rpx; }
 .family-name, .family-role { display: block; }
-.family-name { min-width:0; overflow: hidden; font-size: 44rpx; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
-.family-role { margin-top: 8rpx; color: #65706A; font-size: 26rpx; }
-.family-membership-badge { padding:8rpx 14rpx; display:flex; flex:none; align-items:center; gap:5rpx; color:#654B1B; background:#FFF0CA; border-radius:999rpx; font-size:22rpx; font-weight:650; line-height:1.2; }.family-membership-badge.active { color:#FFFFFF; background:#34715D; }.family-membership-badge-pressed { opacity:.72; }.family-membership-arrow { font-size:26rpx; line-height:1; }
-.invite-button { min-width: 168rpx; height: 76rpx; padding: 0 22rpx; display: inline-flex; flex: none; align-items: center; justify-content: center; color: #FFFFFF; background: #245C4A; border-radius: 22rpx; box-shadow: 0 8rpx 18rpx rgba(36, 92, 74, 0.18); font-size: 28rpx; font-weight: 600; line-height: 1; }
+.family-name { min-width: 0; flex: 1; font-size: 44rpx; font-weight: 600; line-height: 1.25; white-space: normal; word-break: break-all; }
+.family-role { margin-top: 14rpx; color: #65706A; font-size: 26rpx; line-height: 1.55; }
+.family-membership-badge { height:55rpx; padding:0 16rpx; display:flex; flex:none; align-items:center; gap:5rpx; color:#654B1B; background:#FFF0CA; border-radius:999rpx; font-size:22rpx; font-weight:650; line-height:1; }.family-membership-badge.active { color:#FFFFFF; background:#34715D; }.family-membership-badge-pressed { opacity:.72; }.family-membership-arrow { font-size:26rpx; line-height:1; }
+.invite-button { width: 0; min-width: 0; height: 68rpx; padding: 0 14rpx; display: inline-flex; flex: 1; align-items: center; justify-content: center; color: #FFFFFF; background: #245C4A; border-radius: 20rpx; box-shadow: 0 8rpx 18rpx rgba(36, 92, 74, 0.18); font-size: 25rpx; font-weight: 600; line-height: 1; white-space: nowrap; }
 .invite-button:active { background: #194636; }
 .family-description { margin-top: 24rpx; display: block; color: #65706A; line-height: 1.6; }
-.progress-track { height: 12rpx; margin-top: 28rpx; overflow: hidden; background: #E1E5E1; border-radius: 12rpx; }
+.family-progress-row { width: 100%; margin-top: 28rpx; display: flex; align-items: center; gap: 20rpx; }
+.family-progress-main { width: 0; min-width: 0; flex: 1; }
+.progress-track { height: 12rpx; overflow: hidden; background: #E1E5E1; border-radius: 12rpx; }
 .progress-value { height: 100%; background: #245C4A; border-radius: 12rpx; }
 .progress-text { margin-top: 12rpx; display: block; color: #65706A; font-size: 24rpx; }
 .stats-grid { margin-top: 20rpx; display: grid; grid-template-columns: 1fr 1fr; gap: 16rpx; }
@@ -19,6 +20,7 @@
 .onboarding-card { margin-top: 20rpx; padding: 28rpx; }
 .onboarding-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:20rpx; }.onboarding-title { display:block; font-size:32rpx; font-weight:650; }.onboarding-copy { display:block; margin-top:6rpx; color:#65706A; font-size:24rpx; }.onboarding-progress { color:#245C4A; font-size:28rpx; font-weight:650; }
 .onboarding-row { min-height:96rpx; padding:18rpx 0; display:flex; align-items:center; gap:16rpx; border-bottom:2rpx solid #EEF0ED; }.onboarding-row > text { width:42rpx; height:42rpx; display:flex; align-items:center; justify-content:center; color:#65706A; background:#EEF0ED; border-radius:50%; font-size:23rpx; font-weight:650; }.onboarding-row.done > text { color:#FFFFFF; background:#245C4A; }.onboarding-row view { flex:1; display:flex; flex-direction:column; gap:4rpx; }.onboarding-row view text:first-child { font-size:27rpx; font-weight:600; }.onboarding-row view text:last-child { color:#65706A; font-size:22rpx; }.mini-action { min-height:60rpx; padding:0 16rpx; border-radius:16rpx; font-size:23rpx; white-space:nowrap; }.onboarding-wait { width:100%; padding-top:20rpx; color:#65706A; font-size:24rpx; line-height:1.5; box-sizing:border-box; }.onboarding-wait text { display:block; }
+.onboarding-share-button { width: 120rpx; min-width: 120rpx; margin: 0; padding: 0 12rpx; flex: none; }
 .stat-card { min-height: 144rpx; padding: 24rpx; display: flex; flex-direction: column; justify-content: center; transition: background 120ms ease, transform 120ms ease; }
 .stat-card-active { background: #F1F6F3; transform: scale(0.985); }
 .stat-value { color: #245C4A; font-size: 44rpx; font-weight: 600; }
@@ -34,23 +36,25 @@
 .review-button { width: 144rpx; height: 68rpx; font-size: 26rpx; }
 .review-button.reject { color: #B43D3D; background: #FBEDEC; }
 .review-button.approve { color: #FFFFFF; background: #245C4A; }
-.collaborator-scroll { width: calc(100vw - 32rpx); }
-.collaborator-row { display: flex; gap: 16rpx; padding-right: 32rpx; }
-.collaborator-card { flex: none; width: 200rpx; min-height: 220rpx; padding: 24rpx 16rpx; display: flex; flex-direction: column; align-items: center; text-align: center; }
-.collaborator-avatar { width: 84rpx; height: 84rpx; border-radius: 28rpx; }
-.collaborator-placeholder { display: flex; align-items: center; justify-content: center; color: #245C4A; background: #E4EFEA; font-weight: 600; }
-.collaborator-name { max-width: 168rpx; margin-top: 14rpx; overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
-.collaborator-role { margin-top: 4rpx; color: #65706A; font-size: 24rpx; }
-.activity-list { padding: 8rpx 24rpx; }
-.activity-row { min-height: 104rpx; display: flex; align-items: flex-start; padding: 22rpx 0; border-bottom: 2rpx solid #EEF0ED; }
-.activity-row:last-child { border-bottom: none; }
-.activity-dot { width: 16rpx; height: 16rpx; margin: 12rpx 20rpx 0 0; flex: none; background: #245C4A; border-radius: 50%; }
-.activity-copy { display: flex; flex-direction: column; }
-.activity-summary { line-height: 1.5; }
-.activity-time { margin-top: 6rpx; color: #65706A; font-size: 24rpx; }
-.empty-activity { padding: 40rpx; color: #65706A; text-align: center; }
-.graph-button { width: 100%; margin-top: 40rpx; }
-.display-settings-button { margin-top: 16rpx; }
+.setting-list { padding: 0 24rpx; }
+.setting-row { min-height: 116rpx; display: flex; align-items: center; justify-content: space-between; border-bottom: 2rpx solid #EEF0ED; }
+.setting-row:last-child { border-bottom: none; }
+.setting-row-active { background: #F4F8F5; }
+.setting-title,.setting-desc { display: block; }
+.setting-title { font-size: 32rpx; font-weight: 600; }
+.setting-desc { margin-top: 6rpx; color: #65706A; font-size: 27rpx; line-height: 1.45; }
+.setting-arrow { color: #9AA39E; font-size: 48rpx; }
+.family-empty { min-height: 62vh; padding-bottom: 28rpx; }
+.empty-guide-actions { width: 100%; max-width: 520rpx; display: flex; flex-direction: column; align-items: center; gap: 20rpx; }
+.empty-action { width: 100%; margin: 0; }
+.invite-help { margin-top: 12rpx; color: #65706A; font-size: 25rpx; line-height: 1.5; text-align: center; text-decoration: underline; }
+.family-option { min-height: 116rpx; padding: 20rpx; display: flex; align-items: center; justify-content: space-between; border-bottom: 2rpx solid #EEF0ED; }
+.family-option.selected { background: #E4EFEA; border-radius: 20rpx; }
+.family-option-name,.family-option-role { display: block; }
+.family-option-name { font-size: 32rpx; font-weight: 600; }
+.family-option-role { margin-top: 6rpx; color: #65706A; font-size: 27rpx; }
+.selected-text { color: #245C4A; font-size: 28rpx; }
+.create-family-button { width: 100%; margin-top: 28rpx; }
 .share-help { margin-bottom: 24rpx; display: block; color: #65706A; line-height: 1.6; }
 .share-role { margin-bottom: 16rpx; padding: 24rpx; display: flex; flex-direction: column; border: 2rpx solid #D8DED9; border-radius: 22rpx; }
 .share-role.selected { background: #E4EFEA; border-color: #245C4A; }
