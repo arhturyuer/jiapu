@@ -97,6 +97,8 @@ Page({
   loadPage: function (pendingView, options) {
     const self = this;
     const config = options || {};
+    const returnFocus = this._relationReturnFocus;
+    this._relationReturnFocus = null;
     const hasContent = this._hasLoaded && !this.data.loading;
     const familyIsFresh = app.isCacheFresh('familyPages', false);
     const currentFamily = app.getCurrentFamily();
@@ -172,7 +174,9 @@ Page({
           self.setData({ systemShareCard: card });
         });
         app.setCurrentFamily(data.family);
-        self.renderGraph(mode, personId, { nameLayout: nameLayout });
+        const focusPersonId = !pendingView && returnFocus && returnFocus.familyId === data.family._id
+          && persons.some(function (person) { return person._id === returnFocus.personId; }) ? returnFocus.personId : '';
+        self.renderGraph(mode, personId, { nameLayout: nameLayout, focusPersonId: focusPersonId });
         self._hasLoaded = true;
         const tourKey = 'youpu_new_family_tour_' + data.family._id;
         if (wx.getStorageSync(tourKey)) {
@@ -258,7 +262,9 @@ Page({
     }, optionsValue.statePatch || {});
     this.setData(patch, function () {
       if (optionsValue.preserveViewport) return;
-      if (mode === 'perspective' && viewpointId) {
+      if (optionsValue.focusPersonId && result.nodes.some(function (node) { return node._id === optionsValue.focusPersonId; })) {
+        self.fitGraph(optionsValue.focusPersonId, false, { minimumFocusScale: 0.6 });
+      } else if (mode === 'perspective' && viewpointId) {
         self.fitGraph(viewpointId, false, { minimumFocusScale: 0.6 });
       } else {
         self.fitGraph('', true);
@@ -763,6 +769,7 @@ Page({
     const person = this.data.selectedPerson;
     const relationType = event.currentTarget.dataset.type;
     if (!person) return;
+    this._relationReturnFocus = { familyId: this.data.currentFamily._id, personId: person._id };
     this.setData({ showRelationSheet: false, selectedPerson: null });
     wx.navigateTo({
       url: '/pages/add-member/index?familyId=' + this.data.currentFamily._id + '&anchorId=' + person._id + '&anchorName=' + encodeURIComponent(person.name) + '&relationType=' + relationType

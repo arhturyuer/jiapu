@@ -65,6 +65,28 @@ test('重绘图谱一次提交完整节点和关系，不先清空再分批追�
   assert.equal(instance.setDataCalls[0].renderedCount, 2);
 });
 
+test('补录亲属返回后定位原操作人物，人物失效时恢复默认取景', function () {
+  const instance = createPage(), page = instance.page;
+  const previousWx = global.wx;
+  const visits = [];
+  global.wx = { navigateTo: function (options) { visits.push(options.url); } };
+  page.data.currentFamily = { _id: 'family' };
+  page.data.selectedPerson = page.data.rawPersons[0];
+  try {
+    page.chooseRelation({ currentTarget: { dataset: { type: 'father' } } });
+    assert.deepEqual(page._relationReturnFocus, { familyId: 'family', personId: 'parent' });
+    assert.match(visits[0], /anchorId=parent.*relationType=father/);
+    const fits = [];
+    page.fitGraph = function (id, all) { fits.push([id, all]); };
+    page.renderGraph('full', '', { focusPersonId: 'parent' });
+    assert.deepEqual(fits.pop(), ['parent', false]);
+    page.renderGraph('full', '', { focusPersonId: 'deleted' });
+    assert.deepEqual(fits.pop(), ['', true]);
+  } finally {
+    global.wx = previousWx;
+  }
+});
+
 test('家谱显示设置入口替代横竖排快捷切换', function () {
   const instance = createPage();
   instance.page.data.currentFamily = { _id: 'family-1' };

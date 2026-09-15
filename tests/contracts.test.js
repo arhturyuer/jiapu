@@ -120,6 +120,10 @@ test('关于页使用正式版实际版本并按最新在前展示受控更新�
   const verifier = fs.readFileSync(path.join(root, 'deployment/verify-release-note.mjs'), 'utf8');
   assert.deepEqual(releaseInfo.validateReleaseNotes(releaseNotes), [
     {
+      version: '1.2.8',
+      summary: '优化多祖先家谱布局，保持父母双方分支归属并压缩子女间距。'
+    },
+    {
       version: '1.2.7',
       summary: '重构家庭与我的页面职责，集中家谱管理入口并优化多机型卡片与按钮布局。'
     },

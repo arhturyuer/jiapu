@@ -201,6 +201,16 @@ function assignGenerations(persons, relations, components) {
   }
 
   const result = {};
+  // Place a shorter known lineage beside the corresponding generation of the
+  // deeper lineage. Unknown ancestors leave space above, rather than shifting
+  // a person's parents away from that person by several rows.
+  queue.slice().reverse().forEach(function (root) {
+    if (children[root].length) {
+      generationsByRoot[root] = Math.min.apply(null, children[root].map(function (childRoot) {
+        return generationsByRoot[childRoot] - 1;
+      }));
+    }
+  });
   persons.forEach(function (person) {
     result[person._id] = generationsByRoot[components.componentByPerson[person._id]] || 0;
   });
@@ -427,6 +437,7 @@ function buildUnits(persons, relations, components, generations, metrics, childR
       _id: root,
       generation: generations[members[0]._id] || 0,
       members: members,
+      baseWidth: members.length * metrics.nodeWidth + Math.max(0, members.length - 1) * metrics.coupleGap,
       width: members.length * metrics.nodeWidth + Math.max(0, members.length - 1) * metrics.coupleGap,
       sortPerson: members.slice().sort(comparePeople)[0]
     };
@@ -443,6 +454,7 @@ function buildUnits(persons, relations, components, generations, metrics, childR
   const parentRoots = {};
   const childrenByRoot = {};
   const parentIdsByChildRoot = {};
+  const parentsByMember = {};
   const spousePairs = {};
   units.forEach(function (unit) { childrenByRoot[unit._id] = []; });
   relations.forEach(function (relation) {
@@ -454,6 +466,8 @@ function buildUnits(persons, relations, components, generations, metrics, childR
     const childRoot = components.componentByPerson[relation.toPersonId];
     const parentRoot = components.componentByPerson[relation.fromPersonId];
     if (!childRoot || !parentRoot || childRoot === parentRoot) return;
+    if (!parentsByMember[relation.toPersonId]) parentsByMember[relation.toPersonId] = [];
+    if (parentsByMember[relation.toPersonId].indexOf(parentRoot) < 0) parentsByMember[relation.toPersonId].push(parentRoot);
     if (!parentIdsByChildRoot[childRoot]) parentIdsByChildRoot[childRoot] = [];
     if (parentIdsByChildRoot[childRoot].indexOf(relation.fromPersonId) < 0) {
       parentIdsByChildRoot[childRoot].push(relation.fromPersonId);
@@ -553,8 +567,143 @@ function buildUnits(persons, relations, components, generations, metrics, childR
     childrenByRoot: childrenByRoot,
     primaryParentByRoot: primaryParentByRoot,
     primaryChildrenByRoot: primaryChildrenByRoot,
-    familySourceByChildRoot: familySourceByChildRoot
+    familySourceByChildRoot: familySourceByChildRoot,
+    parentsByMember: parentsByMember
   };
+}
+
+// A spouse unit can have ancestors attached to EACH of its members. Reserve a
+// port for each member's lineage, then align every parent unit with those ports.
+// The primary tree is only the seed (and the sibling ordering), not ownership
+// of a married couple by one of its ancestral families.
+function positionAncestralFamilies(graph, metrics) {
+  const levels = Object.keys(graph.unitsByGeneration).map(Number).sort(function (a, b) { return a - b; });
+  const unitByPerson = {};
+  graph.units.forEach(function (unit) {
+    unit.members.forEach(function (member) { unitByPerson[member._id] = unit; });
+  });
+  function parentsOf(member) {
+    return (graph.parentsByMember[member._id] || []).map(function (id) { return graph.unitsById[id]; })
+      .filter(function (unit) { return unit.generation < unitByPerson[member._id].generation; })
+      .sort(function (a, b) {
+        const genderA = personGender(a.members[0]), genderB = personGender(b.members[0]);
+        return (genderA === 'male' ? 0 : genderA === 'female' ? 1 : 2) -
+          (genderB === 'male' ? 0 : genderB === 'female' ? 1 : 2) || a._id.localeCompare(b._id);
+      });
+  }
+  const crossGenerationParentRoots = new Set();
+  graph.units.forEach(function (parent) {
+    const childGenerations = (graph.childrenByRoot[parent._id] || []).map(function (childRoot) {
+      return graph.unitsById[childRoot].generation;
+    });
+    if (childGenerations.some(function (generation) { return generation > parent.generation + 1; }) ||
+      childGenerations.some(function (generation) { return generation !== childGenerations[0]; })) {
+      crossGenerationParentRoots.add(parent._id);
+    }
+  });
+  const fullWidthParentRoots = new Set(crossGenerationParentRoots);
+  const crossGenerationQueue = Array.from(crossGenerationParentRoots);
+  for (let index = 0; index < crossGenerationQueue.length; index += 1) {
+    (graph.childrenByRoot[crossGenerationQueue[index]] || []).forEach(function (childRoot) {
+      if (fullWidthParentRoots.has(childRoot)) return;
+      fullWidthParentRoots.add(childRoot);
+      crossGenerationQueue.push(childRoot);
+    });
+  }
+  levels.forEach(function (level) {
+    graph.unitsByGeneration[level].forEach(function (unit) {
+      // A single person's parents need space above that person, but that space
+      // must not become the person's width. Otherwise every child inherits the
+      // complete ancestral width and siblings are pushed to opposite edges.
+      if (unit.members.length === 1) {
+        unit.memberOffsets = {};
+        unit.memberOffsets[unit.members[0]._id] = 0;
+        unit.width = unit.baseWidth;
+        return;
+      }
+      const ancestralMembers = unit.members.filter(function (member) { return parentsOf(member).length; });
+      const needsLongConnectorClearance = unit.members.some(function (member) {
+        return parentsOf(member).some(function (parent) { return fullWidthParentRoots.has(parent._id); });
+      });
+      if (ancestralMembers.length < 2 && !needsLongConnectorClearance) {
+        unit.memberOffsets = {};
+        unit.members.forEach(function (member, index) {
+          unit.memberOffsets[member._id] = index * (metrics.nodeWidth + metrics.coupleGap);
+        });
+        unit.width = unit.baseWidth;
+        return;
+      }
+      let cursor = 0;
+      unit.memberOffsets = {};
+      unit.members.forEach(function (member) {
+        const parents = parentsOf(member);
+        // Immediate parent cards may widen the gap inside this couple, but the
+        // parents' own ancestry reservation normally stops at their row. When
+        // the same ancestor is reached at different depths, keep the full span
+        // so the long connector can be routed outside intermediate cards.
+        const span = parents.reduce(function (sum, parent) {
+          return sum + (fullWidthParentRoots.has(parent._id) ? parent.width : parent.baseWidth);
+        }, 0) + Math.max(0, parents.length - 1) * metrics.unitGap;
+        const width = Math.max(metrics.nodeWidth, span);
+        unit.memberOffsets[member._id] = cursor + (width - metrics.nodeWidth) / 2;
+        cursor += width + metrics.coupleGap;
+      });
+      unit.width = cursor - metrics.coupleGap;
+    });
+  });
+  positionFamilySubtrees(graph, metrics);
+  const mean = function (values) { return values.reduce(function (sum, value) { return sum + value; }, 0) / values.length; };
+  // Children are positioned before their ancestors. Sort whole sibling blocks
+  // so the existing marriage grouping and child sequence remain contiguous.
+  const targets = {};
+  levels.slice().reverse().forEach(function (level) {
+    const row = graph.unitsByGeneration[level];
+    const blocks = {};
+    row.forEach(function (unit) {
+      const parentId = graph.primaryParentByRoot[unit._id];
+      const key = parentId ? 'children:' + parentId : 'root:' + unit._id;
+      if (!blocks[key]) blocks[key] = [];
+      blocks[key].push(unit);
+    });
+    const blockKeys = Object.keys(blocks).sort(function (a, b) {
+      function score(key) { return mean(blocks[key].map(function (unit) {
+        return (targets[unit._id] ? mean(targets[unit._id]) : unit.x) + unit.width / 2;
+      })); }
+      return score(a) - score(b) || a.localeCompare(b);
+    });
+    row.length = 0;
+    blockKeys.forEach(function (key) {
+      const block = blocks[key], parentId = graph.primaryParentByRoot[block[0]._id];
+      if (parentId) block.sort(function (a, b) {
+        return graph.primaryChildrenByRoot[parentId].indexOf(a._id) - graph.primaryChildrenByRoot[parentId].indexOf(b._id);
+      });
+      block.forEach(function (unit) { row.push(unit); });
+    });
+    // Project desired positions onto non-overlapping ordered intervals.
+    const desired = row.map(function (unit) { return targets[unit._id] ? mean(targets[unit._id]) : unit.x; });
+    let right = -Infinity;
+    row.forEach(function (unit, index) {
+      unit.x = Math.max(desired[index], right);
+      right = unit.x + unit.width + metrics.unitGap;
+    });
+    const shift = mean(row.map(function (unit, index) { return desired[index] - unit.x; }));
+    row.forEach(function (unit) {
+      unit.x += shift;
+      unit.members.forEach(function (member) {
+        const parents = parentsOf(member);
+        const span = parents.reduce(function (sum, parent) { return sum + parent.width; }, 0) + Math.max(0, parents.length - 1) * metrics.unitGap;
+        let left = unit.x + unit.memberOffsets[member._id] + metrics.nodeWidth / 2 - span / 2;
+        parents.forEach(function (parent) {
+          if (!targets[parent._id]) targets[parent._id] = [];
+          targets[parent._id].push(left);
+          left += parent.width + metrics.unitGap;
+        });
+      });
+    });
+  });
+  const minX = Math.min.apply(null, graph.units.map(function (unit) { return unit.x; }));
+  graph.units.forEach(function (unit) { unit.x += metrics.marginX - minX; });
+  return Math.max(750, Math.max.apply(null, graph.units.map(function (unit) { return unit.x + unit.width; })) + metrics.marginX);
 }
 
 function positionFamilySubtrees(unitGraph, metrics) {
@@ -901,23 +1050,32 @@ function layoutGraph(personsInput, relationsInput, options) {
   const metrics = Object.assign({}, metricsForNameLayout(nameLayout));
   if (optionsValue.mode === 'perspective') metrics.nodeHeight = nameLayout === 'vertical' ? 212 : 196;
   if (nameLayout === 'vertical' && optionsValue.mode === 'perspective') metrics.nodeWidth = 112;
-  const activePersons = (personsInput || []).filter(function (person) { return person.status !== 'deleted'; });
-  const active = activeRelations(relationsInput);
+  const activePersons = (personsInput || []).filter(function (person) { return person.status !== 'deleted'; }).slice().sort(function (a, b) { return a._id.localeCompare(b._id); });
+  const personIds = new Set(activePersons.map(function (person) { return person._id; }));
+  const active = activeRelations(relationsInput).filter(function (relation) {
+    return personIds.has(relation.fromPersonId) && personIds.has(relation.toPersonId);
+  }).slice().sort(function (a, b) {
+    return a.type.localeCompare(b.type) || a.fromPersonId.localeCompare(b.fromPersonId) || a.toPersonId.localeCompare(b.toPersonId);
+  });
   const childRanks = childRank.build(activePersons, active);
   const filtered = filterCollapsed(activePersons, active, optionsValue.collapsedIds || []);
   const persons = filtered.persons;
   const relations = filtered.relations;
-  const components = createSpouseComponents(persons, relations);
-  const generations = assignGenerations(persons, relations, components);
-  const unitGraph = buildUnits(persons, relations, components, generations, metrics, childRanks.byPerson);
+  // Compute the complete layout before hiding branches so collapsing one side
+  // cannot reverse the ordering of the other side's ancestors.
+  const components = createSpouseComponents(activePersons, active);
+  const generations = assignGenerations(activePersons, active, components);
+  const unitGraph = buildUnits(activePersons, active, components, generations, metrics, childRanks.byPerson);
   const unitsByGeneration = unitGraph.unitsByGeneration;
   const generationKeys = Object.keys(unitsByGeneration).map(Number).sort(function (a, b) { return a - b; });
   const maxGeneration = generationKeys.length ? Math.max.apply(null, generationKeys) : 0;
 
-  let canvasWidth = positionFamilySubtrees(unitGraph, metrics);
+  const hasMultipleLineages = unitGraph.units.some(function (unit) { return (unitGraph.parentRoots[unit._id] || []).length > 1; });
+  let canvasWidth = hasMultipleLineages ? positionAncestralFamilies(unitGraph, metrics) : positionFamilySubtrees(unitGraph, metrics);
   let canvasHeight = Math.max(900, maxGeneration * metrics.gapY + metrics.nodeHeight + metrics.marginY * 2);
   const nodesById = {};
   const nodes = [];
+  const visibleIds = new Set(persons.map(function (person) { return person._id; }));
   const kinshipDetails = optionsValue.mode === 'perspective'
     ? (optionsValue.kinshipDetails || kinship.calculateKinshipDetails(activePersons, active, optionsValue.viewpointId))
     : {};
@@ -927,7 +1085,8 @@ function layoutGraph(personsInput, relationsInput, options) {
   generationKeys.forEach(function (generation) {
     unitsByGeneration[generation].forEach(function (unit) {
       unit.members.forEach(function (person, memberIndex) {
-        const x = unit.x + memberIndex * (metrics.nodeWidth + metrics.coupleGap);
+        if (!visibleIds.has(person._id)) return;
+        const x = unit.x + (unit.memberOffsets ? unit.memberOffsets[person._id] : memberIndex * (metrics.nodeWidth + metrics.coupleGap));
         const y = metrics.marginY + generation * metrics.gapY;
         const node = Object.assign({}, personGenderDisplay.decorate(person), childRanks.byPerson[person._id] || {}, {
           x: x,
@@ -947,6 +1106,27 @@ function layoutGraph(personsInput, relationsInput, options) {
     });
   });
 
+  if (filtered.hiddenCount && nodes.length) {
+    // Remove empty bands left by hidden subtrees without changing the relative
+    // order established using the complete family. Fit-to-tree stays useful.
+    function compactAxis(axis, minimum, maximumGap) {
+      const values = Array.from(new Set(nodes.map(function (node) { return node[axis]; }))).sort(function (a, b) { return a - b; });
+      const positions = {};
+      let position = minimum;
+      values.forEach(function (value, index) {
+        if (index) position += Math.min(value - values[index - 1], maximumGap);
+        positions[value] = position;
+      });
+      nodes.forEach(function (node) { node[axis] = positions[node[axis]]; });
+    }
+    compactAxis('x', metrics.marginX, metrics.nodeWidth + Math.max(metrics.unitGap, metrics.coupleGap));
+    compactAxis('y', metrics.marginY, metrics.gapY);
+    nodes.forEach(function (node) {
+      node.style = 'left:' + node.x + 'rpx;top:' + node.y + 'rpx;width:' + metrics.nodeWidth + 'rpx;height:' + metrics.nodeHeight + 'rpx;';
+    });
+    canvasWidth = Math.max(750, Math.max.apply(null, nodes.map(function (node) { return node.x; })) + metrics.nodeWidth + metrics.marginX);
+    canvasHeight = Math.max(900, Math.max.apply(null, nodes.map(function (node) { return node.y; })) + metrics.nodeHeight + metrics.marginY);
+  }
   const connections = createFamilyConnections(nodesById, relations, optionsValue.selectedPersonId || '', metrics);
   return {
     nodes: nodes,
