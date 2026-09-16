@@ -1,5 +1,7 @@
 const MIN_SCALE = 0.32;
 const MAX_SCALE = 1.6;
+const REFERENCE_RPX_TO_PX = 0.5;
+const MIN_SCALE_FLOOR = 0.12;
 
 function clamp(value, minimum, maximum) {
   return Math.max(minimum, Math.min(maximum, value));
@@ -23,6 +25,12 @@ function zoomClassForScale(scale, currentClass) {
 function findNode(layout, personId) {
   if (!personId || !layout || !layout.nodes) return null;
   return layout.nodes.find(function (node) { return node._id === personId; }) || null;
+}
+
+function minimumScaleForViewport(viewport) {
+  const rpxToPx = viewport && Number(viewport.rpxToPx);
+  if (!rpxToPx || rpxToPx <= 0) return MIN_SCALE;
+  return clamp(MIN_SCALE * REFERENCE_RPX_TO_PX / rpxToPx, MIN_SCALE_FLOOR, MIN_SCALE);
 }
 
 function fitTransform(layout, viewport, options) {
@@ -68,10 +76,42 @@ function zoomAroundCenter(transform, nextScaleValue, viewport, options) {
   };
 }
 
+function resizeTransform(transform, previousViewport, nextViewport, options) {
+  const optionsValue = options || {};
+  const minimum = optionsValue.minimumScale || minimumScaleForViewport(nextViewport);
+  const maximum = optionsValue.maximumScale || MAX_SCALE;
+  const previousRpxToPx = previousViewport && Number(previousViewport.rpxToPx);
+  const nextRpxToPx = nextViewport && Number(nextViewport.rpxToPx);
+  const previousWidth = previousViewport && Number(previousViewport.width);
+  const previousHeight = previousViewport && Number(previousViewport.height);
+  const nextWidth = nextViewport && Number(nextViewport.width);
+  const nextHeight = nextViewport && Number(nextViewport.height);
+  const currentScale = transform && Number(transform.scale);
+  if (!previousRpxToPx || !nextRpxToPx || !previousWidth || !previousHeight || !nextWidth || !nextHeight || !currentScale) {
+    return {
+      x: transform && Number(transform.x) || 0,
+      y: transform && Number(transform.y) || 0,
+      scale: clamp(currentScale || 1, minimum, maximum)
+    };
+  }
+  const currentX = Number(transform.x) || 0;
+  const currentY = Number(transform.y) || 0;
+  const logicalCenterX = (previousWidth / 2 - currentX) / currentScale / previousRpxToPx;
+  const logicalCenterY = (previousHeight / 2 - currentY) / currentScale / previousRpxToPx;
+  const nextScale = clamp(currentScale * previousRpxToPx / nextRpxToPx, minimum, maximum);
+  return {
+    x: nextWidth / 2 - logicalCenterX * nextRpxToPx * nextScale,
+    y: nextHeight / 2 - logicalCenterY * nextRpxToPx * nextScale,
+    scale: nextScale
+  };
+}
+
 module.exports = {
   MIN_SCALE: MIN_SCALE,
   MAX_SCALE: MAX_SCALE,
   fitTransform: fitTransform,
+  minimumScaleForViewport: minimumScaleForViewport,
+  resizeTransform: resizeTransform,
   zoomAroundCenter: zoomAroundCenter,
   zoomClassForScale: zoomClassForScale
 };

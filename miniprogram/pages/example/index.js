@@ -24,6 +24,7 @@ Page({
     selectedKinship: null,
     loading: true, error: '', slug: '', example: null, rawPersons: [], rawRelations: [], nodes: [], lines: [], junctions: [],
     canvasWidth: 750, canvasHeight: 900, graphScale: 1, graphX: 0, graphY: 0, graphScaleMin: 0.32, graphZoomClass: 'zoom-detail',
+    pageOrientation: 'portrait', isLandscape: false, orientationChanging: false,
     collapsedPersonIds: [], hiddenBranchCount: 0, canExpandAll: false, nameLayout: 'horizontal', viewMode: 'full', viewpointId: '', viewpointName: '',
     selectedPersonId: '', selectedPerson: null, showMemberSheet: false, showPerspectiveSheet: false, perspectiveKeyword: '', perspectiveResults: [],
     showTour: false, tourStep: 1,
@@ -37,8 +38,10 @@ Page({
     this.setData({ slug: slug });
     if (!slug) this.setData({ loading: false, error: '缺少示例家谱信息' }); else this.loadExample();
   },
+  onShow: function () { this.resetPageOrientation(); this.syncPageOrientationSoon(); },
+  onHide: function () { this.resetPageOrientation(); },
   onPullDownRefresh: function () { this.loadExample().then(function () { wx.stopPullDownRefresh(); }); },
-  onUnload: function () { if (this._graphSettleTimer) clearTimeout(this._graphSettleTimer); },
+  onUnload: function () { if (this._graphSettleTimer) clearTimeout(this._graphSettleTimer); if (this._orientationTimer) clearTimeout(this._orientationTimer); this.syncPageChrome(false); },
 
   loadExample: function () {
     const self = this;
@@ -53,6 +56,7 @@ Page({
       const collapsed = graphLayout.suggestCollapsedIds(persons, relations, { limit: 36 });
       const nameLayout = exampleNameLayout(example.slug || self.data.slug);
       self.setData({ loading: false, example: example, rawPersons: persons, rawRelations: relations, perspectiveResults: persons, collapsedPersonIds: collapsed, nameLayout: nameLayout, selectedPersonId: '', selectedPerson: null }, function () {
+        self.syncPageChrome(self.data.isLandscape);
         const initialPersonId = self._initialPersonId;
         self._initialPersonId = '';
         if (initialPersonId && persons.some(function (person) { return person._id === initialPersonId; })) {
@@ -75,13 +79,19 @@ Page({
   },
   commitGraphTransform: function (transform) {
     this._currentGraphScale = transform.scale; this._currentGraphX = transform.x; this._currentGraphY = transform.y;
-    this.setData({ graphScale: transform.scale, graphX: transform.x, graphY: transform.y, graphZoomClass: graphViewport.zoomClassForScale(transform.scale, this.data.graphZoomClass) });
+    this.setData({ graphScale: transform.scale, graphX: transform.x, graphY: transform.y, graphZoomClass: graphViewport.zoomClassForScale(this.getGraphDisplayScale(transform.scale), this.data.graphZoomClass) });
   },
+  getGraphDisplayScale: function (scale) { return scale * graphViewport.MIN_SCALE / (this.data.graphScaleMin || graphViewport.MIN_SCALE); },
   getGraphViewport: function () {
-    let info = {};
-    try { info = wx.getWindowInfo ? wx.getWindowInfo() : wx.getSystemInfoSync(); } catch (error) { info = { windowWidth: 375, windowHeight: 667 }; }
+    const info = this.getWindowSize();
     const width = info.windowWidth || 375;
-    return { width: width, height: Math.max(240, (info.windowHeight || 667) - 316 * width / 750), rpxToPx: width / 750 };
+    if (this._graphViewport && this._graphViewport.windowWidth === width) return this._graphViewport;
+    const height = info.windowHeight || 667;
+    const isLandscape = width > height;
+    return { width: width, height: Math.max(isLandscape ? 120 : 240, height - (isLandscape ? 0 : 316 * width / 750)), rpxToPx: width / 750, windowWidth: width };
+  },
+  getWindowSize: function () {
+    try { return wx.getWindowInfo ? wx.getWindowInfo() : wx.getSystemInfoSync(); } catch (error) { return { windowWidth: 375, windowHeight: 667 }; }
   },
   renderGraph: function (mode, viewpointId, renderOptions) {
     const optionsValue = renderOptions || {};
@@ -102,13 +112,87 @@ Page({
   fitGraph: function (focusPersonId, fitAll, optionsValue) {
     if (!this._lastLayout || !this._lastLayout.nodes.length) return;
     const options = optionsValue || {};
-    this.commitGraphTransform(graphViewport.fitTransform(this._lastLayout, this.getGraphViewport(), { fitAll: fitAll, focusPersonId: focusPersonId, currentScale: this.getGraphTransform().scale, minimumScale: this.data.graphScaleMin, minimumFocusScale: options.minimumFocusScale || 0 }));
+    this.commitGraphTransform(graphViewport.fitTransform(this._lastLayout, this.getGraphViewport(), { fitAll: fitAll, focusPersonId: focusPersonId, currentScale: this.getGraphTransform().scale, minimumScale: this.data.graphScaleMin, minimumFocusScale: (options.minimumFocusScale || 0) * this.data.graphScaleMin / graphViewport.MIN_SCALE }));
   },
   fitWholeGraph: function () { this.fitGraph('', true); },
   locateGraphFocus: function () { const id = this.data.selectedPersonId || this.data.viewpointId; this.fitGraph(id, !id, id ? { minimumFocusScale: 0.68 } : {}); },
-  changeGraphScale: function (delta) { const current = this.getGraphTransform(); this.commitGraphTransform(graphViewport.zoomAroundCenter(current, Math.round((current.scale + delta) * 100) / 100, this.getGraphViewport(), { minimumScale: this.data.graphScaleMin })); },
+  changeGraphScale: function (delta) { const current = this.getGraphTransform(); const normalizedDelta = delta * this.data.graphScaleMin / graphViewport.MIN_SCALE; this.commitGraphTransform(graphViewport.zoomAroundCenter(current, Math.round((current.scale + normalizedDelta) * 100) / 100, this.getGraphViewport(), { minimumScale: this.data.graphScaleMin })); },
   zoomGraphIn: function () { this.changeGraphScale(0.15); },
   zoomGraphOut: function () { this.changeGraphScale(-0.15); },
+  resetPageOrientation: function () {
+    this._orientationResizeSequence = (this._orientationResizeSequence || 0) + 1;
+    if (this._orientationTimer) clearTimeout(this._orientationTimer);
+    this._orientationTimer = null;
+    const needsReset = this.data.pageOrientation !== 'portrait' || this.data.isLandscape || this.data.orientationChanging;
+    if (needsReset) {
+      if (!this._orientationViewport) this._orientationViewport = this.getGraphViewport();
+      if (!this._orientationTransform) this._orientationTransform = this.getGraphTransform();
+      this._orientationTarget = 'portrait';
+      this.setData({ pageOrientation: 'portrait', isLandscape: false, orientationChanging: false });
+    }
+    this.syncPageChrome(false);
+  },
+  syncPageChrome: function (isLandscape) {
+    if (typeof wx === 'undefined') return;
+    const familyName = this.data.example && (this.data.example.title || this.data.example.name);
+    if (wx.setNavigationBarTitle) wx.setNavigationBarTitle({ title: isLandscape && familyName ? familyName : '示例家谱' });
+  },
+  syncPageOrientationSoon: function () {
+    const self = this;
+    setTimeout(function () { const size = self.getWindowSize(); if (self._orientationViewport && size.windowWidth <= size.windowHeight) self.applyPageResize(size); }, 80);
+  },
+  togglePageOrientation: function () {
+    if (this.data.orientationChanging) return;
+    const target = this.data.isLandscape ? 'portrait' : 'landscape';
+    this._orientationViewport = this.getGraphViewport(); this._orientationTransform = this.getGraphTransform(); this._orientationTarget = target;
+    this.setData({ pageOrientation: target, orientationChanging: true });
+    const self = this;
+    if (this._orientationTimer) clearTimeout(this._orientationTimer);
+    this._orientationTimer = setTimeout(function () {
+      self._orientationTimer = null;
+      const size = self.getWindowSize(); const actual = size.windowWidth > size.windowHeight ? 'landscape' : 'portrait';
+      if (actual === target) return self.applyPageResize(size);
+      self._orientationViewport = null; self._orientationTransform = null; self._orientationTarget = ''; self._graphViewport = null; self._orientationResizeSequence = (self._orientationResizeSequence || 0) + 1;
+      self.setData({ pageOrientation: actual, isLandscape: actual === 'landscape', orientationChanging: false, graphScaleMin: graphViewport.minimumScaleForViewport({ rpxToPx: (size.windowWidth || 375) / 750 }) });
+      self.syncPageChrome(actual === 'landscape');
+      wx.showToast({ title: '屏幕方向切换失败，请重试', icon: 'none' });
+    }, 1200);
+  },
+  onPageResize: function (event) { const size = event && event.detail && event.detail.size; if (size) this.applyPageResize(size); },
+  applyPageResize: function (size) {
+    const resizeSequence = (this._orientationResizeSequence || 0) + 1; this._orientationResizeSequence = resizeSequence;
+    const width = Number(size.windowWidth) || 375; const height = Number(size.windowHeight) || 667;
+    const actual = width > height ? 'landscape' : 'portrait';
+    const minimumScale = graphViewport.minimumScaleForViewport({ width: width, height: height, rpxToPx: width / 750 });
+    const previousViewport = this._orientationViewport || this._graphViewport;
+    const previousTransform = this._orientationTransform || this.getGraphTransform();
+    const target = this._orientationTarget; const settled = !target || target === actual;
+    this.syncPageChrome(actual === 'landscape');
+    if (settled && this._orientationTimer) clearTimeout(this._orientationTimer); if (settled) this._orientationTimer = null;
+    const self = this;
+    this.setData({ pageOrientation: target || actual, isLandscape: actual === 'landscape', orientationChanging: Boolean(target && !settled), graphScaleMin: minimumScale }, function () {
+      if (resizeSequence !== self._orientationResizeSequence) return;
+      const measure = function () {
+        self.measureGraphViewport({ windowWidth: width, windowHeight: height }, function (nextViewport) {
+          if (resizeSequence !== self._orientationResizeSequence) return;
+          self._graphViewport = nextViewport;
+          if (self._lastLayout && self._lastLayout.nodes.length) {
+            if (previousViewport) self.commitGraphTransform(graphViewport.resizeTransform(previousTransform, previousViewport, nextViewport, { minimumScale: minimumScale }));
+            else self.fitGraph(self.data.selectedPersonId || self.data.viewpointId, !(self.data.selectedPersonId || self.data.viewpointId));
+          }
+          if (settled) { self._orientationViewport = null; self._orientationTransform = null; self._orientationTarget = ''; }
+        });
+      };
+      if (wx.nextTick) wx.nextTick(measure); else setTimeout(measure, 0);
+    });
+  },
+  measureGraphViewport: function (size, callback) {
+    const width = Number(size.windowWidth) || 375; const height = Number(size.windowHeight) || 667;
+    const fallback = { width: width, height: Math.max(width > height ? 120 : 240, height - (width > height ? 0 : 316 * width / 750)), rpxToPx: width / 750, windowWidth: width };
+    const query = this.createSelectorQuery ? this.createSelectorQuery() : wx.createSelectorQuery();
+    query.select('.graph-viewport').boundingClientRect();
+    query.exec(function (result) { const rect = result && result[0]; callback(rect && rect.width && rect.height ? { width: rect.width, height: rect.height, rpxToPx: width / 750, windowWidth: width } : fallback); });
+  },
   toggleNameLayout: function () {
     const nameLayout = this.data.nameLayout === 'vertical' ? 'horizontal' : 'vertical';
     try { wx.setStorageSync(EXAMPLE_NAME_LAYOUT_KEY_PREFIX + this.data.slug, nameLayout); } catch (error) {}
@@ -118,7 +202,7 @@ Page({
   onGraphChange: function (event) { if (typeof event.detail.x === 'number') this._currentGraphX = event.detail.x; if (typeof event.detail.y === 'number') this._currentGraphY = event.detail.y; this.scheduleGraphSettle(); },
   scheduleGraphSettle: function () {
     const self = this; if (this._graphSettleTimer) clearTimeout(this._graphSettleTimer);
-    this._graphSettleTimer = setTimeout(function () { self._graphSettleTimer = null; const next = graphViewport.zoomClassForScale(self.getGraphTransform().scale, self.data.graphZoomClass); if (next !== self.data.graphZoomClass) self.setData({ graphZoomClass: next }); }, 160);
+    this._graphSettleTimer = setTimeout(function () { self._graphSettleTimer = null; const next = graphViewport.zoomClassForScale(self.getGraphDisplayScale(self.getGraphTransform().scale), self.data.graphZoomClass); if (next !== self.data.graphZoomClass) self.setData({ graphZoomClass: next }); }, 160);
   },
 
   showPerson: function (event) {

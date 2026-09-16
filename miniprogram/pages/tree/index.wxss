@@ -112,7 +112,7 @@
 
 .graph-viewport {
   width: 100%;
-  height: calc(100vh - 112rpx - 120rpx);
+  height: calc(100vh - 112rpx);
   overflow: hidden;
   background-color: #F7F4EC;
   background-image: radial-gradient(rgba(36, 92, 74, 0.09) 1rpx, transparent 1rpx);
@@ -147,6 +147,10 @@
 .graph-control-text {
   font-size: 22rpx;
   font-weight: 500;
+}
+
+.orientation-control.is-disabled {
+  opacity: 0.55;
 }
 
 .graph-movable {
@@ -419,7 +423,7 @@
 .graph-help {
   position: fixed;
   left: 50%;
-  bottom: calc(128rpx + env(safe-area-inset-bottom));
+  bottom: calc(24rpx + env(safe-area-inset-bottom));
   z-index: 20;
   max-width: 620rpx;
   padding: 14rpx 24rpx;
@@ -752,6 +756,179 @@
   margin-top: 10rpx;
   color: #65706A;
   font-size: 26rpx;
+}
+
+.tree-page.is-landscape .tree-toolbar {
+  display: none;
+}
+
+.tree-page.is-landscape .family-switch {
+  max-width: 148px;
+  height: 40px;
+  padding: 0 10px;
+  border-radius: 12px;
+}
+
+.tree-page.is-landscape .family-switch-name {
+  font-size: 14px;
+}
+
+.tree-page.is-landscape .family-switch-arrow {
+  margin-left: 4px;
+}
+
+.tree-page.is-landscape .mode-switch {
+  max-width: 320px;
+  height: 40px;
+  padding: 3px;
+  border-radius: 12px;
+}
+
+.tree-page.is-landscape .mode-item {
+  height: 34px;
+  padding: 0 8px;
+  border-radius: 9px;
+  font-size: 14px;
+}
+
+.tree-page.is-landscape .graph-viewport {
+  height: 100vh;
+}
+
+.tree-page.is-landscape .graph-controls {
+  right: calc(12px + env(safe-area-inset-right));
+  bottom: calc(10px + env(safe-area-inset-bottom));
+  flex-direction: row;
+  gap: 6px;
+}
+
+.tree-page.is-landscape .graph-control {
+  width: 42px;
+  height: 36px;
+  border-width: 1px;
+  border-radius: 10px;
+  font-size: 20px;
+  box-shadow: 0 3px 9px rgba(36, 59, 49, 0.1);
+}
+
+.tree-page.is-landscape .graph-control-text {
+  font-size: 12px;
+}
+
+.tree-page.is-landscape .orientation-control {
+  width: 50px;
+}
+
+.tree-page.is-landscape .landscape-hidden,
+.tree-page.is-landscape .tree-share-reminder,
+.tree-page.is-landscape .graph-help {
+  display: none;
+}
+
+.tree-page.is-landscape .sheet-mask {
+  padding-left: env(safe-area-inset-left);
+  align-items: stretch;
+  justify-content: flex-end;
+}
+
+.tree-page.is-landscape .bottom-sheet {
+  width: 72vw;
+  max-width: 520px;
+  height: 100vh;
+  max-height: 100vh;
+  padding: 16px calc(18px + env(safe-area-inset-right)) 16px 20px;
+  overflow-y: auto;
+  border-radius: 20px 0 0 20px;
+}
+
+.tree-page.is-landscape .sheet-handle {
+  display: none;
+}
+
+.tree-page.is-landscape .person-sheet-head {
+  margin-bottom: 12px;
+}
+
+.tree-page.is-landscape .person-sheet-avatar {
+  width: 58px;
+  height: 58px;
+  margin-right: 12px;
+  border-radius: 16px;
+}
+
+.tree-page.is-landscape .person-sheet-name {
+  max-width: 260px;
+  margin-bottom: 3px;
+  font-size: 22px;
+}
+
+.tree-page.is-landscape .person-rank-basis,
+.tree-page.is-landscape .action-desc,
+.tree-page.is-landscape .child-order-help {
+  font-size: 12px;
+}
+
+.tree-page.is-landscape .action-grid {
+  gap: 8px;
+}
+
+.tree-page.is-landscape .action-cell {
+  min-height: 64px;
+  padding: 10px 12px;
+  border-radius: 12px;
+}
+
+.tree-page.is-landscape .action-title {
+  margin-bottom: 3px;
+  font-size: 14px;
+}
+
+.tree-page.is-landscape .family-option,
+.tree-page.is-landscape .perspective-option {
+  min-height: 52px;
+  padding: 8px 10px;
+}
+
+.tree-page.is-landscape .family-option-role,
+.tree-page.is-landscape .family-option-check {
+  margin-top: 2px;
+  font-size: 12px;
+}
+
+.tree-page.is-landscape .perspective-sheet,
+.tree-page.is-landscape .child-order-sheet {
+  height: 100vh;
+}
+
+.tree-page.is-landscape .person-search {
+  height: 42px;
+  padding: 0 12px;
+  border-radius: 12px;
+}
+
+.tree-page.is-landscape .perspective-list {
+  height: calc(100vh - 96px);
+  margin-top: 8px;
+}
+
+.tree-page.is-landscape .small-avatar {
+  width: 36px;
+  height: 36px;
+  margin-right: 10px;
+  border-radius: 11px;
+}
+
+.tree-page.is-landscape .child-order-row {
+  min-height: 68px;
+  grid-template-columns: 36px minmax(0, 1fr) 54px;
+  column-gap: 8px;
+}
+
+.tree-page.is-landscape .child-order-button {
+  width: 54px;
+  height: 28px;
+  border-radius: 8px;
+  font-size: 12px;
 }
 
 .share-label {

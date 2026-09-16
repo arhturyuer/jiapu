@@ -155,7 +155,7 @@ test('示例图谱复用真实家谱的选中连线、定位与只读资料交�
   assert.doesNotMatch(graph, /person\.update|person\.createRelated|relation\.remove/);
 });
 
-test('示例家谱将标题与图谱操作拆分为两行，避免小屏顶部挤压', function () {
+test('示例家谱竖屏保留标题操作区，横屏仅保留原生家谱标题', function () {
   const page = read('miniprogram/pages/example/index.wxml');
   const style = read('miniprogram/pages/example/index.wxss');
   const treeStyle = read('miniprogram/pages/tree/index.wxss');
@@ -164,9 +164,12 @@ test('示例家谱将标题与图谱操作拆分为两行，避免小屏顶部�
   assert.match(page, /example-actions/);
   assert.match(style, /\.example-header \{ height:196rpx/);
   assert.match(style, /height:calc\(100vh - 196rpx - 120rpx\)/);
+  assert.match(style, /\.example-page\.is-landscape \.example-header \{ display:none; \}/);
+  assert.match(style, /\.example-page\.is-landscape \.graph-viewport \{ height:100vh; \}/);
   assert.match(style, /height:164rpx; min-height:164rpx/);
   assert.match(treeStyle, /height: 164rpx;\n  min-height: 164rpx/);
-  assert.match(source, /- 316 \* width \/ 750/);
+  assert.match(source, /isLandscape \? 0 : 316 \* width \/ 750/);
+  assert.match(source, /setNavigationBarTitle\(\{ title: isLandscape && familyName \? familyName : '示例家谱' \}\)/);
 });
 
 test('示例家谱全谱适配沿用真实家谱的完整画布定位策略', function () {

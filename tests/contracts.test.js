@@ -120,6 +120,10 @@ test('关于页使用正式版实际版本并按最新在前展示受控更新�
   const verifier = fs.readFileSync(path.join(root, 'deployment/verify-release-note.mjs'), 'utf8');
   assert.deepEqual(releaseInfo.validateReleaseNotes(releaseNotes), [
     {
+      version: '1.2.9',
+      summary: '新增家谱横竖屏切换与横屏沉浸浏览，精简画布操作并优化竖屏底部空间。'
+    },
+    {
       version: '1.2.8',
       summary: '优化多祖先家谱布局，保持父母双方分支归属并压缩子女间距。'
     },
@@ -579,7 +583,7 @@ test('冻结、注销重试、运营账号和完整审计只属于超级管理�
   });
 });
 
-test('家谱显示偏好集中设置，正式家谱按个人偏好展示且示例保留独立切换', function () {
+test('家谱显示偏好集中设置，画布保持精简操作且既有偏好继续生效', function () {
   const userApi = fs.readFileSync(path.join(root, 'cloudfunctions/youpuUserApi/index.js'), 'utf8');
   const tree = fs.readFileSync(path.join(root, 'miniprogram/pages/tree/index.js'), 'utf8');
   const treeTemplate = fs.readFileSync(path.join(root, 'miniprogram/pages/tree/index.wxml'), 'utf8');
@@ -595,7 +599,7 @@ test('家谱显示偏好集中设置，正式家谱按个人偏好展示且示�
   assert.match(tree, /saveGraphPreference/);
   assert.match(tree, /openDisplaySettings/);
   assert.doesNotMatch(tree, /toggleNameLayout/);
-  assert.match(treeTemplate, /bindtap="openDisplaySettings">设置/);
+  assert.doesNotMatch(treeTemplate, /bindtap="openDisplaySettings">设置/);
   assert.match(members, /bindtap="openDisplaySettings"[\s\S]{0,180}家谱显示设置/);
   assert.match(settings, /api\.call\('family\.getPreference'/);
   assert.match(settings, /api\.call\('family\.setPreference'/);
@@ -609,6 +613,6 @@ test('家谱显示偏好集中设置，正式家谱按个人偏好展示且示�
   assert.match(treeTemplate, /showGenderColors \? item\.genderClass : 'gender-neutral'/);
   assert.match(example, /EXAMPLE_NAME_LAYOUT_KEY_PREFIX/);
   assert.match(example, /wx\.setStorageSync\(EXAMPLE_NAME_LAYOUT_KEY_PREFIX/);
-  assert.match(exampleTemplate, /bindtap="toggleNameLayout"/);
+  assert.doesNotMatch(exampleTemplate, /bindtap="toggleNameLayout"/);
   assert.match(exampleTemplate, /node-name-vertical/);
 });

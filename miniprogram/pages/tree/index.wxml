@@ -1,5 +1,6 @@
 <import src="../../templates/kinship-card.wxml" />
-<view class="tree-page">
+<page-meta page-orientation="{{pageOrientation}}" bindresize="onPageResize"></page-meta>
+<view class="tree-page {{isLandscape ? 'is-landscape' : ''}}">
   <view class="loading-panel" wx:if="{{loading}}">
     <view class="loading-dot"></view>
     <text>正在整理家谱...</text>
@@ -42,7 +43,7 @@
           {{viewMode === 'perspective' ? '从' + viewpointName + '看' : '以某人看'}}
         </view>
       </view>
-      <view class="toolbar-share" wx:if="{{currentRole === 'admin'}}" bindtap="startShare">分享</view>
+      <view class="toolbar-share landscape-hidden" wx:if="{{currentRole === 'admin'}}" bindtap="startShare">分享</view>
     </view>
 
     <view class="tree-share-reminder" wx:if="{{showShareReminder}}">
@@ -120,10 +121,8 @@
     <view class="graph-controls" wx:if="{{nodes.length > 0}}">
       <view class="graph-control" bindtap="zoomGraphIn">＋</view>
       <view class="graph-control" bindtap="zoomGraphOut">－</view>
-      <view class="graph-control graph-control-text" bindtap="openDisplaySettings">设置</view>
       <view class="graph-control graph-control-text" bindtap="fitWholeGraph">全谱</view>
-      <view class="graph-control graph-control-text" bindtap="locateGraphFocus">定位</view>
-      <view class="graph-control graph-control-text" wx:if="{{canExpandAll}}" bindtap="expandAllBranches">展开</view>
+      <view class="graph-control graph-control-text orientation-control {{orientationChanging ? 'is-disabled' : ''}}" bindtap="togglePageOrientation">{{orientationChanging ? '切换中' : isLandscape ? '竖屏' : '横屏'}}</view>
     </view>
 
     <view class="graph-help" wx:if="{{nodes.length > 0}}">

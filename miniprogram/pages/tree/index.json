@@ -1,5 +1,6 @@
 {
   "navigationBarTitleText": "有谱",
+  "pageOrientation": "portrait",
   "enablePullDownRefresh": true,
   "backgroundColor": "#F7F4EC"
 }
