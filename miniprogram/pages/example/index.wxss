@@ -40,4 +40,5 @@
 .example-page.is-landscape .person-search { height:42px; padding:0 12px; border-radius:12px; }
 .example-page.is-landscape .perspective-list { height:calc(100vh - 96px); margin-top:8px; }
 .example-page.is-landscape .perspective-option { min-height:52px; padding:8px 10px; }
+.person-node.gender-neutral { border-color:#D8DED9; background:#FFFEFA; }.gender-avatar.gender-neutral { color:#65706A; background:#ECEFED; }.gender-badge.gender-neutral { color:#53655C; background:#ECEFED; }.child-rank-badge { position:absolute; top:-18rpx; left:-18rpx; z-index:6; min-width:48rpx; height:36rpx; padding:0 10rpx; display:flex; align-items:center; justify-content:center; color:#7A4B13; background:#F5E8C9; border:3rpx solid #F7F4EC; border-radius:20rpx; font-size:19rpx; font-weight:600; white-space:nowrap; }.person-rank-basis { display:block; margin-bottom:5rpx; color:#A66B1F; font-size:23rpx; }
 .example-page.is-landscape .small-avatar { width:36px; height:36px; margin-right:10px; border-radius:11px; }

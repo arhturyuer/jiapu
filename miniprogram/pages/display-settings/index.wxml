@@ -3,7 +3,7 @@
 <view class="settings-page page-shell" wx:else>
   <view class="settings-intro surface-card">
     <text class="settings-family">{{family.name}}</text>
-    <text class="settings-copy">这些设置只影响你查看这份家谱，不会改变其他家人的显示方式。</text>
+    <text class="settings-copy">{{isExample ? '这些设置只影响你查看此示例，不会改变示例内容或其他人的显示方式。' : '这些设置只影响你查看这份家谱，不会改变其他家人的显示方式。'}}</text>
   </view>
 
   <view class="section-block">

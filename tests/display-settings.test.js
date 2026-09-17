@@ -1,8 +1,10 @@
+require('./helpers/test-environment');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const api = require('../miniprogram/utils/api');
+const exampleDisplayPreference = require('../miniprogram/utils/example-display-preference');
 
 function loadPage(app) {
   let definition = null;
@@ -92,6 +94,66 @@ test('显示设置保存失败时恢复原值并提示', async function () {
   } finally {
     api.call = previousCall;
     global.wx = previousWx;
+  }
+});
+
+test('示例显示设置仅使用按示例隔离的本地偏好', async function () {
+  const previousCall = api.call;
+  const previousWx = global.wx;
+  const storage = {
+    youpu_example_name_layout_demo: 'vertical'
+  };
+  const app = { getCurrentFamily: function () { return { _id: 'family-1' }; } };
+  const page = loadPage(app);
+  global.wx = {
+    getStorageSync: function (key) { return storage[key]; },
+    setStorageSync: function (key, value) { storage[key] = value; }
+  };
+  api.call = function () { throw new Error('示例设置不应请求云端'); };
+  try {
+    await page.onLoad({ exampleSlug: 'demo' });
+    assert.equal(page.data.isExample, true);
+    assert.equal(page.data.family.name, '示例家谱');
+    assert.equal(page.data.nameLayout, 'vertical');
+    await page.savePreference('showGenderBadge', false);
+    assert.deepEqual(storage[exampleDisplayPreference.EXAMPLE_DISPLAY_PREFERENCE_KEY_PREFIX + 'demo'], {
+      nameLayout: 'vertical',
+      showChildRankBadge: true,
+      showGenderBadge: false,
+      showGenderColors: true
+    });
+    assert.equal(exampleDisplayPreference.get('other').nameLayout, 'horizontal');
+    assert.equal(exampleDisplayPreference.get('other').showGenderBadge, true);
+  } finally {
+    api.call = previousCall;
+    global.wx = previousWx;
+  }
+});
+
+test('示例设置保存后立即刷新上一张示例家谱画布', async function () {
+  const previousWx = global.wx;
+  const previousGetCurrentPages = global.getCurrentPages;
+  const storage = {};
+  const refreshed = [];
+  const app = { getCurrentFamily: function () { return null; } };
+  const page = loadPage(app);
+  global.wx = {
+    getStorageSync: function (key) { return storage[key]; },
+    setStorageSync: function (key, value) { storage[key] = value; }
+  };
+  global.getCurrentPages = function () { return [{ applyDisplayPreference: function (preference) { refreshed.push(preference); } }, {}]; };
+  try {
+    await page.onLoad({ exampleSlug: 'demo' });
+    await page.savePreference('nameLayout', 'vertical');
+    assert.deepEqual(refreshed, [{
+      nameLayout: 'vertical',
+      showChildRankBadge: true,
+      showGenderBadge: true,
+      showGenderColors: true
+    }]);
+  } finally {
+    global.wx = previousWx;
+    global.getCurrentPages = previousGetCurrentPages;
   }
 });
 

@@ -4,16 +4,8 @@ const kinship = require('../../utils/kinship');
 const graphViewport = require('../../utils/graph-viewport');
 const shareCard = require('../../utils/share-card');
 const personGender = require('../../utils/person-gender');
+const exampleDisplayPreference = require('../../utils/example-display-preference');
 const MAX_INTERACTIVE_NODES = 80;
-const EXAMPLE_NAME_LAYOUT_KEY_PREFIX = 'youpu_example_name_layout_';
-
-function exampleNameLayout(slug) {
-  try {
-    return wx.getStorageSync(EXAMPLE_NAME_LAYOUT_KEY_PREFIX + slug) === 'vertical' ? 'vertical' : 'horizontal';
-  } catch (error) {
-    return 'horizontal';
-  }
-}
 
 function exampleDetailUrl(slug, personId) {
   return '/pages/example-person-detail/index?slug=' + encodeURIComponent(slug) + '&id=' + encodeURIComponent(personId);
@@ -25,7 +17,7 @@ Page({
     loading: true, error: '', slug: '', example: null, rawPersons: [], rawRelations: [], nodes: [], lines: [], junctions: [],
     canvasWidth: 750, canvasHeight: 900, graphScale: 1, graphX: 0, graphY: 0, graphScaleMin: 0.32, graphZoomClass: 'zoom-detail',
     pageOrientation: 'portrait', isLandscape: false, orientationChanging: false,
-    collapsedPersonIds: [], hiddenBranchCount: 0, canExpandAll: false, nameLayout: 'horizontal', viewMode: 'full', viewpointId: '', viewpointName: '',
+    collapsedPersonIds: [], hiddenBranchCount: 0, canExpandAll: false, nameLayout: 'horizontal', showChildRankBadge: true, showGenderBadge: true, showGenderColors: true, viewMode: 'full', viewpointId: '', viewpointName: '',
     selectedPersonId: '', selectedPerson: null, showMemberSheet: false, showPerspectiveSheet: false, perspectiveKeyword: '', perspectiveResults: [],
     showTour: false, tourStep: 1,
     shareCard: shareCard.create({ kind: 'example' })
@@ -38,7 +30,11 @@ Page({
     this.setData({ slug: slug });
     if (!slug) this.setData({ loading: false, error: '缺少示例家谱信息' }); else this.loadExample();
   },
-  onShow: function () { this.resetPageOrientation(); this.syncPageOrientationSoon(); },
+  onShow: function () {
+    this.resetPageOrientation();
+    this.applyDisplayPreference();
+    this.syncPageOrientationSoon();
+  },
   onHide: function () { this.resetPageOrientation(); },
   onPullDownRefresh: function () { this.loadExample().then(function () { wx.stopPullDownRefresh(); }); },
   onUnload: function () { if (this._graphSettleTimer) clearTimeout(this._graphSettleTimer); if (this._orientationTimer) clearTimeout(this._orientationTimer); this.syncPageChrome(false); },
@@ -54,15 +50,15 @@ Page({
       });
       const relations = example.relations || [];
       const collapsed = graphLayout.suggestCollapsedIds(persons, relations, { limit: 36 });
-      const nameLayout = exampleNameLayout(example.slug || self.data.slug);
-      self.setData({ loading: false, example: example, rawPersons: persons, rawRelations: relations, perspectiveResults: persons, collapsedPersonIds: collapsed, nameLayout: nameLayout, selectedPersonId: '', selectedPerson: null }, function () {
+      const preference = exampleDisplayPreference.get(example.slug || self.data.slug);
+      self.setData(Object.assign({ loading: false, example: example, rawPersons: persons, rawRelations: relations, perspectiveResults: persons, collapsedPersonIds: collapsed, selectedPersonId: '', selectedPerson: null }, preference), function () {
         self.syncPageChrome(self.data.isLandscape);
         const initialPersonId = self._initialPersonId;
         self._initialPersonId = '';
         if (initialPersonId && persons.some(function (person) { return person._id === initialPersonId; })) {
           self.setPerspective(initialPersonId);
         } else {
-          self.renderGraph('full', '', { collapsedPersonIds: collapsed, nameLayout: nameLayout });
+          self.renderGraph('full', '', { collapsedPersonIds: collapsed, nameLayout: preference.nameLayout });
         }
         if (!wx.getStorageSync('youpu_example_tour_' + example.slug)) self.setData({ showTour: true, tourStep: 1 });
         self.prepareExampleShare();
@@ -72,6 +68,24 @@ Page({
         }
       });
     }).catch(function (error) { self.setData({ loading: false, error: error.message || '示例家谱暂时不可用' }); });
+  },
+
+  applyDisplayPreference: function (savedPreference) {
+    if (!this.data.example) return;
+    // Returning from the settings page can leave the page data ahead of its
+    // canvas (for example when a hidden page's previous refresh was dropped).
+    // Always lay out the graph from the stored preference so card dimensions,
+    // vertical names and connection coordinates remain in sync.
+    const preference = exampleDisplayPreference.normalize(savedPreference || exampleDisplayPreference.get(this.displayPreferenceSlug()));
+    this.renderGraph(this.data.viewMode, this.data.viewpointId, {
+      preserveViewport: true,
+      nameLayout: preference.nameLayout,
+      statePatch: preference
+    });
+  },
+
+  displayPreferenceSlug: function () {
+    return (this.data.example && this.data.example.slug) || this.data.slug;
   },
 
   getGraphTransform: function () {
@@ -193,10 +207,9 @@ Page({
     query.select('.graph-viewport').boundingClientRect();
     query.exec(function (result) { const rect = result && result[0]; callback(rect && rect.width && rect.height ? { width: rect.width, height: rect.height, rpxToPx: width / 750, windowWidth: width } : fallback); });
   },
-  toggleNameLayout: function () {
-    const nameLayout = this.data.nameLayout === 'vertical' ? 'horizontal' : 'vertical';
-    try { wx.setStorageSync(EXAMPLE_NAME_LAYOUT_KEY_PREFIX + this.data.slug, nameLayout); } catch (error) {}
-    this.renderGraph(this.data.viewMode, this.data.viewpointId, { nameLayout: nameLayout, statePatch: { nameLayout: nameLayout } });
+  openDisplaySettings: function () {
+    const slug = this.displayPreferenceSlug();
+    if (slug) wx.navigateTo({ url: '/pages/display-settings/index?exampleSlug=' + encodeURIComponent(slug) });
   },
   onGraphScale: function (event) { if (event.detail.scale) { this._currentGraphScale = event.detail.scale; this.scheduleGraphSettle(); } },
   onGraphChange: function (event) { if (typeof event.detail.x === 'number') this._currentGraphX = event.detail.x; if (typeof event.detail.y === 'number') this._currentGraphY = event.detail.y; this.scheduleGraphSettle(); },
@@ -210,13 +223,19 @@ Page({
     const person = this.data.rawPersons.find(function (item) { return item._id === personId; });
     if (!person) return;
     if (this.data.selectedPersonId === personId) return this.openMemberActions(event);
-    this.renderGraph(this.data.viewMode, this.data.viewpointId, { preserveViewport: true, selectedPersonId: personId, statePatch: { selectedPersonId: personId, selectedPerson: Object.assign({}, person, { isCollapsed: this.data.collapsedPersonIds.indexOf(personId) >= 0 }), showMemberSheet: false } });
+    this.renderGraph(this.data.viewMode, this.data.viewpointId, { preserveViewport: true, selectedPersonId: personId, statePatch: { selectedPersonId: personId, selectedPerson: this.decorateSelectedPerson(person), showMemberSheet: false } });
   },
   openMemberActions: function (event) {
     const personId = event.currentTarget.dataset.id;
     const person = this.data.rawPersons.find(function (item) { return item._id === personId; });
     if (person) this.setData({ selectedKinship: this.data.viewMode === 'perspective' ? kinship.memberKinshipCard(this._lastLayout && this._lastLayout.kinshipDetails, personId, this.data.viewpointName, this.data.rawPersons) : null,
-      selectedPersonId: personId, selectedPerson: Object.assign({}, person, { isCollapsed: this.data.collapsedPersonIds.indexOf(personId) >= 0 }), showMemberSheet: true });
+      selectedPersonId: personId, selectedPerson: this.decorateSelectedPerson(person), showMemberSheet: true });
+  },
+  decorateSelectedPerson: function (person) {
+    const node = (this._lastLayout && this._lastLayout.nodes || []).find(function (item) { return item._id === person._id; });
+    return Object.assign({}, person, node ? { childRankLabel: node.childRankLabel || '' } : {}, {
+      isCollapsed: this.data.collapsedPersonIds.indexOf(person._id) >= 0
+    });
   },
   clearGraphSelection: function () { if (this.data.selectedPersonId && !this.data.showMemberSheet) this.renderGraph(this.data.viewMode, this.data.viewpointId, { preserveViewport: true, selectedPersonId: '', statePatch: { selectedPersonId: '', selectedPerson: null } }); },
   closeMemberSheet: function () { this.setData({ showMemberSheet: false, selectedKinship: null }); },

@@ -1,11 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-function loadEnvironment() {
-  const modulePath = require.resolve('../miniprogram/config/env');
-  delete require.cache[modulePath];
-  return require('../miniprogram/config/env');
-}
+const { loadEnvironment } = require('./helpers/test-environment');
 
 function runtime(version) {
   return {
@@ -29,4 +25,11 @@ test('账号信息缺失、异常或未知版本安全降级到 staging', functi
     getAccountInfoSync: function () { throw new Error('unsupported'); }
   }).active, 'staging');
   assert.equal(environment.resolveRuntimeEnvironment(runtime('future')).active, 'staging');
+});
+
+test('应用缺少配置或 staging 指向生产及占位环境时仍拒绝启动', function () {
+  [null, {}, { stagingCloudEnv: 'cloud1-d5gs5yj4l283d9c6d' }, { stagingCloudEnv: 'REPLACE_WITH_STAGING_ENV_ID' }]
+    .forEach(function (local) {
+      assert.throws(function () { loadEnvironment(local); }, /缺少 staging 环境配置/);
+    });
 });

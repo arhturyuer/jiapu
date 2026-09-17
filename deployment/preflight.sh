@@ -98,15 +98,8 @@ else
   exit 3
 fi
 
-find "${PROJECT_PATH}/miniprogram" "${PROJECT_PATH}/cloudfunctions" "${PROJECT_PATH}/tests" \
-  -name '*.js' -print0 | xargs -0 -n1 "${NODE}" --check
-"${NODE}" --test "${PROJECT_PATH}"/tests/*.test.js
-
-(
-  cd "${PROJECT_PATH}/admin"
-  "${PNPM}" run typecheck
-  VITE_CLOUDBASE_ENV="${TARGET_ENV_ID}" "${PNPM}" run build
-)
+NODE_BIN="${NODE}" PNPM_BIN="${PNPM}" VITE_CLOUDBASE_ENV="${TARGET_ENV_ID}" \
+  bash "${PROJECT_PATH}/scripts/check.sh" --build-admin
 
 if [[ "${SKIP_WECHAT_PREVIEW:-0}" != "1" ]]; then
   "${WECHAT_CLI}" preview --project "${PROJECT_PATH}" --qr-format terminal

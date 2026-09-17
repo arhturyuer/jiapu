@@ -21,7 +21,8 @@ function read(relativePath) {
     assert.match(template, /bindtap="togglePageOrientation"/);
     assert.match(template, /bindtap="zoomGraphIn"[\s\S]*bindtap="zoomGraphOut"[\s\S]*bindtap="fitWholeGraph"[\s\S]*bindtap="togglePageOrientation"/);
     assert.doesNotMatch(template, /bindtap="locateGraphFocus"/);
-    assert.doesNotMatch(template, /class="graph-control[^>]+bindtap="(?:openDisplaySettings|toggleNameLayout|expandAllBranches)"/);
+    assert.doesNotMatch(template, /class="graph-control[^>]+bindtap="(?:toggleNameLayout|expandAllBranches)"/);
+    assert.match(template, /class="graph-control graph-control-text" bindtap="openDisplaySettings">设置<\/view>/);
     assert.match(script, /pageOrientation:\s*'portrait'/);
     assert.match(script, /togglePageOrientation:\s*function/);
     assert.match(script, /onPageResize:\s*function/);

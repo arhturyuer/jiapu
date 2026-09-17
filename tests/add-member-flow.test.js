@@ -1,3 +1,4 @@
+require('./helpers/test-environment');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 

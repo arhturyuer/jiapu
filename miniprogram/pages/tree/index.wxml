@@ -123,6 +123,7 @@
       <view class="graph-control" bindtap="zoomGraphOut">－</view>
       <view class="graph-control graph-control-text" bindtap="fitWholeGraph">全谱</view>
       <view class="graph-control graph-control-text orientation-control {{orientationChanging ? 'is-disabled' : ''}}" bindtap="togglePageOrientation">{{orientationChanging ? '切换中' : isLandscape ? '竖屏' : '横屏'}}</view>
+      <view class="graph-control graph-control-text" bindtap="openDisplaySettings">设置</view>
     </view>
 
     <view class="graph-help" wx:if="{{nodes.length > 0}}">

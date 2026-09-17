@@ -1,3 +1,4 @@
+require('./helpers/test-environment');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -28,6 +29,7 @@ test('小程序只通过用户 API 访问数据且调用动作都有服务端路
   const miniFiles = [];
   function walk(directory) {
     fs.readdirSync(directory, { withFileTypes: true }).forEach(function (entry) {
+      if (['env.local.js', 'node_modules', 'miniprogram_npm', 'dist'].includes(entry.name)) return;
       const target = path.join(directory, entry.name);
       if (entry.isDirectory()) walk(target);
       else if (entry.name.endsWith('.js')) miniFiles.push(target);
@@ -52,6 +54,7 @@ test('归档与注销入口遵守弹窗限制并保留可处理的失败信息',
   const miniFiles = [];
   function walk(directory) {
     fs.readdirSync(directory, { withFileTypes: true }).forEach(function (entry) {
+      if (['env.local.js', 'node_modules', 'miniprogram_npm', 'dist'].includes(entry.name)) return;
       const target = path.join(directory, entry.name);
       if (entry.isDirectory()) walk(target);
       else if (entry.name.endsWith('.js')) miniFiles.push(target);
@@ -360,8 +363,6 @@ test('小程序按官方运行时版本路由环境，开发版连接 staging、
   const legal = require(path.join(root, 'miniprogram/config/legal.js'));
   const preflight = fs.readFileSync(path.join(root, 'deployment/preflight.sh'), 'utf8');
   const indexes = JSON.parse(fs.readFileSync(path.join(root, 'deployment/database-indexes.json'), 'utf8'));
-  const localStaging = path.join(root, 'miniprogram/config/env.local.js');
-  assert.ok(fs.existsSync(localStaging));
   assert.equal(environment.active, 'staging');
   assert.equal(environment.resolveRuntimeEnvironment({
     getAccountInfoSync: function () { return { miniProgram: { envVersion: 'develop' } }; }
@@ -599,7 +600,8 @@ test('家谱显示偏好集中设置，画布保持精简操作且既有偏好�
   assert.match(tree, /saveGraphPreference/);
   assert.match(tree, /openDisplaySettings/);
   assert.doesNotMatch(tree, /toggleNameLayout/);
-  assert.doesNotMatch(treeTemplate, /bindtap="openDisplaySettings">设置/);
+  assert.match(treeTemplate, /class="graph-control graph-control-text" bindtap="openDisplaySettings">设置<\/view>/);
+  assert.match(exampleTemplate, /class="graph-control graph-control-text" bindtap="openDisplaySettings">设置<\/view>/);
   assert.match(members, /bindtap="openDisplaySettings"[\s\S]{0,180}家谱显示设置/);
   assert.match(settings, /api\.call\('family\.getPreference'/);
   assert.match(settings, /api\.call\('family\.setPreference'/);
@@ -611,8 +613,11 @@ test('家谱显示偏好集中设置，画布保持精简操作且既有偏好�
   assert.match(treeTemplate, /showChildRankBadge && item\.childRankLabel/);
   assert.match(treeTemplate, /wx:if="\{\{showGenderBadge\}\}"/);
   assert.match(treeTemplate, /showGenderColors \? item\.genderClass : 'gender-neutral'/);
-  assert.match(example, /EXAMPLE_NAME_LAYOUT_KEY_PREFIX/);
-  assert.match(example, /wx\.setStorageSync\(EXAMPLE_NAME_LAYOUT_KEY_PREFIX/);
+  assert.match(example, /exampleDisplayPreference\.get/);
+  assert.match(example, /applyDisplayPreference/);
+  assert.match(exampleTemplate, /showChildRankBadge && item\.childRankLabel/);
+  assert.match(exampleTemplate, /wx:if="\{\{showGenderBadge\}\}"/);
+  assert.match(exampleTemplate, /showGenderColors \? item\.genderClass : 'gender-neutral'/);
   assert.doesNotMatch(exampleTemplate, /bindtap="toggleNameLayout"/);
   assert.match(exampleTemplate, /node-name-vertical/);
 });
