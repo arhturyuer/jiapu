@@ -23,23 +23,23 @@ function loadPage(app) {
   return page;
 }
 
-test('显示设置加载旧偏好时补齐默认开启值', async function () {
+test('显示设置加载新用户默认偏好', async function () {
   const previousCall = api.call;
   const app = { getCurrentFamily: function () { return { _id: 'family-default' }; } };
   const page = loadPage(app);
   let request = null;
   api.call = function (type, payload) {
     request = { type: type, payload: payload };
-    return Promise.resolve({ family: { _id: 'family-1', name: '测试家谱' }, preference: { nameLayout: 'vertical' } });
+    return Promise.resolve({ family: { _id: 'family-1', name: '测试家谱' }, preference: { nameLayout: 'horizontal', showChildRankBadge: false, showGenderBadge: false, showGenderColors: true } });
   };
   try {
     page.onLoad({ familyId: 'family-1' });
     await Promise.resolve();
     assert.deepEqual(request, { type: 'family.getPreference', payload: { familyId: 'family-1' } });
     assert.equal(page.data.loading, false);
-    assert.equal(page.data.nameLayout, 'vertical');
-    assert.equal(page.data.showChildRankBadge, true);
-    assert.equal(page.data.showGenderBadge, true);
+    assert.equal(page.data.nameLayout, 'horizontal');
+    assert.equal(page.data.showChildRankBadge, false);
+    assert.equal(page.data.showGenderBadge, false);
     assert.equal(page.data.showGenderColors, true);
   } finally {
     api.call = previousCall;
@@ -118,12 +118,13 @@ test('示例显示设置仅使用按示例隔离的本地偏好', async function
     await page.savePreference('showGenderBadge', false);
     assert.deepEqual(storage[exampleDisplayPreference.EXAMPLE_DISPLAY_PREFERENCE_KEY_PREFIX + 'demo'], {
       nameLayout: 'vertical',
-      showChildRankBadge: true,
+      showChildRankBadge: false,
       showGenderBadge: false,
       showGenderColors: true
     });
     assert.equal(exampleDisplayPreference.get('other').nameLayout, 'horizontal');
-    assert.equal(exampleDisplayPreference.get('other').showGenderBadge, true);
+    assert.equal(exampleDisplayPreference.get('other').showChildRankBadge, false);
+    assert.equal(exampleDisplayPreference.get('other').showGenderBadge, false);
   } finally {
     api.call = previousCall;
     global.wx = previousWx;
@@ -147,8 +148,8 @@ test('示例设置保存后立即刷新上一张示例家谱画布', async funct
     await page.savePreference('nameLayout', 'vertical');
     assert.deepEqual(refreshed, [{
       nameLayout: 'vertical',
-      showChildRankBadge: true,
-      showGenderBadge: true,
+      showChildRankBadge: false,
+      showGenderBadge: false,
       showGenderColors: true
     }]);
   } finally {
@@ -157,13 +158,29 @@ test('示例设置保存后立即刷新上一张示例家谱画布', async funct
   }
 });
 
-test('服务端显示偏好兼容旧文档并按字段合并', function () {
+test('服务端为新用户返回新默认值，为已有偏好保留旧默认语义', function () {
   const source = fs.readFileSync(path.resolve(__dirname, '../cloudfunctions/youpuUserApi/index.js'), 'utf8');
-  assert.match(source, /showChildRankBadge: preference\.showChildRankBadge !== false/);
-  assert.match(source, /showGenderBadge: preference\.showGenderBadge !== false/);
+  assert.match(source, /const hasSavedPreference = Boolean\(value\)/);
+  assert.match(source, /showChildRankBadge: hasSavedPreference \? preference\.showChildRankBadge !== false : false/);
+  assert.match(source, /showGenderBadge: hasSavedPreference \? preference\.showGenderBadge !== false : false/);
   assert.match(source, /showGenderColors: preference\.showGenderColors !== false/);
   assert.match(source, /const existing = await maybeGet\(transaction, 'user_family_preferences', id\)/);
   assert.match(source, /const preference = normalizeFamilyPreference\(existing\)/);
   assert.match(source, /assert\(typeof event\[field\] === 'boolean', 'INVALID_PREFERENCE'/);
   assert.match(source, /await requireMembership\(event\.familyId, ACTIVE_ROLES, db, openid\)/);
+});
+
+test('示例家谱仅在没有本地显示偏好时采用新默认值', function () {
+  assert.deepEqual(exampleDisplayPreference.normalize(null), {
+    nameLayout: 'horizontal',
+    showChildRankBadge: false,
+    showGenderBadge: false,
+    showGenderColors: true
+  });
+  assert.deepEqual(exampleDisplayPreference.normalize({ nameLayout: 'vertical' }), {
+    nameLayout: 'vertical',
+    showChildRankBadge: true,
+    showGenderBadge: true,
+    showGenderColors: true
+  });
 });

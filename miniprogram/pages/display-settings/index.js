@@ -6,8 +6,8 @@ function normalizedPreference(value) {
   const preference = value || {};
   return {
     nameLayout: preference.nameLayout === 'vertical' ? 'vertical' : 'horizontal',
-    showChildRankBadge: preference.showChildRankBadge !== false,
-    showGenderBadge: preference.showGenderBadge !== false,
+    showChildRankBadge: preference.showChildRankBadge === true,
+    showGenderBadge: preference.showGenderBadge === true,
     showGenderColors: preference.showGenderColors !== false
   };
 }
@@ -21,8 +21,8 @@ Page({
     exampleSlug: '',
     isExample: false,
     nameLayout: 'horizontal',
-    showChildRankBadge: true,
-    showGenderBadge: true,
+    showChildRankBadge: false,
+    showGenderBadge: false,
     showGenderColors: true,
     saving: false,
     savingField: ''

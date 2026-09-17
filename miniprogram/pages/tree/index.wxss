@@ -278,19 +278,53 @@
 }
 
 .person-node.gender-neutral {
-  background: #ECEFED;
-  border-color: #65706A;
+  background: #FFFEFA;
+  border-color: #D8DED9;
 }
 
 .gender-avatar.gender-neutral {
-  color: #65706A;
-  background: #ECEFED;
-  border-color: #65706A;
+  color: #245C4A;
+  background: #E4EFEA;
+  border-color: #B9D2C5;
 }
 
 .gender-badge.gender-neutral {
   color: #FFFFFF;
   background: #65706A;
+}
+
+.life-status-badge {
+  position: absolute;
+  top: -15rpx;
+  right: -12rpx;
+  z-index: 6;
+  min-width: 38rpx;
+  height: 34rpx;
+  padding: 0 9rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #53655C;
+  background: #EEF0ED;
+  border: 3rpx solid #F7F4EC;
+  border-radius: 17rpx;
+  font-size: 20rpx;
+  font-weight: 650;
+  line-height: 1;
+}
+
+.person-node.is-selected .life-status-badge {
+  right: 52rpx;
+}
+
+.person-node.is-deceased .gender-avatar,
+.gender-avatar.is-deceased-avatar {
+  border-color: #A6B7AE;
+}
+
+.person-node.is-deceased .node-placeholder {
+  color: #65706A;
+  background: #EEF0ED;
 }
 
 .person-node.is-viewpoint {
@@ -547,6 +581,21 @@
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.person-sheet-life-status {
+  min-width: 38rpx;
+  height: 34rpx;
+  padding: 0 9rpx;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #53655C;
+  background: #EEF0ED;
+  border-radius: 17rpx;
+  font-size: 20rpx;
+  font-weight: 650;
+  line-height: 1;
 }
 
 .person-rank-basis {

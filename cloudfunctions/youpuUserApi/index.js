@@ -299,12 +299,13 @@ function preferenceId(familyId, openid) {
 
 function normalizeFamilyPreference(value) {
   const preference = value || {};
+  const hasSavedPreference = Boolean(value);
   return {
     viewMode: preference.viewMode === 'perspective' ? 'perspective' : 'full',
     lastViewPersonId: cleanText(preference.lastViewPersonId, 80),
     nameLayout: preference.nameLayout === 'vertical' ? 'vertical' : 'horizontal',
-    showChildRankBadge: preference.showChildRankBadge !== false,
-    showGenderBadge: preference.showGenderBadge !== false,
+    showChildRankBadge: hasSavedPreference ? preference.showChildRankBadge !== false : false,
+    showGenderBadge: hasSavedPreference ? preference.showGenderBadge !== false : false,
     showGenderColors: preference.showGenderColors !== false
   };
 }

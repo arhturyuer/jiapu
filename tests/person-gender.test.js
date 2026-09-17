@@ -109,3 +109,17 @@ test('男女与未填样式使用约定色板并覆盖主要人物界面', funct
     assert.match(fs.readFileSync(path.join(root, file), 'utf8'), /genderClass/, file + ' 应使用统一性别样式');
   });
 });
+
+test('家谱图的性别配色与性别标识可独立生效', function () {
+  const root = path.resolve(__dirname, '..');
+  const expectedCondition = /showGenderColors && item\.gender !== 'unknown' \? item\.genderClass : 'gender-neutral'/;
+  const expectedAvatarCondition = /showGenderColors && selectedPerson\.gender !== 'unknown' \? selectedPerson\.genderClass : 'gender-neutral'/;
+  ['miniprogram/pages/tree/index.wxml', 'miniprogram/pages/example/index.wxml'].forEach(function (file) {
+    const source = fs.readFileSync(path.join(root, file), 'utf8');
+    assert.match(source, expectedCondition, file + ' 应在未知性别或关闭性别配色时使用中性卡片');
+    assert.match(source, /wx:if="\{\{showGenderBadge\}\}"/, file + ' 应独立控制性别文字标识');
+    assert.match(source, /life-status-badge/, file + ' 应为已故成员提供“故”标记');
+    assert.match(source, /is-deceased/, file + ' 应为已故成员提供独立样式');
+  });
+  assert.match(fs.readFileSync(path.join(root, 'miniprogram/pages/tree/index.wxml'), 'utf8'), expectedAvatarCondition);
+});

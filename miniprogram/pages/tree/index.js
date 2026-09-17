@@ -43,8 +43,8 @@ Page({
     isLandscape: false,
     orientationChanging: false,
     nameLayout: 'horizontal',
-    showChildRankBadge: true,
-    showGenderBadge: true,
+    showChildRankBadge: false,
+    showGenderBadge: false,
     showGenderColors: true,
     viewMode: 'full',
     viewpointId: '',
@@ -137,11 +137,7 @@ Page({
           return personGender.decorate(Object.assign({}, person, {
             avatar: '',
             initial: (person.name || '家').slice(0, 1),
-            metaText: person.lifeStatus === 'deceased'
-              ? '故'
-              : person.birthDate
-                ? person.birthDate.slice(0, 4) + '年'
-                : ''
+            metaText: person.birthDate ? person.birthDate.slice(0, 4) + '年' : ''
           }));
         });
         let mode = self.data.viewMode;
@@ -174,8 +170,8 @@ Page({
           relationRevision: Number(data.relationRevision || 0),
           loading: false,
           nameLayout: nameLayout,
-          showChildRankBadge: preference.showChildRankBadge !== false,
-          showGenderBadge: preference.showGenderBadge !== false,
+          showChildRankBadge: preference.showChildRankBadge === true,
+          showGenderBadge: preference.showGenderBadge === true,
           showGenderColors: preference.showGenderColors !== false,
           viewMode: mode,
           viewpointId: personId,

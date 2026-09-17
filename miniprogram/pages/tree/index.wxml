@@ -92,19 +92,20 @@
         <view
           wx:for="{{nodes}}"
           wx:key="_id"
-          class="person-node gender-surface {{showGenderColors ? item.genderClass : 'gender-neutral'}} {{nameLayout === 'vertical' ? 'node-vertical' : ''}} {{item.isViewpoint ? 'is-viewpoint' : ''}} {{item.isSelected ? 'is-selected' : ''}}"
+          class="person-node gender-surface {{showGenderColors && item.gender !== 'unknown' ? item.genderClass : 'gender-neutral'}} {{nameLayout === 'vertical' ? 'node-vertical' : ''}} {{item.lifeStatus === 'deceased' ? 'is-deceased' : ''}} {{item.isViewpoint ? 'is-viewpoint' : ''}} {{item.isSelected ? 'is-selected' : ''}}"
           style="{{item.style}}"
           data-id="{{item._id}}"
           catchtap="showPerson"
         >
-          <text class="gender-badge gender-node-badge {{showGenderColors ? item.genderClass : 'gender-neutral'}}" wx:if="{{showGenderBadge}}">{{item.genderText}}</text>
+          <text class="gender-badge gender-node-badge {{showGenderColors && item.gender !== 'unknown' ? item.genderClass : 'gender-neutral'}}" wx:if="{{showGenderBadge}}">{{item.genderText}}</text>
+          <text class="life-status-badge" wx:if="{{item.lifeStatus === 'deceased'}}">故</text>
           <block wx:if="{{nameLayout === 'vertical'}}">
             <text class="node-name node-name-vertical">{{item.verticalName}}</text>
             <text class="node-meta node-kinship" wx:if="{{viewMode === 'perspective' && item.relationLabel}}">{{item.relationLabel}}</text>
           </block>
           <block wx:else>
-            <image class="node-avatar gender-avatar {{showGenderColors ? item.genderClass : 'gender-neutral'}}" wx:if="{{item.avatar}}" src="{{item.avatar}}" mode="aspectFill"></image>
-            <view class="node-avatar node-placeholder gender-avatar {{showGenderColors ? item.genderClass : 'gender-neutral'}}" wx:else>{{item.initial}}</view>
+            <image class="node-avatar gender-avatar {{showGenderColors && item.gender !== 'unknown' ? item.genderClass : 'gender-neutral'}}" wx:if="{{item.avatar}}" src="{{item.avatar}}" mode="aspectFill"></image>
+            <view class="node-avatar node-placeholder gender-avatar {{showGenderColors && item.gender !== 'unknown' ? item.genderClass : 'gender-neutral'}}" wx:else>{{item.initial}}</view>
             <text class="node-name">{{item.name}}</text>
             <text class="node-meta" wx:if="{{viewMode === 'perspective' && item.relationLabel}}">{{item.relationLabel}}</text>
             <text class="node-meta" wx:elif="{{item.metaText}}">{{item.metaText}}</text>
@@ -153,10 +154,10 @@
     <view class="bottom-sheet person-sheet" catchtap="stopEvent">
       <view class="sheet-handle"></view>
       <view class="person-sheet-head">
-        <image class="person-sheet-avatar gender-avatar {{showGenderColors ? selectedPerson.genderClass : 'gender-neutral'}}" wx:if="{{selectedPerson.avatar}}" src="{{selectedPerson.avatar}}" mode="aspectFill"></image>
-        <view class="person-sheet-avatar person-sheet-placeholder gender-avatar {{showGenderColors ? selectedPerson.genderClass : 'gender-neutral'}}" wx:else>{{selectedPerson.initial}}</view>
+        <image class="person-sheet-avatar gender-avatar {{showGenderColors && selectedPerson.gender !== 'unknown' ? selectedPerson.genderClass : 'gender-neutral'}} {{selectedPerson.lifeStatus === 'deceased' ? 'is-deceased-avatar' : ''}}" wx:if="{{selectedPerson.avatar}}" src="{{selectedPerson.avatar}}" mode="aspectFill"></image>
+        <view class="person-sheet-avatar person-sheet-placeholder gender-avatar {{showGenderColors && selectedPerson.gender !== 'unknown' ? selectedPerson.genderClass : 'gender-neutral'}} {{selectedPerson.lifeStatus === 'deceased' ? 'is-deceased-avatar' : ''}}" wx:else>{{selectedPerson.initial}}</view>
         <view class="person-sheet-copy">
-          <view class="person-sheet-name-row"><text class="person-sheet-name">{{selectedPerson.name}}</text><text class="gender-badge {{showGenderColors ? selectedPerson.genderClass : 'gender-neutral'}}" wx:if="{{showGenderBadge}}">{{selectedPerson.genderText}}</text></view>
+          <view class="person-sheet-name-row"><text class="person-sheet-name">{{selectedPerson.name}}</text><text class="gender-badge {{showGenderColors && selectedPerson.gender !== 'unknown' ? selectedPerson.genderClass : 'gender-neutral'}}" wx:if="{{showGenderBadge}}">{{selectedPerson.genderText}}</text><text class="person-sheet-life-status" wx:if="{{selectedPerson.lifeStatus === 'deceased'}}">故</text></view>
           <text class="muted-text">{{selectedPerson.birthDate || '家庭成员'}}</text>
           <text class="person-rank-basis" wx:if="{{showChildRankBadge && selectedPerson.childRankLabel}}">{{selectedPerson.childRankLabel}} · {{selectedPerson.childRankBasisText}}</text>
         </view>

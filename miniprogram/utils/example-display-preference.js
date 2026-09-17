@@ -3,12 +3,13 @@ const EXAMPLE_DISPLAY_PREFERENCE_KEY_PREFIX = 'youpu_example_display_preference_
 
 function normalize(value, fallbackNameLayout) {
   const preference = value || {};
+  const hasSavedPreference = Boolean(value);
   return {
     nameLayout: preference.nameLayout === 'vertical'
       ? 'vertical'
       : fallbackNameLayout === 'vertical' ? 'vertical' : 'horizontal',
-    showChildRankBadge: preference.showChildRankBadge !== false,
-    showGenderBadge: preference.showGenderBadge !== false,
+    showChildRankBadge: hasSavedPreference ? preference.showChildRankBadge !== false : false,
+    showGenderBadge: hasSavedPreference ? preference.showGenderBadge !== false : false,
     showGenderColors: preference.showGenderColors !== false
   };
 }

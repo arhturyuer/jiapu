@@ -584,7 +584,7 @@ test('冻结、注销重试、运营账号和完整审计只属于超级管理�
   });
 });
 
-test('家谱显示偏好集中设置，画布保持精简操作且既有偏好继续生效', function () {
+test('家谱显示偏好集中设置，新用户采用默认节点且性别开关可独立生效', function () {
   const userApi = fs.readFileSync(path.join(root, 'cloudfunctions/youpuUserApi/index.js'), 'utf8');
   const tree = fs.readFileSync(path.join(root, 'miniprogram/pages/tree/index.js'), 'utf8');
   const treeTemplate = fs.readFileSync(path.join(root, 'miniprogram/pages/tree/index.wxml'), 'utf8');
@@ -594,7 +594,8 @@ test('家谱显示偏好集中设置，画布保持精简操作且既有偏好�
   const example = fs.readFileSync(path.join(root, 'miniprogram/pages/example/index.js'), 'utf8');
   const exampleTemplate = fs.readFileSync(path.join(root, 'miniprogram/pages/example/index.wxml'), 'utf8');
   assert.match(userApi, /function normalizeFamilyPreference/);
-  assert.match(userApi, /showChildRankBadge: preference\.showChildRankBadge !== false/);
+  assert.match(userApi, /const hasSavedPreference = Boolean\(value\)/);
+  assert.match(userApi, /showChildRankBadge: hasSavedPreference \? preference\.showChildRankBadge !== false : false/);
   assert.match(userApi, /'family\.getPreference': familyGetPreference/);
   assert.match(userApi, /Object\.prototype\.hasOwnProperty\.call\(event, field\)/);
   assert.match(tree, /saveGraphPreference/);
@@ -612,12 +613,14 @@ test('家谱显示偏好集中设置，画布保持精简操作且既有偏好�
   assert.match(treeTemplate, /wx:if="\{\{nameLayout === 'vertical'\}\}"/);
   assert.match(treeTemplate, /showChildRankBadge && item\.childRankLabel/);
   assert.match(treeTemplate, /wx:if="\{\{showGenderBadge\}\}"/);
-  assert.match(treeTemplate, /showGenderColors \? item\.genderClass : 'gender-neutral'/);
+  assert.match(treeTemplate, /showGenderColors && item\.gender !== 'unknown' \? item\.genderClass : 'gender-neutral'/);
+  assert.match(treeTemplate, /life-status-badge/);
   assert.match(example, /exampleDisplayPreference\.get/);
   assert.match(example, /applyDisplayPreference/);
   assert.match(exampleTemplate, /showChildRankBadge && item\.childRankLabel/);
   assert.match(exampleTemplate, /wx:if="\{\{showGenderBadge\}\}"/);
-  assert.match(exampleTemplate, /showGenderColors \? item\.genderClass : 'gender-neutral'/);
+  assert.match(exampleTemplate, /showGenderColors && item\.gender !== 'unknown' \? item\.genderClass : 'gender-neutral'/);
+  assert.match(exampleTemplate, /life-status-badge/);
   assert.doesNotMatch(exampleTemplate, /bindtap="toggleNameLayout"/);
   assert.match(exampleTemplate, /node-name-vertical/);
 });

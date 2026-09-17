@@ -17,7 +17,7 @@ Page({
     loading: true, error: '', slug: '', example: null, rawPersons: [], rawRelations: [], nodes: [], lines: [], junctions: [],
     canvasWidth: 750, canvasHeight: 900, graphScale: 1, graphX: 0, graphY: 0, graphScaleMin: 0.32, graphZoomClass: 'zoom-detail',
     pageOrientation: 'portrait', isLandscape: false, orientationChanging: false,
-    collapsedPersonIds: [], hiddenBranchCount: 0, canExpandAll: false, nameLayout: 'horizontal', showChildRankBadge: true, showGenderBadge: true, showGenderColors: true, viewMode: 'full', viewpointId: '', viewpointName: '',
+    collapsedPersonIds: [], hiddenBranchCount: 0, canExpandAll: false, nameLayout: 'horizontal', showChildRankBadge: false, showGenderBadge: false, showGenderColors: true, viewMode: 'full', viewpointId: '', viewpointName: '',
     selectedPersonId: '', selectedPerson: null, showMemberSheet: false, showPerspectiveSheet: false, perspectiveKeyword: '', perspectiveResults: [],
     showTour: false, tourStep: 1,
     shareCard: shareCard.create({ kind: 'example' })
@@ -46,7 +46,7 @@ Page({
     return api.call('examples.get', { slug: this.data.slug }).then(function (data) {
       const example = data.example;
       const persons = (example.persons || []).map(function (person) {
-        return personGender.decorate(Object.assign({}, person, { initial: (person.name || '家').slice(0, 1), metaText: person.lifeStatus === 'deceased' ? '故' : person.birthDate ? person.birthDate.slice(0, 4) + '年' : '' }));
+        return personGender.decorate(Object.assign({}, person, { initial: (person.name || '家').slice(0, 1), metaText: person.birthDate ? person.birthDate.slice(0, 4) + '年' : '' }));
       });
       const relations = example.relations || [];
       const collapsed = graphLayout.suggestCollapsedIds(persons, relations, { limit: 36 });
