@@ -18,7 +18,7 @@ staging 操作不读取、不导出、不复制、不清空生产数据；生产
 
 1. 在与生产相同账号下新建一个云开发环境，名称建议 `youpu-staging`；创建后记录**新**环境 ID、数据库实例 ID 和默认存储桶名称。不要选择导入、恢复、迁移或复制生产数据库/存储。
 2. 切换到新环境，在“登录授权 / 身份认证”只开启运营后台需要的邮箱密码登录；为 staging 单独创建一个运营测试账号。不要复用生产账号密码、`BOOTSTRAP_SECRET`、第三方密钥或真实用户数据。
-3. 为 `youpuJobs` 准备一个新的 staging 专用 `BOOTSTRAP_SECRET`。四个函数的 Nodejs20.19、内存、超时和四个定时触发器由部署清单配置；家庭备份保留 `youpuJobs` 的 900 秒任务超时。初次 bootstrap 后立即轮换该密钥。
+3. 为 `youpuJobs` 准备一个新的 staging 专用 `BOOTSTRAP_SECRET`，生成清单时同一随机值也作为仅限 user API → jobs 的 `JOB_DISPATCH_SECRET`，但两边变量职责独立。四个函数的 Nodejs20.19、内存、超时和唯一的每日保留触发器由部署清单配置；家庭备份保留 `youpuJobs` 的 900 秒任务超时。确认 user API 的运行角色允许异步调用同环境 `youpuJobs`。初次 bootstrap 后轮换时必须同时更新两端派发密钥。
 4. 在微信公众平台的“虚拟支付”沙箱中配置三个 SKU，并准备沙箱 OfferID、AppKey、应用凭据和独立的内部调用密钥；不要使用 production 域名、OfferID 或 AppKey。函数部署完成后，在云开发控制台“设置 → 其他设置 → 消息推送”中，将 `event/xpay_goods_deliver_notify` 与 `event/xpay_refund_notify` 分别绑定到 staging 的 `youpuPaymentNotify`。平台会直接向该函数投递 JSON；不配置 HTTP 通知 URL、消息 Token 或 AESKey。
 5. 在新环境配置静态托管并部署 `admin/dist`；测试图片审核时为新环境配置 `security.mediaCheckAsync` 回调到 `youpuJobs`。不要设置整个 `staging/` 对象前缀的 24 小时删除规则：审核通过图片也保留在该路径，详见[存储边界](../docs/有谱开发部署说明.md#5-索引与安全规则)。
 

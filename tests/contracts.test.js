@@ -311,7 +311,7 @@ test('个人导出使用私有异步任务，不会复制数据到剪贴板', fu
   assert.match(userApi, /'account\.exportUrl':\s*accountExportUrl/);
   assert.match(userApi, /current\.userId === user\._id/);
   assert.match(userApi, /downloadIssuedAt/);
-  assert.match(jobs, /processExportTasks/);
+  assert.match(jobs, /processAccountExportTask/);
   assert.match(jobs, /cloud\.uploadFile/);
   assert.match(jobs, /expireExportTasks/);
   assert.ok(indexes.indexes.export_tasks);

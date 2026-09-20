@@ -25,14 +25,11 @@ const COLLECTIONS = [
   'operators',
   'account_deletion_requests',
   'idempotency_records',
-  'backup_manifests',
-  'profile_sync_tasks',
   'rate_limits',
   'export_tasks',
   'payment_orders',
   'payment_events',
   'membership_grants',
-  'commerce_metrics_daily',
   'feedback_group_settings',
   'example_templates',
   'example_template_versions',
@@ -41,12 +38,6 @@ const COLLECTIONS = [
 
 function hash(value, length) {
   return crypto.createHash('sha256').update(String(value)).digest('hex').slice(0, length || 32);
-}
-
-function paymentNotifyFunctionName() {
-  return String(process.env.PAYMENT_MODE || '').toLowerCase() === 'live'
-    ? 'youpuPaymentNotifyV2'
-    : 'youpuPaymentNotify';
 }
 
 async function deleteFilesStrict(fileIds) {
@@ -65,17 +56,15 @@ async function deleteFilesStrict(fileIds) {
 
 function assertAuthorized(event) {
   const expected = process.env.BOOTSTRAP_SECRET;
+  const dispatchSecret = process.env.JOB_DISPATCH_SECRET;
   const context = cloud.getWXContext() || {};
   const hasUserIdentity = Boolean(context.OPENID || context.UNIONID || context.UID);
   const triggerName = event && (event.triggerName || event.TriggerName);
-  const isKnownTimer = event && [
-    'youpu-frequent-maintenance',
-    'youpu-profile-maintenance',
-    'youpu-hourly-maintenance',
-    'youpu-daily-maintenance'
-  ].includes(triggerName);
+  const isKnownTimer = triggerName === 'youpu-retention-maintenance';
   const isTimer = event && (event.Type === 'Timer' || event.type === 'Timer' || isKnownTimer);
-  if (isTimer && !hasUserIdentity) return;
+  if (isKnownTimer && isTimer && !hasUserIdentity) return;
+  const isTaskDispatch = event && ['task.account-export', 'task.family-backup'].includes(event.action || event.type);
+  if (isTaskDispatch && !hasUserIdentity && dispatchSecret && event.internalSecret === dispatchSecret) return;
   if (!expected || expected === 'CHANGE_BEFORE_DEPLOY' || event.secret !== expected) {
     const error = new Error('后台任务鉴权失败');
     error.code = 'UNAUTHORIZED';
@@ -137,29 +126,6 @@ async function ensureCollections(event) {
     }
   }
   return { created: created, existing: existing, initialOperator: initialOperator };
-}
-
-async function syncProfiles() {
-  const page = await db.collection('profile_sync_tasks').where({ status: 'pending' }).limit(20).get();
-  let synced = 0;
-  for (const task of page.data || []) {
-    try {
-      await updateManyStable('family_memberships', { userId: task.userId, status: 'active' }, {
-        displayName: task.displayName || '家人',
-        avatarAssetId: task.avatarAssetId || '',
-        updatedAt: db.serverDate()
-      }, 500);
-      await db.collection('profile_sync_tasks').doc(task._id).update({
-        data: { status: 'completed', completedAt: db.serverDate(), updatedAt: db.serverDate() }
-      });
-      synced += 1;
-    } catch (error) {
-      await db.collection('profile_sync_tasks').doc(task._id).update({
-        data: { status: 'failed', errorCode: 'SYNC_FAILED', updatedAt: db.serverDate() }
-      });
-    }
-  }
-  return { processed: (page.data || []).length, synced: synced };
 }
 
 async function updateMany(collectionName, where, data, limit) {
@@ -227,27 +193,6 @@ async function listAllForExport(collectionName, where, limit) {
   const error = new Error('导出数据量超过当前任务安全上限，请联系微信客服');
   error.code = 'EXPORT_RESULT_LIMIT_EXCEEDED';
   throw error;
-}
-
-async function expireInvitations() {
-  const now = new Date();
-  const expired = await updateMany('invitations', {
-    status: 'active',
-    expiresAt: _.lte(now)
-  }, {
-    status: 'expired',
-    updatedAt: db.serverDate()
-  }, 1000);
-  const activePage = await db.collection('invitations').where({ status: 'active' }).limit(100).get();
-  let exhausted = 0;
-  for (const invitation of activePage.data || []) {
-    if ((invitation.useCount || 0) < invitation.maxUses) continue;
-    await db.collection('invitations').doc(invitation._id).update({
-      data: { status: 'exhausted', updatedAt: db.serverDate() }
-    });
-    exhausted += 1;
-  }
-  return { expired: expired, exhausted: exhausted };
 }
 
 async function closeUserMemberships(userId) {
@@ -612,51 +557,60 @@ async function buildAccountExport(task) {
   };
 }
 
-async function claimExportTask(taskId) {
+async function claimExportTask(taskId, kind) {
   return db.runTransaction(async function (transaction) {
-    const result = await transaction.collection('export_tasks').doc(taskId).get();
+    let result;
+    try {
+      result = await transaction.collection('export_tasks').doc(taskId).get();
+    } catch (error) {
+      const message = String(error && (error.errMsg || error.message) || '').toLowerCase();
+      if (message.includes('does not exist') || message.includes('not found') || message.includes('document_not_exist')) return null;
+      throw error;
+    }
     const task = result.data;
     if (!task || task.status !== 'pending') return null;
+    if (kind === 'family_backup' && task.kind !== 'family_backup') return null;
+    if (kind === 'account_export' && task.kind === 'family_backup') return null;
     await transaction.collection('export_tasks').doc(taskId).update({
-      data: { status: 'processing', startedAt: db.serverDate(), updatedAt: db.serverDate() }
+      data: {
+        status: 'processing',
+        startedAt: db.serverDate(),
+        failureCode: _.remove(),
+        failureMessage: _.remove(),
+        failedAt: _.remove(),
+        updatedAt: db.serverDate()
+      }
     });
     return task;
   });
 }
 
-async function processExportTasks() {
-  const page = await db.collection('export_tasks').where({ status: 'pending' }).limit(2).get();
-  const completed = [];
-  const failed = [];
-  for (const queued of page.data || []) {
-    if (queued.kind === 'family_backup') continue;
-    const task = await claimExportTask(queued._id);
-    if (!task) continue;
-    try {
-      const payload = await buildAccountExport(task);
-      const content = Buffer.from(JSON.stringify(payload, null, 2), 'utf8');
-      const cloudPath = ['exports', task.userId, queued._id + '.json'].join('/');
-      const uploaded = await cloud.uploadFile({ cloudPath: cloudPath, fileContent: content });
-      if (!uploaded || !uploaded.fileID) throw new Error('导出文件上传失败');
-      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-      await db.collection('export_tasks').doc(queued._id).update({
-        data: {
-          status: 'completed', fileId: uploaded.fileID, cloudPath: cloudPath, size: content.length,
-          completedAt: db.serverDate(), expiresAt: expiresAt, updatedAt: db.serverDate()
-        }
-      });
-      completed.push(queued._id);
-    } catch (error) {
-      await db.collection('export_tasks').doc(queued._id).update({
-        data: {
-          status: 'failed', failureMessage: String(error.message || '导出任务失败').slice(0, 160),
-          failedAt: db.serverDate(), updatedAt: db.serverDate()
-        }
-      });
-      failed.push(queued._id);
-    }
+async function processAccountExportTask(taskId) {
+  const task = await claimExportTask(taskId, 'account_export');
+  if (!task) return { taskId: taskId, skipped: true, reason: 'already_claimed' };
+  try {
+    const payload = await buildAccountExport(task);
+    const content = Buffer.from(JSON.stringify(payload, null, 2), 'utf8');
+    const cloudPath = ['exports', task.userId, taskId + '.json'].join('/');
+    const uploaded = await cloud.uploadFile({ cloudPath: cloudPath, fileContent: content });
+    if (!uploaded || !uploaded.fileID) throw new Error('导出文件上传失败');
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    await db.collection('export_tasks').doc(taskId).update({
+      data: {
+        status: 'completed', fileId: uploaded.fileID, cloudPath: cloudPath, size: content.length,
+        completedAt: db.serverDate(), expiresAt: expiresAt, updatedAt: db.serverDate()
+      }
+    });
+    return { taskId: taskId, completed: true };
+  } catch (error) {
+    await db.collection('export_tasks').doc(taskId).update({
+      data: {
+        status: 'failed', failureMessage: String(error.message || '导出任务失败').slice(0, 160),
+        failedAt: db.serverDate(), updatedAt: db.serverDate()
+      }
+    });
+    return { taskId: taskId, completed: false };
   }
-  return { completed: completed, failed: failed };
 }
 
 function csvCell(value) {
@@ -772,55 +726,21 @@ async function buildFamilyBackup(task) {
   return { parts: uploadedParts, unavailableMediaCount: Array.from(new Set(missing)).length };
 }
 
-async function processFamilyBackupTasks() {
-  const stale = await db.collection('export_tasks').where({ kind: 'family_backup', status: 'processing', startedAt: _.lte(new Date(Date.now() - 30 * 60 * 1000)) }).limit(10).get();
-  for (const task of stale.data || []) {
-    const staleFiles = (task.parts || []).map(function (part) { return part.fileId; }).filter(Boolean);
-    for (let index = 0; index < staleFiles.length; index += 50) await deleteFilesStrict(staleFiles.slice(index, index + 50)).catch(function () {});
-    await db.collection('export_tasks').doc(task._id).update({ data: { status: 'failed', parts: [], failureMessage: '备份任务超时，请重新生成', failedAt: db.serverDate(), updatedAt: db.serverDate() } });
+async function processFamilyBackupTask(taskId) {
+  const task = await claimExportTask(taskId, 'family_backup');
+  if (!task) return { taskId: taskId, skipped: true, reason: 'already_claimed' };
+  try {
+    const family = await maybeGet('families', task.familyId);
+    if (!hasActiveMembership(family)) throw new Error('家庭会员已失效，未生成完整备份');
+    const result = await buildFamilyBackup(Object.assign({ _id: taskId }, task));
+    await db.collection('export_tasks').doc(taskId).update({ data: { status: 'completed', progress: 100, parts: result.parts, unavailableMediaCount: result.unavailableMediaCount, completedAt: db.serverDate(), expiresAt: new Date(Date.now() + 72 * 60 * 60 * 1000), updatedAt: db.serverDate() } });
+    await db.collection('families').doc(task.familyId).update({ data: { backupTaskId: '', lastBackupCompletedAt: db.serverDate(), updatedAt: db.serverDate() } });
+    return { taskId: taskId, completed: true };
+  } catch (error) {
+    await db.collection('export_tasks').doc(taskId).update({ data: { status: 'failed', failureMessage: String(error.message || '家庭备份生成失败').slice(0, 160), failedAt: db.serverDate(), updatedAt: db.serverDate() } });
     await db.collection('families').doc(task.familyId).update({ data: { backupTaskId: '', updatedAt: db.serverDate() } }).catch(function () {});
+    return { taskId: taskId, completed: false };
   }
-  const page = await db.collection('export_tasks').where({ kind: 'family_backup', status: 'pending' }).limit(1).get();
-  const completed = []; const failed = [];
-  for (const queued of page.data || []) {
-    const task = await claimExportTask(queued._id);
-    if (!task) continue;
-    try {
-      const family = await maybeGet('families', task.familyId);
-      if (!hasActiveMembership(family)) {
-        await db.collection('export_tasks').doc(queued._id).update({ data: {
-          status: 'failed', failureMessage: '家庭会员已失效，未生成完整备份', failedAt: db.serverDate(), updatedAt: db.serverDate()
-        } });
-        await db.collection('families').doc(task.familyId).update({ data: { backupTaskId: '', updatedAt: db.serverDate() } }).catch(function () {});
-        failed.push(queued._id);
-        continue;
-      }
-      const result = await buildFamilyBackup(Object.assign({ _id: queued._id }, task));
-      await db.collection('export_tasks').doc(queued._id).update({ data: { status: 'completed', progress: 100, parts: result.parts, unavailableMediaCount: result.unavailableMediaCount, completedAt: db.serverDate(), expiresAt: new Date(Date.now() + 72 * 60 * 60 * 1000), updatedAt: db.serverDate() } });
-      await db.collection('families').doc(task.familyId).update({ data: { backupTaskId: '', lastBackupCompletedAt: db.serverDate(), updatedAt: db.serverDate() } });
-      completed.push(queued._id);
-    } catch (error) {
-      await db.collection('export_tasks').doc(queued._id).update({ data: { status: 'failed', failureMessage: String(error.message || '家庭备份生成失败').slice(0, 160), failedAt: db.serverDate(), updatedAt: db.serverDate() } });
-      await db.collection('families').doc(task.familyId).update({ data: { backupTaskId: '', updatedAt: db.serverDate() } }).catch(function () {});
-      failed.push(queued._id);
-    }
-  }
-  return { completed: completed, failed: failed };
-}
-
-async function paymentAccessToken() {
-  const appId = String(process.env.VP_APP_ID || '');
-  const appSecret = String(process.env.VP_APP_SECRET || '');
-  if (!appId || !appSecret) throw new Error('虚拟支付查单缺少 AppID/AppSecret');
-  const response = await fetch('https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=' + encodeURIComponent(appId) + '&secret=' + encodeURIComponent(appSecret));
-  const payload = await response.json().catch(function () { return {}; });
-  if (!response.ok || !payload.access_token) throw new Error('获取微信 access_token 失败');
-  return payload.access_token;
-}
-
-function paymentEnvironment(order) {
-  if (Number(order && order.paymentEnv) === 1 || (order && order.paymentMode === 'sandbox')) return 1;
-  return 0;
 }
 
 function hasActiveMembership(family, now) {
@@ -828,112 +748,6 @@ function hasActiveMembership(family, now) {
   if (family.proLifetime) return true;
   const expiresAt = family.proExpiresAt ? new Date(family.proExpiresAt) : null;
   return Boolean(expiresAt && !Number.isNaN(expiresAt.getTime()) && expiresAt.getTime() > (now || Date.now()));
-}
-
-function isPaidOrder(result) {
-  const source = result || {};
-  return Number(source.order_state || source.orderState) === 1 || [2, 3, 4].includes(Number(source.status)) || String(source.status || '').toLowerCase() === 'paid';
-}
-
-async function queryPaidOrder(order, accessToken) {
-  const payer = await maybeGet('users', order.payerUserId);
-  if (!payer || !payer.openid) throw new Error('订单付款身份已不可用');
-  const appKey = String(process.env.VP_APP_KEY || '');
-  if (!appKey) throw new Error('虚拟支付查单缺少 AppKey');
-  const wxOrderId = String(order.wxOrderId || '').trim();
-  const body = JSON.stringify(wxOrderId
-    ? { openid: payer.openid, env: paymentEnvironment(order), wx_order_id: wxOrderId }
-    : { openid: payer.openid, env: paymentEnvironment(order), order_id: order._id });
-  const paySig = crypto.createHmac('sha256', appKey).update('/xpay/query_order&' + body, 'utf8').digest('hex');
-  const response = await fetch('https://api.weixin.qq.com/xpay/query_order?access_token=' + encodeURIComponent(accessToken) + '&pay_sig=' + paySig, {
-    method: 'POST', headers: { 'content-type': 'application/json' }, body: body
-  });
-  const payload = await response.json().catch(function () { return {}; });
-  if (!response.ok || Number(payload.errcode || 0) !== 0) {
-    const errorCode = Number(payload.errcode);
-    const errorMessage = String(payload.errmsg || '未知错误').replace(/[\r\n]/g, ' ').slice(0, 80);
-    const error = new Error('微信 query_order 返回失败 [' + (Number.isFinite(errorCode) ? errorCode : response.status) + ']: ' + errorMessage);
-    error.code = errorCode === 268490002 ? 'PAYMENT_QUERY_NOT_FOUND' : 'PAYMENT_QUERY_UNAVAILABLE';
-    throw error;
-  }
-  return payload.order || payload;
-}
-
-async function reconcilePendingPayments() {
-  const cutoff = new Date(Date.now() - 10 * 60 * 1000);
-  const recoveryCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const [page, timedOutPage] = await Promise.all([
-    db.collection('payment_orders').where({ status: 'pending', createdAt: _.lte(cutoff) }).limit(20).get(),
-    db.collection('payment_orders').where({ status: 'closed', closeReason: 'payment_timeout', updatedAt: _.gte(recoveryCutoff) }).limit(20).get()
-  ]);
-  const mode = String(process.env.PAYMENT_MODE || 'mock').toLowerCase();
-  const checked = [];
-  let accessToken = '';
-  const orders = (page.data || []).concat(timedOutPage.data || []).filter(function (order, index, rows) {
-    return rows.findIndex(function (item) { return item._id === order._id; }) === index;
-  });
-  for (const order of orders) {
-    if (!['sandbox', 'live'].includes(mode)) {
-      const mockExpired = order.expiresAt && new Date(order.expiresAt).getTime() <= Date.now();
-      await db.collection('payment_orders').doc(order._id).update({ data: { status: mockExpired ? 'closed' : 'pending', closeReason: mockExpired ? 'payment_timeout' : '', reconcileStatus: mockExpired ? 'closed_unpaid' : 'mock_waiting', lastQueriedAt: db.serverDate(), updatedAt: db.serverDate() } });
-      checked.push(order._id); continue;
-    }
-    if (order.paymentMode !== mode || paymentEnvironment(order) !== (mode === 'sandbox' ? 1 : 0)) continue;
-    try {
-      if (!accessToken) accessToken = await paymentAccessToken();
-      const result = await queryPaidOrder(order, accessToken);
-      const paid = isPaidOrder(result);
-      if (paid) {
-        const notification = await cloud.callFunction({ name: paymentNotifyFunctionName(), data: { internalSecret: process.env.VP_INTERNAL_NOTIFY_SECRET, Event: 'xpay_goods_deliver_notify', MchOrderNo: result.mch_order_no || result.wx_order_id || result.wxOrderId, OutTradeNo: order._id, ProductId: order.productId, Quantity: 1 } });
-        const notificationResult = notification && notification.result || {};
-        if (Number(notificationResult.ErrCode) !== 0) throw new Error('支付发货处理未成功');
-      }
-      const expired = !paid && order.expiresAt && new Date(order.expiresAt).getTime() <= Date.now();
-      const reconcileUpdate = paid
-        ? { reconcileStatus: 'delivery_requested', lastQueriedAt: db.serverDate(), updatedAt: db.serverDate() }
-        : { status: expired ? 'closed' : 'pending', closeReason: expired ? 'payment_timeout' : '', reconcileStatus: expired ? 'closed_unpaid' : 'not_paid', lastQueriedAt: db.serverDate(), updatedAt: db.serverDate() };
-      await db.collection('payment_orders').doc(order._id).update({ data: reconcileUpdate });
-      checked.push(order._id);
-    } catch (error) {
-      const status = error && error.code === 'PAYMENT_QUERY_NOT_FOUND' ? 'query_not_found' : 'query_failed';
-      await db.collection('payment_orders').doc(order._id).update({ data: { reconcileStatus: status, reconcileMessage: String(error.message || '查单失败').slice(0, 120), lastQueriedAt: db.serverDate(), updatedAt: db.serverDate() } });
-    }
-  }
-  return checked;
-}
-
-async function updateCommerceMetricsDaily() {
-  const now = new Date();
-  const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const dayEnd = new Date(dayStart.getTime() + 86400000);
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const [created, paidToday, refundedToday, paidThisMonth, lifetimeFamilies, fixedFamilies] = await Promise.all([
-    listAllForExport('payment_orders', { createdAt: _.gte(dayStart).and(_.lt(dayEnd)) }, 20000),
-    listAllForExport('payment_orders', { paidAt: _.gte(dayStart).and(_.lt(dayEnd)) }, 20000),
-    listAllForExport('payment_orders', { refundedAt: _.gte(dayStart).and(_.lt(dayEnd)) }, 20000),
-    listAllForExport('payment_orders', { paidAt: _.gte(monthStart) }, 50000),
-    db.collection('families').where({ status: 'active', proLifetime: true }).count(),
-    db.collection('families').where({ status: 'active', proExpiresAt: _.gt(now) }).count()
-  ]);
-  const gmvCents = paidToday.reduce(function (sum, item) { return sum + Number(item.priceCents || 0); }, 0);
-  const refundCents = refundedToday.reduce(function (sum, item) { return sum + Number(item.priceCents || 0); }, 0);
-  const monthGmvCents = paidThisMonth.reduce(function (sum, item) { return sum + Number(item.priceCents || 0); }, 0);
-  const sku = {};
-  paidToday.forEach(function (item) { sku[item.productId] = (sku[item.productId] || 0) + 1; });
-  const ratio = Math.round(monthGmvCents / 10000000 * 1000) / 10;
-  const alertLevel = ratio >= 100 ? 100 : ratio >= 90 ? 90 : ratio >= 80 ? 80 : 0;
-  const day = [dayStart.getFullYear(), String(dayStart.getMonth() + 1).padStart(2, '0'), String(dayStart.getDate()).padStart(2, '0')].join('-');
-  const id = 'commerce_' + day.replace(/-/g, '');
-  const previous = await maybeGet('commerce_metrics_daily', id);
-  await db.collection('commerce_metrics_daily').doc(id).set({ data: {
-    day: day, createdOrders: created.length, paidOrders: paidToday.length,
-    refundedOrders: refundedToday.length, gmvCents: gmvCents, refundCents: refundCents,
-    sku: sku, activeMemberFamilies: Number(lifetimeFamilies.total || 0) + Number(fixedFamilies.total || 0),
-    monthGmvCents: monthGmvCents, monthlyLimitCents: 10000000, monthlyLimitPercent: ratio,
-    alertLevel: alertLevel, updatedAt: db.serverDate()
-  } });
-  if (alertLevel && alertLevel > Number(previous && previous.alertLevel || 0)) console.warn(JSON.stringify({ action: 'commerce.monthly_limit_alert', alertLevel: alertLevel, monthlyLimitPercent: ratio }));
-  return { day: day, gmvCents: gmvCents, refundCents: refundCents, alertLevel: alertLevel };
 }
 
 async function expireExportTasks() {
@@ -955,60 +769,41 @@ async function expireExportTasks() {
   return (page.data || []).length;
 }
 
-async function createBackupManifest() {
-  const counts = {};
-  for (const collectionName of COLLECTIONS) {
-    if (collectionName === 'backup_manifests') continue;
-    try {
-      const result = await db.collection(collectionName).count();
-      counts[collectionName] = result.total || 0;
-    } catch (error) {
-      counts[collectionName] = -1;
+async function recoverStaleExportTasks() {
+  const page = await db.collection('export_tasks').where({
+    status: 'processing',
+    startedAt: _.lte(new Date(Date.now() - 30 * 60 * 1000))
+  }).limit(50).get();
+  let recovered = 0;
+  for (const task of page.data || []) {
+    const fileIds = [];
+    if (task.fileId) fileIds.push(task.fileId);
+    (task.parts || []).forEach(function (part) { if (part.fileId) fileIds.push(part.fileId); });
+    for (let index = 0; index < fileIds.length; index += 50) {
+      await deleteFilesStrict(fileIds.slice(index, index + 50)).catch(function () {});
     }
+    await db.collection('export_tasks').doc(task._id).update({ data: {
+      status: 'failed', fileId: '', parts: [], failureMessage: '后台任务执行超时，请重新申请',
+      failedAt: db.serverDate(), updatedAt: db.serverDate()
+    } });
+    if (task.kind === 'family_backup' && task.familyId) {
+      await db.collection('families').doc(task.familyId).update({
+        data: { backupTaskId: '', updatedAt: db.serverDate() }
+      }).catch(function () {});
+    }
+    recovered += 1;
   }
-  const date = new Date().toISOString().slice(0, 10);
-  await db.collection('backup_manifests').doc('backup_' + date).set({
-    data: {
-      date: date,
-      counts: counts,
-      platformBackupRequired: true,
-      createdAt: db.serverDate()
-    }
-  });
-  return counts;
+  return recovered;
 }
 
-async function dailyRun() {
-  return {
-    invitations: await expireInvitations(),
-    archivedFamilies: await purgeArchivedFamilies(),
-    cleanup: await cleanTemporaryData(),
-    expiredExports: await expireExportTasks(),
-    backupManifest: await createBackupManifest()
-  };
-}
-
-async function frequentRun() {
-  return { exports: await processExportTasks(), familyBackups: await processFamilyBackupTasks(), payments: await reconcilePendingPayments(), commerceMetrics: await updateCommerceMetricsDaily() };
-}
-
-async function profileRun() {
-  return { profileSync: await syncProfiles() };
-}
-
-async function hourlyRun() {
+async function retentionRun() {
   return {
     recoveredDeletions: await recoverStaleDeletions(),
-    deletions: await processDeletions()
-  };
-}
-
-async function maintenanceRun() {
-  return {
-    frequent: await frequentRun(),
-    profile: await profileRun(),
-    hourly: await hourlyRun(),
-    daily: await dailyRun()
+    deletions: await processDeletions(),
+    archivedFamilies: await purgeArchivedFamilies(),
+    cleanup: await cleanTemporaryData(),
+    staleExports: await recoverStaleExportTasks(),
+    expiredExports: await expireExportTasks()
   };
 }
 
@@ -1093,25 +888,21 @@ exports.main = async function (event) {
     let data;
     let resolvedAction = action;
     if (action === 'system.bootstrap') data = await ensureCollections(request);
-    if (triggerName === 'youpu-frequent-maintenance') {
-      resolvedAction = 'maintenance.frequent';
-      data = await frequentRun();
+    if (triggerName === 'youpu-retention-maintenance') {
+      resolvedAction = 'maintenance.retention';
+      data = await retentionRun();
     }
-    if (triggerName === 'youpu-profile-maintenance') {
-      resolvedAction = 'maintenance.profile';
-      data = await profileRun();
+    if (!data && action === 'task.account-export') {
+      resolvedAction = action;
+      data = await processAccountExportTask(String(request.taskId || '').trim().slice(0, 80));
     }
-    if (triggerName === 'youpu-hourly-maintenance') {
-      resolvedAction = 'maintenance.hourly';
-      data = await hourlyRun();
-    }
-    if (triggerName === 'youpu-daily-maintenance') {
-      resolvedAction = 'maintenance.daily';
-      data = await dailyRun();
+    if (!data && action === 'task.family-backup') {
+      resolvedAction = action;
+      data = await processFamilyBackupTask(String(request.taskId || '').trim().slice(0, 80));
     }
     if (!data && action === 'maintenance.run') {
       resolvedAction = 'maintenance.run';
-      data = await maintenanceRun();
+      data = await retentionRun();
     }
     if (!data) throw new Error('unknown job action');
     console.log(JSON.stringify({ requestId: requestId, actorId: 'system', action: resolvedAction, success: true, durationMs: Date.now() - startedAt, resultCode: 'OK' }));

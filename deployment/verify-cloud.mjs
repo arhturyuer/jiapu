@@ -20,8 +20,8 @@ const manifestPath = process.env.DEPLOYMENT_TARGET === 'staging' && existsSync(g
   : resolve(root, 'deployment/cloudbaserc.example.json');
 const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
 const productionPaymentEnvironmentKeys = {
-  youpuUserApi: ['CONTENT_MODERATION_MODE', 'PAYMENT_MODE', 'VP_APP_ID', 'VP_APP_SECRET', 'VP_OFFER_ID', 'VP_APP_KEY', 'VP_INTERNAL_NOTIFY_SECRET'],
-  youpuJobs: ['BOOTSTRAP_SECRET', 'PAYMENT_MODE', 'VP_APP_ID', 'VP_APP_SECRET', 'VP_APP_KEY', 'VP_INTERNAL_NOTIFY_SECRET'],
+  youpuUserApi: ['CONTENT_MODERATION_MODE', 'JOB_DISPATCH_SECRET', 'JOB_FUNCTION_NAMESPACE', 'PAYMENT_MODE', 'VP_APP_ID', 'VP_APP_SECRET', 'VP_OFFER_ID', 'VP_APP_KEY', 'VP_INTERNAL_NOTIFY_SECRET'],
+  youpuJobs: ['BOOTSTRAP_SECRET', 'JOB_DISPATCH_SECRET'],
   youpuPaymentNotify: ['VP_INTERNAL_NOTIFY_SECRET'],
   youpuPaymentNotifyV2: ['VP_INTERNAL_NOTIFY_SECRET']
 };
@@ -79,14 +79,14 @@ for (const expected of expectedFunctions) {
     if (expected.name === 'youpuUserApi' && (actualEnv.get('PAYMENT_MODE') !== 'live' || actualEnv.get('CONTENT_MODERATION_MODE') !== 'strict')) {
       throw new Error('youpuUserApi production 支付或内容审核模式不符合要求');
     }
-    if (expected.name === 'youpuJobs' && actualEnv.get('PAYMENT_MODE') !== 'live') {
-      throw new Error('youpuJobs production 支付模式必须为 live');
-    }
   }
 
   const actualTriggers = new Map((actual.Triggers || []).map(function (item) {
     const desc = JSON.parse(item.TriggerDesc || '{}');
-    return [item.TriggerName, { type: item.Type, cron: desc.cron, enabled: Number(item.Enable) === 1 }];
+    const enabled = item.Enable === undefined
+      ? item.BindStatus !== 'off'
+      : Number(item.Enable) === 1;
+    return [item.TriggerName, { type: item.Type, cron: desc.cron, enabled: enabled }];
   }));
   const expectedTriggers = expected.triggers || [];
   if (actualTriggers.size !== expectedTriggers.length) throw new Error(expected.name + ' 触发器数量不符合部署清单');

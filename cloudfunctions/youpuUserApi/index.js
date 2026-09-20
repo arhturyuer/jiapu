@@ -2,6 +2,7 @@ const cloud = require('wx-server-sdk');
 const crypto = require('crypto');
 const domain = require('./domain');
 const commerce = require('./commerce');
+const jobDispatcher = require('./job-dispatcher');
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
@@ -846,6 +847,20 @@ async function authLogin() {
   };
 }
 
+async function syncMembershipProfile(userIdValue, displayName, avatarAssetId) {
+  const result = await db.collection('family_memberships').where({
+    userId: userIdValue,
+    status: 'active'
+  }).update({
+    data: {
+      displayName: displayName || '家人',
+      avatarAssetId: avatarAssetId || '',
+      updatedAt: db.serverDate()
+    }
+  });
+  return Number(result && result.stats && result.stats.updated) || 0;
+}
+
 async function authUpdateProfile(event) {
   const openid = getOpenid();
   const existingUser = await requireActiveUser(openid);
@@ -856,7 +871,7 @@ async function authUpdateProfile(event) {
     : existingUser.avatarAssetId || '';
   if (hasAvatarUpdate) await requireOwnedMedia(avatarAssetId, openid, '', 'user_avatar');
   await moderateText(openid, [nickName]);
-  return mutate('auth.updateProfile', event, openid, async function (transaction) {
+  const result = await mutate('auth.updateProfile', event, openid, async function (transaction) {
     const user = await ensureUser(openid, transaction);
     const update = {
       nickName: nickName,
@@ -864,18 +879,10 @@ async function authUpdateProfile(event) {
       updatedAt: db.serverDate()
     };
     await transaction.collection('users').doc(user._id).update({ data: update });
-    const taskId = 'profile_' + user._id;
-    await transaction.collection('profile_sync_tasks').doc(taskId).set({
-      data: {
-        userId: user._id,
-        displayName: nickName || '家人',
-        avatarAssetId: update.avatarAssetId,
-        status: 'pending',
-        updatedAt: db.serverDate()
-      }
-    });
     return { user: publicAccount(Object.assign({}, user, update)) };
   });
+  await syncMembershipProfile(userId(openid), result.user.nickName, result.user.avatarAssetId);
+  return result;
 }
 
 async function authUpdateAvatar(event) {
@@ -884,31 +891,51 @@ async function authUpdateAvatar(event) {
   const avatarAssetId = cleanText(event.avatarAssetId, 80);
   assert(avatarAssetId, 'AVATAR_REQUIRED', '请选择需要保存的头像');
   const asset = await requireOwnedMedia(avatarAssetId, openid, '', 'user_avatar');
-  return mutate('auth.updateAvatar', event, openid, async function (transaction) {
+  const result = await mutate('auth.updateAvatar', event, openid, async function (transaction) {
     const user = await ensureUser(openid, transaction);
     const update = { avatarAssetId: avatarAssetId, updatedAt: db.serverDate() };
     await transaction.collection('users').doc(user._id).update({ data: update });
-    await transaction.collection('profile_sync_tasks').doc('profile_' + user._id).set({
-      data: {
-        userId: user._id,
-        displayName: user.nickName || '家人',
-        avatarAssetId: avatarAssetId,
-        status: 'pending',
-        updatedAt: db.serverDate()
-      }
-    });
     return {
       user: publicAccount(Object.assign({}, user, update)),
       moderationStatus: asset.moderationStatus || 'pending'
     };
   });
+  await syncMembershipProfile(userId(openid), result.user.nickName, result.user.avatarAssetId);
+  return result;
+}
+
+async function dispatchExportTask(action, task, event) {
+  try {
+    await jobDispatcher.dispatchJob(action, task.taskId, { requestId: event.requestId });
+    return task;
+  } catch (error) {
+    await db.collection('export_tasks').doc(task.taskId).update({
+      data: {
+        status: 'failed',
+        failureMessage: '后台任务启动失败，请重新申请',
+        failureCode: cleanText(error && error.code, 80) || 'JOB_DISPATCH_FAILED',
+        failedAt: db.serverDate(),
+        updatedAt: db.serverDate()
+      }
+    }).catch(function () {});
+    if (action === 'task.family-backup' && task.familyId) {
+      await db.runTransaction(async function (transaction) {
+        const result = await transaction.collection('families').doc(task.familyId).get();
+        if (!result.data || result.data.backupTaskId !== task.taskId) return;
+        await transaction.collection('families').doc(task.familyId).update({
+          data: { backupTaskId: '', updatedAt: db.serverDate() }
+        });
+      }).catch(function () {});
+    }
+    throw new BusinessError('JOB_DISPATCH_FAILED', '后台任务启动失败，请稍后重试');
+  }
 }
 
 async function accountExport(event) {
   const openid = getOpenid();
   const user = await ensureUser(openid);
   assert(['active', 'pending_delete'].includes(user.status), 'ACCOUNT_UNAVAILABLE', '账户当前不可导出');
-  return mutate('account.export', event, openid, async function (transaction) {
+  const task = await mutate('account.export', event, openid, async function (transaction) {
     const current = await ensureUser(openid, transaction);
     const taskId = 'exp_' + randomToken(18);
     await transaction.collection('export_tasks').doc(taskId).set({
@@ -931,6 +958,7 @@ async function accountExport(event) {
     });
     return { taskId: taskId, status: 'pending' };
   });
+  return dispatchExportTask('task.account-export', task, event);
 }
 
 function publicExportTask(task) {
@@ -3208,7 +3236,7 @@ async function familyBackupCreate(event) {
     return new Date(right.completedAt).getTime() - new Date(left.completedAt).getTime();
   })[0];
   assert(!latest || Date.now() - new Date(latest.completedAt).getTime() >= 7 * 24 * 60 * 60 * 1000, 'BACKUP_COOLDOWN', '完整备份每 7 天可生成一次');
-  return mutate('family.backup.create', event, openid, async function (transaction) {
+  const task = await mutate('family.backup.create', event, openid, async function (transaction) {
     const lockedFamily = await mustGet(transaction, 'families', access.family._id, 'FAMILY_NOT_FOUND', '家谱不存在或已删除');
     assert(!lockedFamily.backupTaskId, 'BACKUP_IN_PROGRESS', '这份家谱已有备份正在生成');
     assert(!lockedFamily.lastBackupCompletedAt || Date.now() - new Date(lockedFamily.lastBackupCompletedAt).getTime() >= 7 * 24 * 60 * 60 * 1000, 'BACKUP_COOLDOWN', '完整备份每 7 天可生成一次');
@@ -3230,6 +3258,7 @@ async function familyBackupCreate(event) {
     await transaction.collection('families').doc(access.family._id).update({ data: { backupTaskId: taskId, updatedAt: db.serverDate() } });
     return publicBackupTask({ _id: taskId, familyId: access.family._id, status: 'pending', progress: 0, parts: [], createdAt: new Date() });
   });
+  return dispatchExportTask('task.family-backup', task, event);
 }
 
 async function familyBackupStatus(event) {

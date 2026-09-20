@@ -10,9 +10,9 @@
 
 1. 按 `deployment/staging-runbook.md` 生成 staging 本地配置并运行 preflight。
 2. 部署四个云函数、数据库索引和 deny-all 安全规则；执行 bootstrap 后确认 schema version 为 8。
-3. 确认新增集合 `payment_orders`、`payment_events`、`membership_grants`、`commerce_metrics_daily` 与扩展后的 `export_tasks` 已创建。
+3. 确认 `payment_orders`、`payment_events`、`membership_grants` 与扩展后的 `export_tasks` 已创建；`commerce_metrics_daily` 已退出活动运行路径，不作为新环境必需集合。
 4. 在云开发控制台的“设置 → 其他设置 → 消息推送”中，把 `event/xpay_goods_deliver_notify` 和 `event/xpay_refund_notify` 逐条绑定到 staging 的 `youpuPaymentNotify`，并留存页面截图和函数日志。绑定若会替换 production 目标，必须先获得当前请求的生产授权；不能因 staging 验收而中断生产通知。平台直接向云函数传入 JSON，不配置 HTTP 通知 URL、GET 校验、消息 Token 或 AESKey。每个事件组合同一时间只能绑定一个环境；切换 production 前必须确认 staging 无待确认订单。
-5. `youpuJobs` 的 5 分钟触发器负责待确认订单查单、家庭备份和商业指标；沙箱订单以 `env=1` 调用 `query_order`，仅查询 `paymentMode=sandbox` 的 staging 订单。
+5. `youpuJobs` 只保留每日保留期触发器。家庭备份由管理员申请后异步派发；沙箱待确认订单只在用户打开订单并显式重试时以 `env=1` 调用 `query_order`。运营商业指标按打开页面时即时读取，不再周期写入日报集合。
 6. 广告开通状态属于待核验的平台事实。未配置有效广告位 ID 时，页面不应留下广告空白；广告配置以 `miniprogram/config/commerce.js` 和本次平台验收结果为准。
 
 ## 端到端验收
@@ -20,9 +20,9 @@
 1. 使用虚构测试资料创建家谱 A，并邀请第二个 staging 测试账号加入。另建家谱 B 验证权益不串谱。
 2. 在“家庭 → 顶部会员标识”进入家庭会员，确认页面明确显示家谱 A、全体家人共享和不可转移；选择 30 天、1 年或永久 SKU 并阅读说明。
 3. 分别选择三个 SKU，完成真机微信沙箱支付。页面应调用 `wx.requestVirtualPayment`，订单保存 `paymentMode=sandbox`、`paymentEnv=1`，最终为 `fulfilled`，且同一订单只有一个 active grant。沙箱真机支付仅使用 Android：微信 Apple IAP 不支持 `env=1` 沙箱，iPhone 开发版应明确拦截并提示改用 Android，禁止为此改用 `env=0`。
-4. 分别验证云函数消息推送和定时 `query_order` 兜底均可完成发货；重复推送、重复查单或重复打开订单不得产生第二个 grant 或延长期限。取消支付、未知事件、错误商品/付款人和订单超时必须不发放权益；处理异常时函数应返回非零结果，让平台重试。
+4. 分别验证云函数消息推送和用户点击“查单重试”均可完成发货；重复推送、重复查单或重复打开订单不得产生第二个 grant 或延长期限。取消支付、未知事件、错误商品/付款人和订单超时必须不发放权益；处理异常时函数应返回非零结果，让平台重试。
 5. 用第二个家庭成员账号打开家谱 A：应能查看完整历史；家谱 B 仍为免费家庭且只能查看最近 20 条。
-6. 以家谱 A 管理员生成完整备份。等待定时任务后检查进度、分卷不超过 100MB、`manifest.json`、CSV 和审核通过图片；通过“下载并转发”调用 `wx.downloadFile` 与 `wx.shareFileMessage`。非管理员必须被拒绝，7 天内再次申请必须被拒绝。
+6. 以家谱 A 管理员生成完整备份。确认请求后立即异步启动，检查退避轮询、进度、分卷不超过 100MB、`manifest.json`、CSV 和审核通过图片；离开页面后不得继续查询。通过“下载并转发”调用 `wx.downloadFile` 与 `wx.shareFileMessage`。非管理员必须被拒绝，7 天内再次申请必须被拒绝。
 7. 在沙箱后台触发退款通知并确认订单变为 `refunded`；会员期限按其余未退款 grant 重算。若无有效 grant，完整历史分页、备份和去广告权益立即降级。
 8. 打开运营后台“商业化”：核对 GMV、退款、SKU、转化、有效会员家庭和月额度；待确认订单只显示“查单重试”，后台不得出现改价、手工改会员或直接退款入口。
 

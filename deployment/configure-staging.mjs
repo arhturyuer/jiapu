@@ -65,16 +65,15 @@ writeFileSync(destination, [
 const manifest = JSON.parse(readFileSync(resolve(root, 'deployment/cloudbaserc.example.json'), 'utf8'));
 manifest.envId = envId;
 for (const fn of manifest.functions || []) {
-  if (fn.name === 'youpuJobs') fn.envVariables.BOOTSTRAP_SECRET = bootstrapSecret;
+  if (fn.name === 'youpuJobs') Object.assign(fn.envVariables, {
+    BOOTSTRAP_SECRET: bootstrapSecret,
+    JOB_DISPATCH_SECRET: bootstrapSecret
+  });
   if (fn.name === 'youpuUserApi') Object.assign(fn.envVariables, {
+    JOB_DISPATCH_SECRET: bootstrapSecret, JOB_FUNCTION_NAMESPACE: envId,
     PAYMENT_MODE: 'sandbox', VP_APP_ID: sandboxVariables.VP_APP_ID,
     VP_APP_SECRET: sandboxVariables.VP_APP_SECRET, VP_OFFER_ID: sandboxVariables.VP_OFFER_ID,
     VP_APP_KEY: sandboxVariables.VP_APP_KEY, VP_INTERNAL_NOTIFY_SECRET: sandboxVariables.VP_INTERNAL_NOTIFY_SECRET
-  });
-  if (fn.name === 'youpuJobs') Object.assign(fn.envVariables, {
-    PAYMENT_MODE: 'sandbox', VP_APP_ID: sandboxVariables.VP_APP_ID,
-    VP_APP_SECRET: sandboxVariables.VP_APP_SECRET, VP_APP_KEY: sandboxVariables.VP_APP_KEY,
-    VP_INTERNAL_NOTIFY_SECRET: sandboxVariables.VP_INTERNAL_NOTIFY_SECRET
   });
   if (fn.name === 'youpuPaymentNotify') Object.assign(fn.envVariables, {
     VP_INTERNAL_NOTIFY_SECRET: sandboxVariables.VP_INTERNAL_NOTIFY_SECRET

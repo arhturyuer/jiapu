@@ -6,15 +6,20 @@ function sizeText(bytes) { const size = Number(bytes) || 0; return size >= 10485
 Page({
   data: { familyId: '', family: null, isAdmin: false, membershipActive: false, loading: true, creating: false, task: null, parts: [], downloadingPartIndex: -1, sharingPartIndex: -1, readyPartIndex: -1, downloadProgress: 0 },
   onLoad: function (options) { this.setData({ familyId: options.familyId || '' }); },
-  onShow: function () { this.loadPage(); },
+  onShow: function () { this._stopped = false; this.loadPage(); },
+  onHide: function () { this.stopTaskPolling(); },
   onUnload: function () {
-    this._stopped = true;
-    if (this._timer) clearTimeout(this._timer);
+    this.stopTaskPolling();
     if (this._readyPart) fileTransfer.removeTempFile(this._readyPart.filePath);
     this._readyPart = null;
   },
+  stopTaskPolling: function () {
+    this._stopped = true;
+    if (this._timer) clearTimeout(this._timer);
+    this._timer = null;
+  },
   loadPage: function () {
-    const self = this; this._stopped = false;
+    const self = this;
     return api.call('membership.status', { familyId: this.data.familyId }).then(function (data) {
       self.setData({ family: data.family, isAdmin: data.family.currentRole === 'admin', membershipActive: data.membership.active, loading: false });
       const taskId = wx.getStorageSync('youpu_family_backup_' + self.data.familyId);
@@ -27,7 +32,15 @@ Page({
     return api.call('family.backup.status', { taskId: taskId }).then(function (task) {
       const parts = (task.parts || []).map(function (item) { return Object.assign({}, item, { sizeText: sizeText(item.size) }); });
       self.setData({ task: task, parts: parts, creating: ['pending', 'processing'].includes(task.status) });
-      if (['pending', 'processing'].includes(task.status) && !self._stopped) self._timer = setTimeout(function () { self.loadTask(taskId); }, 3500);
+      if (['pending', 'processing'].includes(task.status) && !self._stopped) {
+        const attempt = Number(self._pollAttempt) || 0;
+        const delay = Math.min(30000, 4000 * Math.pow(2, Math.min(attempt, 3)));
+        self._pollAttempt = attempt + 1;
+        if (self._timer) clearTimeout(self._timer);
+        self._timer = setTimeout(function () { self.loadTask(taskId); }, delay);
+      } else {
+        self._pollAttempt = 0;
+      }
     }).catch(function () { wx.removeStorageSync('youpu_family_backup_' + self.data.familyId); });
   },
   createBackup: function () {
@@ -37,6 +50,7 @@ Page({
     this.setData({ creating: true });
     api.call('family.backup.create', { familyId: this.data.familyId }).then(function (task) {
       wx.setStorageSync('youpu_family_backup_' + self.data.familyId, task.taskId);
+      self._pollAttempt = 0;
       self.setData({ task: task }); self.loadTask(task.taskId);
     }).catch(function (error) { self.setData({ creating: false }); wx.showToast({ title: error.message || '备份创建失败', icon: 'none' }); });
   },

@@ -12,6 +12,8 @@
       "installDependency": true,
       "envVariables": {
         "CONTENT_MODERATION_MODE": "strict",
+        "JOB_DISPATCH_SECRET": "REPLACE_WITH_A_RANDOM_SECRET",
+        "JOB_FUNCTION_NAMESPACE": "REPLACE_WITH_STAGING_ENV_ID",
         "PAYMENT_MODE": "mock"
       }
     },
@@ -45,13 +47,10 @@
       "installDependency": true,
       "envVariables": {
         "BOOTSTRAP_SECRET": "REPLACE_WITH_A_RANDOM_SECRET",
-        "PAYMENT_MODE": "mock"
+        "JOB_DISPATCH_SECRET": "REPLACE_WITH_A_RANDOM_SECRET"
       },
       "triggers": [
-        { "name": "youpu-frequent-maintenance", "type": "timer", "config": "0 */5 * * * * *" },
-        { "name": "youpu-profile-maintenance", "type": "timer", "config": "0 */15 * * * * *" },
-        { "name": "youpu-hourly-maintenance", "type": "timer", "config": "0 0 * * * * *" },
-        { "name": "youpu-daily-maintenance", "type": "timer", "config": "0 0 3 * * * *" }
+        { "name": "youpu-retention-maintenance", "type": "timer", "config": "0 0 3 * * * *" }
       ]
     }
   ]

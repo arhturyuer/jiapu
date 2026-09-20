@@ -2,25 +2,10 @@
   "permissions": {
     "openapi": []
   },
-  "envVariables": { "PAYMENT_MODE": "mock" },
+  "envVariables": {},
   "triggers": [
     {
-      "name": "youpu-frequent-maintenance",
-      "type": "timer",
-      "config": "0 */5 * * * * *"
-    },
-    {
-      "name": "youpu-profile-maintenance",
-      "type": "timer",
-      "config": "0 */15 * * * * *"
-    },
-    {
-      "name": "youpu-hourly-maintenance",
-      "type": "timer",
-      "config": "0 0 * * * * *"
-    },
-    {
-      "name": "youpu-daily-maintenance",
+      "name": "youpu-retention-maintenance",
       "type": "timer",
       "config": "0 0 3 * * * *"
     }
