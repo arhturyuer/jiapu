@@ -45,3 +45,13 @@ test('所有 staging 写入脚本都会加载共享生产保护护栏', function
       assert.match(source, /assertDeploymentTarget|target-guard/);
     });
 });
+
+test('生产部署清单生成器受生产护栏保护且不会输出密钥值', function () {
+  const fs = require('node:fs');
+  const source = fs.readFileSync(path.join(root, 'deployment/configure-production.mjs'), 'utf8');
+  assert.match(source, /assertDeploymentTarget\(PRODUCTION_ENV_ID/);
+  assert.match(source, /JOB_DISPATCH_SECRET/);
+  assert.match(source, /JOB_FUNCTION_NAMESPACE/);
+  assert.match(source, /randomBytes\(32\)/);
+  assert.doesNotMatch(source, /console\.log\([^\n]*(dispatchSecret|bootstrapSecret|item\.Value)/);
+});
