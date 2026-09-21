@@ -128,7 +128,7 @@ Page({
     }).catch(function (error) {
       if (!hasContent) {
         self.setData({ loading: false });
-        wx.showToast({ title: error.message || '家庭数据加载失败', icon: 'none' });
+        wx.showToast({ title: api.userMessage(error, '家庭信息加载失败'), icon: 'none' });
       } else console.warn('后台刷新家庭看板失败，保留当前内容', error);
     });
   },
@@ -221,7 +221,7 @@ Page({
       app.invalidateFamilyData(self.data.currentFamily && self.data.currentFamily._id);
       self.loadDashboard({ force: true });
     }).catch(function (error) {
-      wx.showToast({ title: error.message || '处理失败', icon: 'none' });
+      wx.showToast({ title: api.userMessage(error, '处理失败'), icon: 'none' });
     });
   },
 
@@ -294,7 +294,7 @@ Page({
     }).catch(function (error) {
       if (sequence !== self._sharePreparationSequence || !self.data.showShareSheet) return;
       self.setData({ shareCreating: false });
-      wx.showToast({ title: error.message || '微信邀请准备失败，请重试', icon: 'none' });
+      wx.showToast({ title: api.userMessage(error, '微信邀请准备失败，请重试'), icon: 'none' });
     });
   },
 

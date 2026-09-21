@@ -2,7 +2,7 @@
 <view class="page-shell" wx:elif="{{error}}"><view class="empty-panel"><view class="empty-mark">!</view><text class="empty-title">暂时无法打开我的页面</text><text class="empty-description">{{error}}</text><button class="primary-button empty-action" bindtap="loadPage">重新加载</button></view></view>
 <view class="profile-page page-shell" wx:else>
   <view class="pending-card surface-card" wx:if="{{accountState === 'pending_delete'}}">
-    <text class="pending-title">账户正在注销冷静期</text><text class="pending-desc">冷静期结束后会匿名化你的账户资料。期间不能修改资料、创建或管理家谱。</text>
+    <text class="pending-title">账户正在注销冷静期</text><text class="pending-desc">冷静期结束后会清除你的账户资料，并去除必要记录与你身份的关联。期间不能修改资料、创建或管理家谱。</text>
     <button class="primary-button" bindtap="showPrivacy">查看注销状态或撤销</button>
     <button class="contact-button" open-type="contact">联系微信客服</button>
   </view>

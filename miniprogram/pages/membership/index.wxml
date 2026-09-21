@@ -1,12 +1,12 @@
 <view class="loading-panel" wx:if="{{loading}}"><view class="loading-dot"></view><text>正在加载会员方案…</text></view>
 <view class="membership-page page-shell" wx:else>
   <view class="purchase-family surface-card"><text class="eyebrow">正在为这份家谱购买</text><picker range="{{families}}" range-key="name" value="{{familyIndex}}" bindchange="changeFamily"><view class="family-picker"><text>{{family.name}}</text><text>切换 ›</text></view></picker><text class="scope-copy">全体有效家人共享 · 多份家谱分别付费 · 不可转移</text><text class="current-status">{{membershipText}}</text></view>
-  <view class="benefit-grid"><view><text>无广告</text><text>家庭与我的页清爽使用</text></view><view><text>完整历史</text><text>按时间、操作者和类型查询</text></view><view><text>家庭备份</text><text>管理员领取完整 ZIP 分卷</text></view></view>
+  <view class="benefit-grid"><view><text>无广告</text><text>家庭与我的页清爽使用</text></view><view><text>完整历史</text><text>按时间、操作人和变化类型查询</text></view><view><text>家庭备份</text><text>管理员领取完整家庭资料与照片</text></view></view>
   <view class="section-heading"><text class="section-title">选择会员期限</text><text class="muted-text">一次购买，不自动续费</text></view>
   <view class="product-card {{selectedProductId === item.productId ? 'selected' : ''}}" wx:for="{{products}}" wx:key="productId" data-id="{{item.productId}}" bindtap="selectProduct"><view><text class="product-name">{{item.name}}</text><text class="product-desc">{{item.lifetime ? '家谱未永久删除且服务持续运营期间有效' : '固定期限，从当前到期时间继续累加'}}</text></view><view class="price"><text>{{item.priceText}}</text><text wx:if="{{item.recommended}}">推荐</text></view></view>
   <view class="agreement" bindtap="toggleAgreement"><text class="check {{agreed ? 'checked' : ''}}">{{agreed ? '✓' : ''}}</text><text>我已阅读并同意</text><text class="rule-link" catchtap="openRules">《家庭会员与退款说明》</text></view>
   <button class="primary-button pay-button" loading="{{paying}}" disabled="{{paying || (membership && membership.lifetime)}}" bindtap="startPayment">{{membership && membership.lifetime ? '当前家谱已是永久会员' : (paying ? '正在处理订单' : '确认购买')}}</button>
-  <view class="payment-state {{paymentState}}" wx:if="{{paymentMessage}}">{{paymentMessage}}</view>
+  <view class="payment-state {{paymentState}}" wx:if="{{paymentMessage}}"><view class="state-mark">{{paymentState === 'success' ? '✓' : paymentState === 'failed' ? '!' : paymentState === 'cancelled' ? '×' : '···'}}</view><view class="state-copy"><text class="state-title">{{paymentState === 'success' ? '开通成功' : paymentState === 'failed' ? '购买未完成' : paymentState === 'cancelled' ? '已取消购买' : paymentState === 'paying' ? '等待完成支付' : paymentState === 'creating' ? '正在准备订单' : '正在确认订单'}}</text><text class="state-message">{{paymentMessage}}</text><text class="state-next">{{paymentState === 'success' ? '下一步：开始使用会员权益' : paymentState === 'failed' || paymentState === 'cancelled' ? '下一步：确认后可重新购买' : paymentState === 'paying' ? '下一步：在微信页面完成支付' : '下一步：请稍候，不要重复购买'}}</text></view></view>
   <view class="section-heading order-heading"><text class="section-title">购买记录</text><text class="muted-text">仅显示你的付款订单</text></view>
   <view class="order-list surface-card" wx:if="{{orders.length}}">
     <view class="order-row" wx:for="{{orders}}" wx:key="orderId">
@@ -17,5 +17,5 @@
   </view>
   <view class="order-empty surface-card" wx:elif="{{!loadingOrders}}"><text>你还没有在这份家谱的购买记录</text></view>
   <view class="order-loading" wx:else><text>正在加载购买记录…</text></view>
-  <text class="payment-footnote">前端支付成功不代表会员已开通，以微信平台通知并由服务端完成发货为准。退款请通过微信客服或 iOS App Store 规则处理。</text>
+  <view class="payment-note surface-card"><text class="payment-note-mark">i</text><text>支付后微信可能需要一点时间确认；确认完成后会自动开通，请勿重复购买。退款请通过微信客服或 App Store 申请。</text></view>
 </view>

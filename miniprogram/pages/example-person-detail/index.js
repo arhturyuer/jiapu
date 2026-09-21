@@ -32,7 +32,7 @@ Page({
         return { relationId: relation._id, person: personGender.decorate(Object.assign({}, related, { initial: (related.name || '家').slice(0, 1) })), label: labelForRelation(person, relation, related) };
       });
       self.setData({ loading: false, person: personGender.decorate(Object.assign({}, person, { initial: (person.name || '家').slice(0, 1), lifeText: person.lifeStatus === 'living' ? '健在' : person.lifeStatus === 'deceased' ? '已故' : '未填写' })), relatives: relatives });
-    }).catch(function (error) { self.setData({ loading: false, error: error.message || '资料加载失败' }); });
+    }).catch(function (error) { self.setData({ loading: false, error: api.userMessage(error, '资料加载失败') }); });
   },
   openRelative: function (event) {
     if (this._suppressRelationTapUntil && Date.now() < this._suppressRelationTapUntil) return;

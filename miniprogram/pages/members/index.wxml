@@ -44,7 +44,7 @@
   <view class="section-block"><view class="section-heading"><text class="section-title">家谱管理</text><text class="section-action" bindtap="createFamily">新建</text></view><view class="setting-list surface-card">
     <view class="setting-row" bindtap="openFamilySheet" hover-class="setting-row-active"><view><text class="setting-title">切换家谱</text><text class="setting-desc">已加入 {{familyList.length}} 份家谱</text></view><text class="setting-arrow">›</text></view>
     <view class="setting-row" bindtap="openActivity" hover-class="setting-row-active"><view><text class="setting-title">家谱变更历史</text><text class="setting-desc">{{membershipActive ? '查看自功能上线以来的完整记录' : '免费家庭可查看最近 20 条'}}</text></view><text class="setting-arrow">›</text></view>
-    <view class="setting-row" bindtap="openFamilyBackup" hover-class="setting-row-active"><view><text class="setting-title">完整家庭备份</text><text class="setting-desc">管理员可生成结构化资料与家庭图片 ZIP</text></view><text class="setting-arrow">›</text></view>
+    <view class="setting-row" bindtap="openFamilyBackup" hover-class="setting-row-active"><view><text class="setting-title">完整家庭备份</text><text class="setting-desc">管理员可保存人物关系、变更记录与家庭照片</text></view><text class="setting-arrow">›</text></view>
     <view class="setting-row" bindtap="openDisplaySettings" hover-class="setting-row-active"><view><text class="setting-title">家谱显示设置</text><text class="setting-desc">调整家谱人物信息的显示方式</text></view><text class="setting-arrow">›</text></view>
     <view class="setting-row" bindtap="openFamilyManage" hover-class="setting-row-active"><view><text class="setting-title">家庭与权限管理</text><text class="setting-desc">家谱资料、成员角色、邀请和归档</text></view><text class="setting-arrow">›</text></view>
   </view></view>

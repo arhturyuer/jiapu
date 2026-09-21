@@ -3220,7 +3220,7 @@ function publicBackupTask(task) {
     createdAt: task.createdAt || null,
     completedAt: task.completedAt || null,
     expiresAt: task.expiresAt || null,
-    failureMessage: task.status === 'failed' ? cleanText(task.failureMessage, 160) : ''
+    failureMessage: task.status === 'failed' ? '备份生成失败，请重新尝试' : ''
   };
 }
 

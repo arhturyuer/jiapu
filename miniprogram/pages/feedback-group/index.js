@@ -11,7 +11,7 @@ Page({
     return api.call('feedbackGroup.get').then(function (data) {
       self.setData({ loading: false, available: Boolean(data.available && data.qrCodeUrl), qrCodeUrl: data.qrCodeUrl || '' });
     }).catch(function (error) {
-      self.setData({ loading: false, error: error.message || '反馈群信息加载失败，请稍后重试' });
+      self.setData({ loading: false, error: api.userMessage(error, '反馈群信息加载失败，请稍后重试') });
     });
   },
 

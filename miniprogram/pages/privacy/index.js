@@ -8,7 +8,13 @@ const EXPORT_TASK_STORAGE_KEY = 'youpu_export_task';
 
 function decorateReports(items) {
   const labels = { open: '待处理', processing: '处理中', resolved: '已解决', rejected: '未采纳' };
-  return (items || []).map(function (item) { return Object.assign({}, item, { statusText: labels[item.status] || item.status }); });
+  const targetLabels = { person: '人物资料', media: '人物头像', family: '家谱资料', invitation: '邀请内容', invite: '邀请内容' };
+  return (items || []).map(function (item) {
+    return Object.assign({}, item, {
+      statusText: labels[item.status] || '处理中',
+      targetTypeText: targetLabels[item.targetType] || '相关资料'
+    });
+  });
 }
 
 function decorateExportTask(task) {
@@ -23,11 +29,12 @@ Page({
   data: {
     loading: true, error: '', legal: legal, accountState: 'active', deletion: null,
     reports: [], reportCursor: '', hasMoreReports: false, exporting: false, exportTask: null, exportFileReady: false,
-    deleting: false, cancelling: false, deletionExecuteText: ''
+    deleting: false, cancelling: false, deletionExecuteText: '', supportProblemId: ''
   },
 
   onShow: function () {
     this._pageVisible = true;
+    this.setData({ supportProblemId: api.lastProblemId() });
     this.loadAccount();
   },
   onHide: function () {
@@ -67,7 +74,7 @@ Page({
         self.setData({ reports: [], reportCursor: '', hasMoreReports: false });
       })]);
     }).catch(function (error) {
-      self.setData({ loading: false, error: error.message || '账户状态加载失败，请检查网络后重试' });
+      self.setData({ loading: false, error: api.userMessage(error, '账户状态加载失败，请检查网络后重试') });
     });
   },
 
@@ -99,7 +106,7 @@ Page({
       wx.showToast({ title: '已开始准备导出文件', icon: 'none' });
       return self.refreshExportTask(task.taskId, true);
     }).catch(function (error) {
-      wx.showToast({ title: error.message || '导出申请失败', icon: 'none' });
+      wx.showToast({ title: api.userMessage(error, '暂时无法准备个人资料文件'), icon: 'none' });
     }).then(function () { self.setData({ exporting: false }); });
   },
 
@@ -125,7 +132,7 @@ Page({
       self.setData({ exporting: false, exportFileReady: true });
       wx.showToast({ title: '下载完成，请再次点击转发', icon: 'none', duration: 2600 });
     }).catch(function (error) {
-      wx.showToast({ title: error.message || '导出文件下载失败', icon: 'none' });
+      wx.showToast({ title: api.userMessage(error, '个人资料文件下载失败'), icon: 'none' });
     }).then(function () {
       if (!self._readyExport) return fileTransfer.removeTempFile(filePath).then(function () { self.setData({ exporting: false, exportFileReady: false }); });
       return null;
@@ -157,7 +164,7 @@ Page({
   requestDeletion: function () {
     const self = this;
     if (this.data.deleting) return;
-    wx.showModal({ title: '申请注销账户？', content: '申请后进入 7 天冷静期并暂停使用。你的账户资料将被匿名化，共享家谱仍由家庭管理员维护。', confirmText: '申请注销', confirmColor: '#B43D3D' }).then(function (result) {
+    wx.showModal({ title: '申请注销账户？', content: '申请后进入 7 天冷静期并暂停使用。届时会清除你的账户资料，并去除其他必要记录与你身份的关联；共享家谱仍由家庭管理员维护。', confirmText: '申请注销', confirmColor: '#B43D3D' }).then(function (result) {
       if (!result.confirm) return null;
       if (self.data.deleting) return null;
       self.setData({ deleting: true });
@@ -169,7 +176,7 @@ Page({
       wx.showToast({ title: '已进入注销冷静期', icon: 'none' });
     }).catch(function (error) {
       if (error.code === 'LAST_ADMIN' && error.details && error.details.familyId) return self.showLastAdminGuidance(error);
-      wx.showToast({ title: error.message || '注销申请失败', icon: 'none' });
+      wx.showToast({ title: api.userMessage(error, '注销申请失败'), icon: 'none' });
     }).then(function () { self.setData({ deleting: false }); });
   },
 
@@ -184,7 +191,7 @@ Page({
       if (!result.confirm) return;
       return wx.navigateTo({ url: '/pages/family-manage/index?familyId=' + details.familyId + '&section=collaborators' });
     }).catch(function (modalError) {
-      wx.showToast({ title: modalError.message || modalError.errMsg || error.message || '注销申请失败', icon: 'none' });
+      wx.showToast({ title: api.userMessage(modalError, '注销申请失败'), icon: 'none' });
     });
   },
 
@@ -196,14 +203,14 @@ Page({
       app.globalData.accountState = 'active'; app.globalData.loggedIn = true;
       self.setData({ accountState: 'active', deletion: null, deletionExecuteText: '' });
       wx.showToast({ title: '注销已撤销', icon: 'success' });
-    }).catch(function (error) { wx.showToast({ title: error.message || '撤销失败', icon: 'none' }); }).then(function () { self.setData({ cancelling: false }); });
+    }).catch(function (error) { wx.showToast({ title: api.userMessage(error, '撤销失败'), icon: 'none' }); }).then(function () { self.setData({ cancelling: false }); });
   },
 
   clearCache: function () {
-    wx.showModal({ title: '清除本机缓存？', content: '只会清除这台设备上的临时资料，不会退出微信登录，也不会删除云端家谱。' }).then(function (result) {
+    wx.showModal({ title: '清理本机临时文件？', content: '只会清理这台设备上为提高速度保留的临时文件，不会退出微信登录，也不会删除已保存的家谱资料。' }).then(function (result) {
       if (!result.confirm) return;
       app.clearLocalData();
-      wx.showToast({ title: '本机缓存已清除', icon: 'success' });
+      wx.showToast({ title: '本机临时文件已清理', icon: 'success' });
       setTimeout(function () { wx.reLaunch({ url: '/pages/tree/index' }); }, 500);
     });
   },
@@ -221,6 +228,6 @@ Page({
     if (!this.data.hasMoreReports) return;
     api.call('report.listMine', { pageSize: 20, cursor: this.data.reportCursor }).then(function (result) {
       self.setData({ reports: self.data.reports.concat(decorateReports(result.items)), reportCursor: result.nextCursor || '', hasMoreReports: Boolean(result.hasMore) });
-    }).catch(function (error) { wx.showToast({ title: error.message || '加载失败', icon: 'none' }); });
+    }).catch(function (error) { wx.showToast({ title: api.userMessage(error, '举报记录加载失败'), icon: 'none' }); });
   }
 });

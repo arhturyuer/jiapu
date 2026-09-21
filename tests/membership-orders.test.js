@@ -101,7 +101,7 @@ test('待确认订单手动刷新会保留未完成状态，网络失败会给�
 
     api.call = function () { return Promise.reject(new Error('网络异常')); };
     await page.refreshOrderById('order-1', false);
-    assert.deepEqual(wxState.notices, ['订单仍在确认中，请稍后再试', '网络异常']);
+    assert.deepEqual(wxState.notices, ['订单仍在确认中，请稍后再试', '订单状态刷新失败']);
     assert.equal(page.data.refreshingOrderId, '');
   } finally {
     api.call = previousCall;
@@ -132,7 +132,7 @@ test('沙箱待确认订单会主动调用服务端查单，而不是只读取�
   }
 });
 
-test('微信沙箱未找到订单时，会员页停止轮询并展示可操作的配置提示', async function () {
+test('测试环境暂未找到订单时，会员页停止轮询并使用安全确认提示', async function () {
   const api = require('../miniprogram/utils/api');
   const previousCall = api.call;
   const wxState = installWx();
@@ -148,15 +148,16 @@ test('微信沙箱未找到订单时，会员页停止轮询并展示可操作�
     }) }); };
     await page.pollOrder(0);
     assert.equal(page.data.paying, false);
-    assert.equal(page.data.paymentState, 'failed');
-    assert.equal(page.data.paymentMessage, '微信沙箱未找到该订单，请核对配置');
+    assert.equal(page.data.paymentState, 'confirming');
+    assert.equal(page.data.paymentMessage, '订单暂未查询到结果，请确认微信购买流程已完成，稍后再刷新状态');
+    assert.doesNotMatch(page.data.paymentMessage, /沙箱|配置|reconcile/i);
   } finally {
     api.call = previousCall;
     wxState.restore();
   }
 });
 
-test('iOS 不会在 staging 沙箱创建虚拟支付订单，避免 Apple IAP 误走现网或留下待确认订单', function () {
+test('iOS 不会在 staging 测试环境创建支付订单，页面只展示用户语言提示', function () {
   const api = require('../miniprogram/utils/api');
   const previousCall = api.call;
   const previousWx = global.wx;
@@ -172,8 +173,9 @@ test('iOS 不会在 staging 沙箱创建虚拟支付订单，避免 Apple IAP �
     api.call = function () { throw new Error('iOS 沙箱不应调用服务端创建订单'); };
     page.startPayment();
     assert.equal(page.data.paying, false);
-    assert.equal(modal.title, '请使用 Android 完成沙箱验收');
-    assert.match(modal.content, /不支持沙箱环境/);
+    assert.equal(modal.title, '测试环境提示');
+    assert.match(modal.content, /仅支持 Android 真机/);
+    assert.doesNotMatch(modal.content, /sandbox|env=1|IAP|staging|沙箱/i);
   } finally {
     api.call = previousCall;
     global.wx = previousWx;

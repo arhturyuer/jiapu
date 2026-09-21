@@ -81,12 +81,14 @@ test('归档与注销入口遵守弹窗限制并保留可处理的失败信息',
   assert.match(userApi, /familyId:\s*family\._id/);
 });
 
-test('云函数调用保留微信 errMsg 以便页面展示', async function () {
+test('云函数调用保留内部错误供日志使用，页面只获取用户文案', async function () {
   const source = fs.readFileSync(path.join(root, 'miniprogram/utils/api.js'), 'utf8');
+  const userMessage = require(path.join(root, 'miniprogram/utils/user-message.js'));
   let attempts = 0;
   const context = {
     module: { exports: {} },
-    require: function () {
+    require: function (request) {
+      if (request === './user-message') return userMessage;
       return { resolveRuntimeEnvironment: function () { return { environment: { userApi: 'youpuUserApi' } }; } };
     },
     setTimeout: function (callback, delay) {
@@ -107,7 +109,13 @@ test('云函数调用保留微信 errMsg 以便页面展示', async function () 
   vm.runInNewContext(source, context, { filename: 'api.js' });
   await assert.rejects(context.module.exports.call('family.archive'), function (error) {
     assert.equal(error.message, 'request:fail network disconnected');
+    assert.equal(error.errMsg, 'request:fail network disconnected');
     assert.equal(error.code, 'CLOUD_CALL_FAILED');
+    assert.ok(error.requestId);
+    const presentation = context.module.exports.userError(error, '暂时无法加载');
+    assert.equal(presentation.message, '网络不稳定，请检查后重试');
+    assert.equal(presentation.problemId, error.requestId);
+    assert.doesNotMatch(presentation.message, /request:fail|network disconnected/);
     return true;
   });
   assert.equal(attempts, 2, '非业务错误应保留一次网络重试');
@@ -317,7 +325,7 @@ test('个人导出使用私有异步任务，不会复制数据到剪贴板', fu
   assert.ok(indexes.indexes.export_tasks);
 });
 
-test('缓存清理入口位于隐私与账户页的权限与保存模块', function () {
+test('本机临时文件清理入口位于隐私与账户页的权限与保存模块', function () {
   const profile = fs.readFileSync(path.join(root, 'miniprogram/pages/profile/index.js'), 'utf8');
   const profileTemplate = fs.readFileSync(path.join(root, 'miniprogram/pages/profile/index.wxml'), 'utf8');
   const privacy = fs.readFileSync(path.join(root, 'miniprogram/pages/privacy/index.js'), 'utf8');
@@ -325,7 +333,7 @@ test('缓存清理入口位于隐私与账户页的权限与保存模块', funct
   assert.match(profileTemplate, /隐私与账户/);
   assert.doesNotMatch(profileTemplate, /隐私、导出与注销|清除本机缓存|bindtap="clearCache"/);
   assert.doesNotMatch(profile, /clearCache\s*:\s*function/);
-  assert.match(privacyTemplate, /权限与保存[\s\S]*bindtap="clearCache"[\s\S]*清除本机缓存/);
+  assert.match(privacyTemplate, /权限与保存[\s\S]*bindtap="clearCache"[\s\S]*清理本机临时文件/);
   assert.match(privacy, /clearCache\s*:\s*function[\s\S]*app\.clearLocalData\(\)/);
 });
 

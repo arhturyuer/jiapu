@@ -56,7 +56,7 @@ Page({
       wx.showToast({ title: '举报已提交', icon: 'success' });
       setTimeout(function () { wx.navigateBack(); }, 600);
     }).catch(function (error) {
-      wx.showToast({ title: error.message || '提交失败', icon: 'none' });
+      wx.showToast({ title: api.userMessage(error, '提交失败'), icon: 'none' });
     }).then(function () {
       self.setData({ submitting: false });
     });

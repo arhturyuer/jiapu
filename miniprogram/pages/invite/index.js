@@ -43,7 +43,7 @@ Page({
         isPerspective: data.viewMode === 'perspective'
       });
     }).catch(function (error) {
-      self.setData({ loading: false, invalid: true, errorMessage: error.message || '邀请已经失效' });
+      self.setData({ loading: false, invalid: true, errorMessage: api.userMessage(error, '邀请已经失效') });
     });
   },
 
@@ -68,7 +68,7 @@ Page({
       wx.showToast({ title: (data.alreadyJoined ? '已进入' : '已加入') + data.family.name, icon: 'success' });
       setTimeout(function () { self.enterFamily(data); }, 600);
     }).catch(function (error) {
-      wx.showToast({ title: error.message || '加入失败', icon: 'none' });
+      wx.showToast({ title: api.userMessage(error, '加入失败'), icon: 'none' });
     }).then(function () {
       self.setData({ accepting: false });
     });

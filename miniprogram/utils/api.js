@@ -1,4 +1,5 @@
 const environmentConfig = require('../config/env');
+const userMessage = require('./user-message');
 const CLOUD_CALL_TIMEOUT = 8000;
 
 function currentEnvironment() {
@@ -10,7 +11,10 @@ function requestId() {
 }
 
 function normalizeCloudError(error) {
-  if (error instanceof Error) return error;
+  if (error instanceof Error) {
+    if (!error.code) error.code = 'CLOUD_CALL_FAILED';
+    return error;
+  }
   const source = error || {};
   const message = source.message || source.errMsg || (typeof error === 'string' ? error : '') || '服务请求失败，请检查网络后重试';
   const normalized = new Error(message);
@@ -38,6 +42,7 @@ function call(type, data) {
         settled = true;
         const error = new Error('服务响应超时，请检查网络后重试');
         error.code = 'CLOUD_FUNCTION_TIMEOUT';
+        error.requestId = payload.requestId;
         reject(error);
       }, CLOUD_CALL_TIMEOUT);
 
@@ -55,7 +60,9 @@ function call(type, data) {
           data: payload
         });
       } catch (error) {
-        finish(reject, normalizeCloudError(error));
+        const normalized = normalizeCloudError(error);
+        normalized.requestId = normalized.requestId || payload.requestId;
+        finish(reject, normalized);
         return;
       }
       Promise.resolve(cloudRequest).then(function (response) {
@@ -68,10 +75,13 @@ function call(type, data) {
         const error = new Error(result.message || result.errMsg || '请求失败');
         error.code = result.code || 'UNKNOWN_ERROR';
         error.details = result.details || null;
+        error.requestId = result.requestId || payload.requestId;
         error.isBusinessError = true;
         finish(reject, error);
       }).catch(function (error) {
-        finish(reject, normalizeCloudError(error));
+        const normalized = normalizeCloudError(error);
+        normalized.requestId = normalized.requestId || payload.requestId;
+        finish(reject, normalized);
       });
     }).catch(function (error) {
       if (!error.isBusinessError && retriesLeft > 0) {
@@ -167,5 +177,8 @@ module.exports = {
   getMediaUrls: getMediaUrls,
   getMediaStates: getMediaStates,
   getMediaPresentation: getMediaPresentation,
-  requestId: requestId
+  requestId: requestId,
+  userError: userMessage.fromError,
+  userMessage: userMessage.message,
+  lastProblemId: userMessage.lastProblemId
 };

@@ -64,7 +64,7 @@ Page({
         family: data.family || null
       }, normalizedPreference(data.preference)));
     }).catch(function (error) {
-      self.setData({ loading: false, error: error.message || '显示设置加载失败' });
+      self.setData({ loading: false, error: api.userMessage(error, '显示设置加载失败') });
     });
   },
 
@@ -103,7 +103,7 @@ Page({
       const rollback = { saving: false, savingField: '' };
       rollback[field] = previous;
       self.setData(rollback);
-      wx.showToast({ title: error.message || '设置保存失败，请重试', icon: 'none' });
+      wx.showToast({ title: api.userMessage(error, '设置保存失败，请重试'), icon: 'none' });
     });
   },
 

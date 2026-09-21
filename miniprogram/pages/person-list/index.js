@@ -93,7 +93,7 @@ Page({
         self.buildViews(resolved, relations);
       }).catch(function () {});
     }).catch(function (error) {
-      self.setData({ loading: false, error: error.message || '成员列表加载失败' });
+      self.setData({ loading: false, error: api.userMessage(error, '成员列表加载失败') });
     });
   },
 

@@ -68,7 +68,7 @@ Page({
       }
       return self.loadChanges(true);
     }).catch(function (error) {
-      self.setData({ loading: false, error: error.message || '申请列表加载失败' });
+      self.setData({ loading: false, error: api.userMessage(error, '申请列表加载失败') });
     });
   },
 
@@ -101,7 +101,7 @@ Page({
       });
     }).catch(function (error) {
       if (version !== self._requestVersion) return;
-      self.setData({ loading: false, loadingMore: false, error: error.message || '申请列表加载失败' });
+      self.setData({ loading: false, loadingMore: false, error: api.userMessage(error, '申请列表加载失败') });
       throw error;
     });
   },
@@ -132,7 +132,7 @@ Page({
       return self.loadChanges(true);
     }).catch(function (error) {
       if (error && error.errMsg && error.errMsg.includes('cancel')) return;
-      wx.showToast({ title: error.message || '处理失败', icon: 'none' });
+      wx.showToast({ title: api.userMessage(error, '处理失败'), icon: 'none' });
     }).then(function () {
       self.setData({ reviewingId: '' });
     });

@@ -110,7 +110,7 @@ Page({
         });
       });
     }).catch(function (error) {
-      self.setData({ loading: false, error: error.message || '资料加载失败' });
+      self.setData({ loading: false, error: api.userMessage(error, '资料加载失败') });
     });
   },
 
@@ -180,9 +180,9 @@ Page({
         savingAvatar: false,
         avatarState: 'failed',
         avatarStateText: '头像保存失败，点击重试',
-        avatarError: error.message || error.errMsg || '头像保存失败'
+        avatarError: api.userMessage(error, '头像保存失败')
       }, function () { self.refreshFormState(); });
-      wx.showToast({ title: error.message || error.errMsg || '头像保存失败', icon: 'none' });
+      wx.showToast({ title: api.userMessage(error, '头像保存失败'), icon: 'none' });
     });
   },
 
@@ -235,7 +235,7 @@ Page({
           savingAvatar: false,
           avatarState: 'failed',
           avatarStateText: '头像保存失败，点击重试',
-          avatarError: error.message || '头像保存失败'
+          avatarError: api.userMessage(error, '头像保存失败')
         }, function () { self.refreshFormState(); });
       });
       return;
@@ -277,7 +277,7 @@ Page({
       return data;
     }).catch(function (error) {
       self.setData({ submitting: false });
-      wx.showToast({ title: error.message || '保存失败', icon: 'none' });
+      wx.showToast({ title: api.userMessage(error, '保存失败'), icon: 'none' });
     });
   }
 });

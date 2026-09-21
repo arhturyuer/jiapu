@@ -77,5 +77,7 @@ test('isCancelled 只识别用户取消转发', function () {
 test('shareFailureText 为用户手势、文件失效和未知微信错误提供可操作提示', function () {
   assert.match(fileTransfer.shareFailureText({ errMsg: 'shareFileMessage:fail can only be invoked by user TAP gesture' }), /再次点击/);
   assert.match(fileTransfer.shareFailureText({ errMsg: 'shareFileMessage:fail file not exists' }), /重新下载/);
-  assert.match(fileTransfer.shareFailureText({ errMsg: 'shareFileMessage:fail internal error 12' }), /internal error 12/);
+  const unknown = fileTransfer.shareFailureText({ errMsg: 'shareFileMessage:fail internal error 12' });
+  assert.equal(unknown, '文件转发失败，请稍后重试');
+  assert.doesNotMatch(unknown, /internal error|errMsg|shareFileMessage/);
 });

@@ -65,7 +65,7 @@ Page({
       const products = (catalog.products || []).map(function (item) { return Object.assign({}, item, { priceText: priceText(item.priceCents) }); });
       self.setData({ families: families, familyIndex: index, products: products, paymentMode: catalog.paymentMode || 'mock', loading: false });
       return self.refreshCurrentFamily(true).then(function () { self._loaded = true; });
-    }).catch(function (error) { self.setData({ loading: false }); wx.showToast({ title: error.message || '会员信息加载失败', icon: 'none' }); });
+    }).catch(function (error) { self.setData({ loading: false }); wx.showToast({ title: api.userMessage(error, '会员信息加载失败'), icon: 'none' }); });
   },
   loadStatus: function () {
     const self = this; const family = this.data.families[this.data.familyIndex];
@@ -131,7 +131,7 @@ Page({
       if (['refunded', 'failed', 'closed'].includes(order.status)) {
         self.setData({ paymentState: 'failed', paymentMessage: order.status === 'refunded' ? '该订单已退款，会员权益已按剩余订单更新' : '该订单未完成，请重新发起购买或联系客服查单' });
       } else if (order.reconcileStatus === 'query_not_found') {
-        self.setData({ paymentState: 'failed', paymentMessage: order.reconcileMessage || '微信沙箱未找到该订单，请确认已完成支付，并核对沙箱商品配置' });
+        self.setData({ paymentState: 'confirming', paymentMessage: '订单暂未查询到结果，请确认微信购买流程已完成，稍后再刷新状态' });
       } else if (automatic) {
         self.setData({ paymentState: 'confirming', paymentMessage: '检测到一笔待确认订单，已刷新状态，暂未收到开通通知' });
       } else {
@@ -140,7 +140,7 @@ Page({
       return order;
     }).catch(function (error) {
       self.setData({ refreshingOrderId: '' });
-      if (!automatic) wx.showToast({ title: error.message || '订单状态刷新失败', icon: 'none' });
+      if (!automatic) wx.showToast({ title: api.userMessage(error, '订单状态刷新失败'), icon: 'none' });
     });
   },
   refreshPendingOrder: function (event) { return this.refreshOrderById(event.currentTarget.dataset.id, false); },
@@ -149,7 +149,7 @@ Page({
     if (this._pollTimer) clearTimeout(this._pollTimer);
     this._orderId = '';
     this.setData({ familyIndex: Number(event.detail.value) || 0, paymentState: '', paymentMessage: '', refreshingOrderId: '' });
-    this.refreshCurrentFamily(true).catch(function (error) { wx.showToast({ title: error.message || '订单记录加载失败', icon: 'none' }); });
+    this.refreshCurrentFamily(true).catch(function (error) { wx.showToast({ title: api.userMessage(error, '订单记录加载失败'), icon: 'none' }); });
   },
   selectProduct: function (event) { if (!this.data.paying) this.setData({ selectedProductId: event.currentTarget.dataset.id }); },
   toggleAgreement: function () { this.setData({ agreed: !this.data.agreed }); },
@@ -161,7 +161,7 @@ Page({
     const system = wx.getSystemInfoSync ? wx.getSystemInfoSync() : {};
     const isIos = String(system.platform).toLowerCase() === 'ios';
     if (this.data.paymentMode === 'sandbox' && isIos) {
-      wx.showModal({ title: '请使用 Android 完成沙箱验收', content: '微信 Apple IAP 不支持沙箱环境（env=1）。为避免产生真实扣款，staging 已禁止在 iPhone 上发起购买；请使用 Android 真机测试。', showCancel: false }); return;
+      wx.showModal({ title: '测试环境提示', content: '当前测试方式仅支持 Android 真机完成购买流程验证，iPhone 不会发起扣款。', showCancel: false }); return;
     }
     if (isIos && !versionAtLeast(system.version, '8.0.68')) {
       wx.showModal({ title: '请升级微信', content: 'iOS 微信 8.0.68 及以上版本才支持本次购买。', showCancel: false }); return;
@@ -172,10 +172,14 @@ Page({
     }).then(function (data) {
       self._orderId = data.order.orderId;
       if (data.mock) {
-        self.setData({ paymentState: 'confirming', paymentMessage: 'staging 模拟平台正在确认发货…' });
+        self.setData({ paymentState: 'confirming', paymentMessage: '测试订单正在确认，请稍候…' });
         return api.call('payment.mockComplete', { orderId: self._orderId });
       }
-      if (typeof wx.requestVirtualPayment !== 'function') throw new Error('当前微信版本不支持虚拟支付，请升级微信');
+      if (typeof wx.requestVirtualPayment !== 'function') {
+        const unsupported = new Error('payment capability unavailable');
+        unsupported.code = 'PAYMENT_NOT_CONFIGURED';
+        throw unsupported;
+      }
       self.setData({ paymentState: 'paying', paymentMessage: '请在微信支付页面完成购买…' });
       return wx.requestVirtualPayment(data.payData).then(function (result) {
         // Keep only a small, non-sensitive callback trace. If WeChat supplies
@@ -187,7 +191,7 @@ Page({
       self.pollOrder(0);
     }).catch(function (error) {
       const cancelled = String(error.errMsg || error.message || '').toLowerCase().indexOf('cancel') >= 0;
-      self.setData({ paying: false, paymentState: cancelled ? 'cancelled' : 'failed', paymentMessage: cancelled ? '已取消支付，未产生会员权益' : (error.message || error.errMsg || '支付未完成，请稍后重试') });
+      self.setData({ paying: false, paymentState: cancelled ? 'cancelled' : 'failed', paymentMessage: cancelled ? '已取消支付，未产生会员权益' : api.userMessage(error, '支付未完成，请稍后重试') });
     });
   },
   pollOrder: function (attempt) {
@@ -202,7 +206,7 @@ Page({
         self.setData({ paying: false, paymentState: 'failed', paymentMessage: '订单未完成，请重新发起或联系客服查单' }); return;
       }
       if (data.order.reconcileStatus === 'query_not_found') {
-        self.setData({ paying: false, paymentState: 'failed', paymentMessage: data.order.reconcileMessage || '微信沙箱暂时无法查询该订单，请稍后刷新订单状态' }); return;
+        self.setData({ paying: false, paymentState: 'confirming', paymentMessage: '订单暂未查询到结果，请确认微信购买流程已完成，稍后再刷新状态' }); return;
       }
       if (attempt >= 5) { self.setData({ paying: false, paymentState: 'confirming', paymentMessage: '订单仍在确认中，可稍后回到本页查看，请勿重复支付' }); return; }
       self._pollTimer = setTimeout(function () { self.pollOrder(attempt + 1); }, Math.min(6000, 900 + attempt * 700));

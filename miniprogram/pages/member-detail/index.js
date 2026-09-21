@@ -62,7 +62,7 @@ Page({
         self.setData({ person: person, relatives: relatives });
       });
     }).catch(function (error) {
-      self.setData({ loading: false, error: error.message || '资料加载失败' });
+      self.setData({ loading: false, error: api.userMessage(error, '资料加载失败') });
     });
   },
 
@@ -159,7 +159,7 @@ Page({
             showCancel: false
           });
         }
-        wx.showToast({ title: error.message || '关系移除失败', icon: 'none' });
+        wx.showToast({ title: api.userMessage(error, '关系移除失败'), icon: 'none' });
         return null;
       });
     });
@@ -224,7 +224,7 @@ Page({
       wx.showToast({ title: '成员已删除', icon: 'success' });
       setTimeout(function () { wx.navigateBack(); }, 600);
     }).catch(function (error) {
-      wx.showToast({ title: error.message || '删除失败', icon: 'none' });
+      wx.showToast({ title: api.userMessage(error, '删除失败'), icon: 'none' });
     });
   }
 });

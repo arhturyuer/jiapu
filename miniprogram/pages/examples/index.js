@@ -27,7 +27,7 @@ Page({
         tags: data.tags || []
       });
     }).catch(function (error) {
-      self.setData({ loading: false, error: error.message || '示例家谱暂时不可用' });
+      self.setData({ loading: false, error: api.userMessage(error, '示例家谱暂时不可用') });
     });
   },
 

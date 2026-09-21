@@ -89,7 +89,7 @@ Page({
         }
       });
     }).catch(function (error) {
-      self.setData({ loading: false, error: error.message || '加载失败' });
+      self.setData({ loading: false, error: api.userMessage(error, '加载失败') });
     });
   },
 
@@ -126,7 +126,7 @@ Page({
       self.setData({ family: data.family });
       wx.showToast({ title: '家谱资料已保存', icon: 'success' });
     }).catch(function (error) {
-      wx.showToast({ title: error.message || '保存失败', icon: 'none' });
+      wx.showToast({ title: api.userMessage(error, '保存失败'), icon: 'none' });
     }).then(function () {
       self.setData({ saving: false });
     });
@@ -150,7 +150,7 @@ Page({
       self.loadPage();
     }).catch(function (error) {
       if (error && error.errMsg && error.errMsg.includes('cancel')) return;
-      wx.showToast({ title: error.message || '角色更新失败', icon: 'none' });
+      wx.showToast({ title: api.userMessage(error, '角色更新失败'), icon: 'none' });
     });
   },
 
@@ -176,7 +176,7 @@ Page({
       wx.showToast({ title: '管理员已添加', icon: 'success' });
       self.loadPage();
     }).catch(function (error) {
-      wx.showToast({ title: error.message || '设置失败', icon: 'none' });
+      wx.showToast({ title: api.userMessage(error, '设置失败'), icon: 'none' });
     });
   },
 
@@ -203,7 +203,7 @@ Page({
       wx.showToast({ title: '管理权已转让', icon: 'success' });
       self.loadPage();
     }).catch(function (error) {
-      wx.showToast({ title: error.message || '转让失败', icon: 'none' });
+      wx.showToast({ title: api.userMessage(error, '转让失败'), icon: 'none' });
     });
   },
 
@@ -224,7 +224,7 @@ Page({
       });
     }).catch(function (error) {
       self.setData({ loadingMoreInvites: false });
-      wx.showToast({ title: error.message || '加载失败', icon: 'none' });
+      wx.showToast({ title: api.userMessage(error, '加载失败'), icon: 'none' });
     });
   },
 
@@ -240,7 +240,7 @@ Page({
       wx.showToast({ title: '邀请已撤销', icon: 'success' });
       self.loadPage();
     }).catch(function (error) {
-      wx.showToast({ title: error.message || '撤销失败', icon: 'none' });
+      wx.showToast({ title: api.userMessage(error, '撤销失败'), icon: 'none' });
     });
   },
 
@@ -264,7 +264,7 @@ Page({
       app.setCurrentFamily(null);
       wx.showToast({ title: '已移入回收站', icon: 'none' });
     }).catch(function (error) {
-      wx.showToast({ title: error.message || '归档失败', icon: 'none' });
+      wx.showToast({ title: api.userMessage(error, '移入回收站失败'), icon: 'none' });
     }).then(function () {
       self.setData({ archiving: false });
     });
@@ -277,7 +277,7 @@ Page({
       wx.showToast({ title: '家谱已恢复', icon: 'success' });
       self.loadPage();
     }).catch(function (error) {
-      wx.showToast({ title: error.message || '恢复失败', icon: 'none' });
+      wx.showToast({ title: api.userMessage(error, '恢复失败'), icon: 'none' });
     });
   },
 
@@ -298,7 +298,7 @@ Page({
       wx.showToast({ title: '已退出家谱', icon: 'none' });
       setTimeout(function () { wx.reLaunch({ url: '/pages/tree/index' }); }, 500);
     }).catch(function (error) {
-      wx.showToast({ title: error.message || '退出失败', icon: 'none' });
+      wx.showToast({ title: api.userMessage(error, '退出失败'), icon: 'none' });
     });
   }
 });

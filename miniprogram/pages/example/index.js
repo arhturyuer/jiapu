@@ -67,7 +67,7 @@ Page({
           api.call('share.record', { stage: 'opened', kind: 'example', slug: example.slug }).catch(function () {});
         }
       });
-    }).catch(function (error) { self.setData({ loading: false, error: error.message || '示例家谱暂时不可用' }); });
+    }).catch(function (error) { self.setData({ loading: false, error: api.userMessage(error, '示例家谱暂时不可用') }); });
   },
 
   applyDisplayPreference: function (savedPreference) {

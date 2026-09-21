@@ -90,7 +90,7 @@ test('显示设置保存失败时恢复原值并提示', async function () {
     await page.savePreference('nameLayout', 'vertical');
     assert.equal(page.data.nameLayout, 'horizontal');
     assert.equal(page.data.saving, false);
-    assert.equal(toasts[0].title, '网络不可用');
+    assert.equal(toasts[0].title, '设置保存失败，请重试');
   } finally {
     api.call = previousCall;
     global.wx = previousWx;

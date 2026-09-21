@@ -4,7 +4,7 @@ const fileTransfer = require('../../utils/file-transfer');
 
 function sizeText(bytes) { const size = Number(bytes) || 0; return size >= 1048576 ? (size / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.ceil(size / 1024)) + ' KB'; }
 Page({
-  data: { familyId: '', family: null, isAdmin: false, membershipActive: false, loading: true, creating: false, task: null, parts: [], downloadingPartIndex: -1, sharingPartIndex: -1, readyPartIndex: -1, downloadProgress: 0 },
+  data: { familyId: '', family: null, isAdmin: false, membershipActive: false, loading: true, creating: false, task: null, parts: [], privacyExpanded: false, downloadingPartIndex: -1, sharingPartIndex: -1, readyPartIndex: -1, downloadProgress: 0 },
   onLoad: function (options) { this.setData({ familyId: options.familyId || '' }); },
   onShow: function () { this._stopped = false; this.loadPage(); },
   onHide: function () { this.stopTaskPolling(); },
@@ -25,12 +25,13 @@ Page({
       const taskId = wx.getStorageSync('youpu_family_backup_' + self.data.familyId);
       if (taskId) return self.loadTask(taskId);
       return null;
-    }).catch(function (error) { self.setData({ loading: false }); wx.showToast({ title: error.message || '备份状态加载失败', icon: 'none' }); });
+    }).catch(function (error) { self.setData({ loading: false }); wx.showToast({ title: api.userMessage(error, '备份状态加载失败'), icon: 'none' }); });
   },
   loadTask: function (taskId) {
     const self = this;
     return api.call('family.backup.status', { taskId: taskId }).then(function (task) {
-      const parts = (task.parts || []).map(function (item) { return Object.assign({}, item, { sizeText: sizeText(item.size) }); });
+      const total = (task.parts || []).length;
+      const parts = (task.parts || []).map(function (item, index) { return Object.assign({}, item, { displayName: '备份文件 ' + (index + 1) + '/' + total, sizeText: sizeText(item.size) }); });
       self.setData({ task: task, parts: parts, creating: ['pending', 'processing'].includes(task.status) });
       if (['pending', 'processing'].includes(task.status) && !self._stopped) {
         const attempt = Number(self._pollAttempt) || 0;
@@ -52,7 +53,7 @@ Page({
       wx.setStorageSync('youpu_family_backup_' + self.data.familyId, task.taskId);
       self._pollAttempt = 0;
       self.setData({ task: task }); self.loadTask(task.taskId);
-    }).catch(function (error) { self.setData({ creating: false }); wx.showToast({ title: error.message || '备份创建失败', icon: 'none' }); });
+    }).catch(function (error) { self.setData({ creating: false }); wx.showToast({ title: api.userMessage(error, '备份创建失败'), icon: 'none' }); });
   },
   downloadPart: function (event) {
     if (this.data.downloadingPartIndex >= 0 || this.data.sharingPartIndex >= 0) return;
@@ -74,7 +75,7 @@ Page({
     let loadingVisible = true;
     this._readyPart = null;
     this.setData({ downloadingPartIndex: index, readyPartIndex: -1, downloadProgress: 0 });
-    wx.showLoading({ title: '正在下载分卷' });
+    wx.showLoading({ title: '正在准备文件' });
     fileTransfer.removeTempFile(previous && previous.filePath).then(function () {
       return api.call('family.backup.partUrl', { taskId: self.data.task.taskId, partIndex: index });
     }).then(function (data) {
@@ -90,7 +91,7 @@ Page({
         wx.showToast({ title: '下载完成，请点击转发到聊天', icon: 'none', duration: 2600 });
       });
     }).catch(function (error) {
-      wx.showToast({ title: error.message || error.errMsg || '分卷下载失败', icon: 'none' });
+      wx.showToast({ title: api.userMessage(error, '备份文件下载失败'), icon: 'none' });
     }).then(function () {
       if (loadingVisible) wx.hideLoading();
       if (!self._readyPart) return fileTransfer.removeTempFile(filePath);
@@ -107,7 +108,7 @@ Page({
     fileTransfer.shareFile(ready.filePath, ready.fileName).then(function () {
       self._readyPart = null;
       self.setData({ sharingPartIndex: -1, readyPartIndex: -1, downloadProgress: 0 });
-      wx.showToast({ title: '已转发备份分卷', icon: 'success' });
+      wx.showToast({ title: '备份文件已转发', icon: 'success' });
       return fileTransfer.removeTempFile(ready.filePath);
     }).catch(function (error) {
       self.setData({ sharingPartIndex: -1 });
@@ -119,6 +120,7 @@ Page({
       wx.showModal({ title: '文件转发失败', content: fileTransfer.shareFailureText(error), showCancel: false });
     });
   },
+  togglePrivacy: function () { this.setData({ privacyExpanded: !this.data.privacyExpanded }); },
   openMembership: function () { wx.navigateTo({ url: '/pages/membership/index?familyId=' + this.data.familyId }); },
   openHistory: function () { wx.navigateTo({ url: '/pages/activity/index?familyId=' + this.data.familyId }); }
 });

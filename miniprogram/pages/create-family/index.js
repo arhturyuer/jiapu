@@ -113,7 +113,7 @@ Page({
         wx.switchTab({ url: '/pages/tree/index' });
       }, 500);
     }).catch(function (error) {
-      wx.showToast({ title: error.message || '创建失败，请重试', icon: 'none' });
+      wx.showToast({ title: api.userMessage(error, '创建失败，请重试'), icon: 'none' });
     }).then(function () {
       self.setData({ submitting: false });
     });

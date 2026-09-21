@@ -216,7 +216,7 @@ Page({
       });
     }).catch(function (error) {
       console.error('加载家谱失败', error);
-      if (!hasContent) self.setData({ loading: false, loadError: error.message || '家谱加载失败' });
+      if (!hasContent) self.setData({ loading: false, loadError: api.userMessage(error, '家谱加载失败') });
       else console.warn('后台刷新家谱失败，保留当前内容', error);
     });
   },
@@ -797,7 +797,7 @@ Page({
       return data;
     }).catch(function (error) {
       self.setData({ childOrderSaving: false });
-      wx.showToast({ title: error.code === 'GRAPH_CHANGED' ? '家谱刚有变化，请刷新后重试' : error.message || '排行保存失败', icon: 'none' });
+      wx.showToast({ title: api.userMessage(error, '排行保存失败'), icon: 'none' });
     });
   },
 
@@ -956,7 +956,7 @@ Page({
         currentFamily: updatedFamily
       });
     }).catch(function (error) {
-      wx.showToast({ title: error.message || '暂时无法关闭提醒', icon: 'none' });
+      wx.showToast({ title: api.userMessage(error, '暂时无法关闭提醒'), icon: 'none' });
     });
   },
 
@@ -1044,7 +1044,7 @@ Page({
     }).catch(function (error) {
       if (sequence !== self._sharePreparationSequence || !self.data.showShareSheet) return;
       self.setData({ shareCreating: false });
-      wx.showToast({ title: error.message || '微信邀请准备失败，请重试', icon: 'none' });
+      wx.showToast({ title: api.userMessage(error, '微信邀请准备失败，请重试'), icon: 'none' });
     });
   },
 

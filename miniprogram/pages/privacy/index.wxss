@@ -23,8 +23,8 @@
 .contact-trigger::after { border: none; }
 .action-title, .action-desc { display: block; }
 .action-title { font-size: 32rpx; font-weight: 650; }
-.action-desc { margin-top: 6rpx; color: #65706A; font-size: 27rpx; line-height: 1.45; }
+.action-desc { margin-top: 6rpx; color: #65706A; font-size: 28rpx; line-height: 1.45; }
 .action-arrow { color: #9AA39E; font-size: 48rpx; }
 .status-text { color: #8A641F; font-size: 28rpx; }
-.operator-note { margin-top: 38rpx; padding: 28rpx; display: flex; flex-direction: column; gap: 10rpx; color: #65706A; font-size: 27rpx; line-height: 1.6; }
+.operator-note { margin-top: 38rpx; padding: 28rpx; display: flex; flex-direction: column; gap: 10rpx; color: #65706A; font-size: 28rpx; line-height: 1.6; }
 .deletion-button { width: 100%; margin-top: 30rpx; }

@@ -107,7 +107,7 @@ Page({
       self._hasLoaded = true;
       formState.clearLeaveAlert(self);
     }).catch(function (error) {
-      if (!hasContent) self.setData({ loading: false, error: error.message || '页面加载失败，请检查网络后重试' });
+      if (!hasContent) self.setData({ loading: false, error: api.userMessage(error, '页面加载失败，请检查网络后重试') });
       else console.warn('后台刷新我的页面失败，保留当前内容', error);
     });
   },
@@ -139,7 +139,7 @@ Page({
     }).catch(function (error) {
       if (error && error.errMsg && error.errMsg.indexOf('cancel') >= 0) return;
       self.setData({ avatarUrl: selectedPath || self.data.avatarUrl, savingAvatar: false }, function () { self.refreshProfileState(); });
-      wx.showToast({ title: error.message || error.errMsg || '头像上传失败', icon: 'none' });
+      wx.showToast({ title: api.userMessage(error, '头像上传失败'), icon: 'none' });
     });
   },
 
@@ -183,7 +183,7 @@ Page({
       wx.showToast({ title: '名字已保存并同步', icon: 'success' });
       return data;
     }).catch(function (error) {
-      wx.showToast({ title: error.message || '保存失败', icon: 'none' });
+      wx.showToast({ title: api.userMessage(error, '保存失败'), icon: 'none' });
       self.setData({ savingProfile: false });
     });
   },

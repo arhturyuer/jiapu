@@ -114,7 +114,7 @@ function shareFailureText(error) {
   if (normalized.indexOf('user tap gesture') >= 0) return '请再次点击“转发到聊天”后重试';
   if (normalized.indexOf('not exist') >= 0 || normalized.indexOf('no such file') >= 0) return '下载文件已失效，请重新下载';
   if (normalized.indexOf('size') >= 0 && (normalized.indexOf('exceed') >= 0 || normalized.indexOf('limit') >= 0)) return '文件超过微信可转发大小，请联系微信客服';
-  return raw ? ('微信返回：' + raw) : (error && error.message ? error.message : '文件转发失败，请重试');
+  return '文件转发失败，请稍后重试';
 }
 
 module.exports = {
