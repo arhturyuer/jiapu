@@ -16,7 +16,8 @@ Page({
   },
 
   onLoad: function (options) {
-    const token = options.token || '';
+    let token = options.token || options.scene || '';
+    try { token = decodeURIComponent(token); } catch (error) { token = ''; }
     this.setData({ token: token });
     if (!token) {
       this.setData({ loading: false, invalid: true, errorMessage: '邀请链接不完整' });

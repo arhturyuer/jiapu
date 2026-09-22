@@ -24,6 +24,10 @@ const RATE_LIMITS = {
   'family.backup.create': { max: 3, windowMs: 24 * 60 * 60 * 1000 },
   'family.create': { max: 10, windowMs: 24 * 60 * 60 * 1000 },
   'invite.create': { max: 60, windowMs: 60 * 60 * 1000 },
+  'invite.createPoster': { max: 30, windowMs: 60 * 60 * 1000 },
+  'invite.getMiniCode': { max: 60, windowMs: 60 * 60 * 1000 },
+  'examples.getMiniCode': { max: 60, windowMs: 60 * 60 * 1000 },
+  'examples.resolvePoster': { max: 120, windowMs: 60 * 60 * 1000 },
   'invite.preview': { max: 60, windowMs: 60 * 1000 },
   'invite.accept': { max: 30, windowMs: 60 * 1000 },
   'share.record': { max: 120, windowMs: 60 * 60 * 1000 },
@@ -60,6 +64,7 @@ const MUTATION_TYPES = new Set([
   'person.delete',
   'change.review',
   'invite.create',
+  'invite.createPoster',
   'invite.revoke',
   'invite.accept',
   'share.record',
@@ -2169,6 +2174,7 @@ async function inviteCreate(event) {
         tokenHash: hash(token, 64),
         familyId: event.familyId,
         role: role,
+        purpose: 'direct',
         viewMode: viewMode,
         viewPersonId: viewPersonId,
         viewPersonName: viewPersonName,
@@ -2205,6 +2211,104 @@ async function inviteCreate(event) {
   });
 }
 
+async function inviteCreatePoster(event) {
+  const openid = getOpenid();
+  await requireActiveUser(openid);
+  return mutate('invite.createPoster', event, openid, async function (transaction) {
+    const access = await requireMembership(event.familyId, ACTIVE_ROLES, transaction, openid);
+    const viewMode = event.viewMode === 'perspective' ? 'perspective' : 'full';
+    let viewPersonId = '';
+    let viewPersonName = '';
+    if (viewMode === 'perspective') {
+      const person = await mustGet(transaction, 'persons', event.viewPersonId, 'PERSON_NOT_FOUND', '分享视角成员不存在');
+      assert(person.familyId === event.familyId && person.status === 'active', 'PERSON_NOT_FOUND', '分享视角成员不存在');
+      viewPersonId = person._id;
+      viewPersonName = person.name;
+    }
+    const token = randomToken(24);
+    const result = await transaction.collection('invitations').add({
+      data: {
+        tokenHash: hash(token, 64),
+        familyId: event.familyId,
+        role: 'viewer',
+        purpose: 'poster',
+        viewMode: viewMode,
+        viewPersonId: viewPersonId,
+        viewPersonName: viewPersonName,
+        status: 'active',
+        useCount: 0,
+        maxUses: null,
+        expiresAt: null,
+        createdBy: userId(openid),
+        createdByName: access.membership.displayName || '家人',
+        createdAt: db.serverDate(),
+        updatedAt: db.serverDate()
+      }
+    });
+    await audit(transaction, {
+      familyId: event.familyId,
+      openid: openid,
+      actorName: access.membership.displayName,
+      action: 'invite.poster_create',
+      objectType: 'invitation',
+      objectId: result._id,
+      summary: '生成家谱图片查看邀请',
+      requestId: event.requestId
+    });
+    return {
+      invitationId: result._id,
+      token: token,
+      familyName: access.family.name,
+      role: 'viewer',
+      purpose: 'poster',
+      viewMode: viewMode,
+      viewPersonName: viewPersonName,
+      expiresAt: null,
+      maxUses: null
+    };
+  });
+}
+
+function miniCodeBuffer(result) {
+  if (Buffer.isBuffer(result)) return result;
+  if (result && Buffer.isBuffer(result.buffer)) return result.buffer;
+  if (result && result.buffer && Array.isArray(result.buffer.data)) return Buffer.from(result.buffer.data);
+  if (result && typeof result.buffer === 'string') return Buffer.from(result.buffer, 'base64');
+  return null;
+}
+
+async function inviteGetMiniCode(event) {
+  const openid = getOpenid();
+  const user = await requireActiveUser(openid);
+  const invitationId = cleanText(event.invitationId, 80);
+  const token = cleanText(event.token, 200);
+  const envVersion = cleanText(event.envVersion, 20);
+  assert(invitationId && token, 'INVALID_INVITATION', '邀请内容不完整，请重新生成图片');
+  assert(['develop', 'trial', 'release'].includes(envVersion), 'INVALID_ENV_VERSION', '小程序版本信息无效');
+  const invitation = await mustGet(db, 'invitations', invitationId, 'INVITE_NOT_FOUND', '邀请不存在');
+  assert(invitation.createdBy === user._id, 'INVALID_INVITATION', '邀请不属于当前用户');
+  assert(invitation.purpose === 'poster' && invitation.role === 'viewer', 'INVALID_INVITATION', '邀请类型不支持生成图片');
+  assert(invitation.tokenHash === hash(token, 64), 'INVALID_INVITATION', '邀请内容无效，请重新生成图片');
+  await requireMembership(invitation.familyId, ACTIVE_ROLES, db, openid);
+  assertInvitationActive(invitation);
+  let response;
+  try {
+    response = await cloud.openapi.wxacode.getUnlimited({
+      scene: token,
+      page: 'pages/invite/index',
+      width: 430,
+      isHyaline: true,
+      checkPath: envVersion !== 'develop',
+      envVersion: envVersion
+    });
+  } catch (error) {
+    throw new BusinessError('MINI_CODE_FAILED', '小程序码生成失败，请稍后重试');
+  }
+  const buffer = miniCodeBuffer(response);
+  assert(buffer && buffer.length, 'MINI_CODE_FAILED', '小程序码生成失败，请稍后重试');
+  return { mimeType: 'image/png', base64: buffer.toString('base64') };
+}
+
 async function inviteList(event) {
   const openid = getOpenid();
   await requireActiveUser(openid);
@@ -2215,6 +2319,7 @@ async function inviteList(event) {
       _id: item._id,
       familyId: item.familyId,
       role: item.role,
+      purpose: item.purpose || 'direct',
       viewMode: item.viewMode,
       viewPersonId: item.viewPersonId || '',
       viewPersonName: item.viewPersonName || '',
@@ -2222,8 +2327,8 @@ async function inviteList(event) {
       status: item.status,
       displayStatus: invitationState(item),
       useCount: item.useCount || 0,
-      maxUses: item.maxUses || 0,
-      expiresAt: item.expiresAt,
+      maxUses: item.maxUses === null || item.maxUses === undefined ? null : item.maxUses,
+      expiresAt: item.expiresAt || null,
       createdAt: item.createdAt || null
     };
   });
@@ -2261,6 +2366,7 @@ async function invitePreview(event) {
   const family = await getFamily(db, invitation.familyId);
   const membership = await getMembership(db, family._id, openid);
   if (membership) {
+    if (invitation.purpose === 'poster') assertInvitationActive(invitation);
     return {
       alreadyJoined: true,
       family: publicFamily(family, membership.role),
@@ -2296,6 +2402,7 @@ async function inviteAccept(event) {
     const id = membershipId(family._id, openid);
     const existing = await maybeGet(transaction, 'family_memberships', id);
     if (existing && existing.status === 'active') {
+      if (invitation.purpose === 'poster') assertInvitationActive(invitation);
       return {
         family: publicFamily(family, existing.role),
         role: existing.role,
@@ -2305,7 +2412,9 @@ async function inviteAccept(event) {
       };
     }
     assertInvitationActive(invitation);
-    const role = existing && ['admin', 'member'].includes(existing.role) ? existing.role : invitation.role;
+    const role = invitation.purpose === 'poster'
+      ? 'viewer'
+      : existing && ['admin', 'member'].includes(existing.role) ? existing.role : invitation.role;
     await transaction.collection('family_memberships').doc(id).set({
       data: {
         familyId: family._id,
@@ -2729,6 +2838,74 @@ async function examplesGet(event) {
   const result = await db.collection('example_templates').where({ slug: slug, status: 'published' }).limit(1).get();
   assert(result.data && result.data.length && result.data[0].publishedContent, 'EXAMPLE_NOT_FOUND', '该示例家谱已下架或暂不可用');
   return { example: publicExampleContent(result.data[0]) };
+}
+
+function examplePosterScene(slug, viewMode, viewPersonId) {
+  const mode = viewMode === 'perspective' ? 'p' : 'f';
+  const personHash = mode === 'p' ? hash(viewPersonId, 10) : '0000000000';
+  return 'e' + hash(slug, 20) + mode + personHash;
+}
+
+async function examplesGetMiniCode(event) {
+  const openid = getOpenid();
+  await requireActiveUser(openid);
+  const slug = cleanText(event.slug, 80);
+  const envVersion = cleanText(event.envVersion, 20);
+  const viewMode = event.viewMode === 'perspective' ? 'perspective' : 'full';
+  const viewPersonId = viewMode === 'perspective' ? cleanText(event.viewPersonId, 80) : '';
+  assert(slug, 'EXAMPLE_SLUG_REQUIRED', '缺少示例家谱信息');
+  assert(['develop', 'trial', 'release'].includes(envVersion), 'INVALID_ENV_VERSION', '小程序版本信息无效');
+  const result = await db.collection('example_templates').where({ slug: slug, status: 'published' }).limit(1).get();
+  const template = result.data && result.data[0];
+  assert(template && template.publishedContent, 'EXAMPLE_NOT_FOUND', '该示例家谱已下架或暂不可用');
+  if (viewMode === 'perspective') {
+    const example = publicExampleContent(template);
+    assert(viewPersonId && example.persons.some(function (person) { return person._id === viewPersonId; }),
+      'PERSON_NOT_FOUND', '分享视角成员不存在');
+  }
+  let response;
+  try {
+    response = await cloud.openapi.wxacode.getUnlimited({
+      scene: examplePosterScene(slug, viewMode, viewPersonId),
+      page: 'pages/example/index',
+      width: 430,
+      isHyaline: true,
+      checkPath: envVersion !== 'develop',
+      envVersion: envVersion
+    });
+  } catch (error) {
+    throw new BusinessError('MINI_CODE_FAILED', '小程序码生成失败，请稍后重试');
+  }
+  const buffer = miniCodeBuffer(response);
+  assert(buffer && buffer.length, 'MINI_CODE_FAILED', '小程序码生成失败，请稍后重试');
+  return { mimeType: 'image/png', base64: buffer.toString('base64') };
+}
+
+async function examplesResolvePoster(event) {
+  const openid = getOpenid();
+  await requireActiveUser(openid);
+  const scene = cleanText(event.scene, 40);
+  assert(/^e[0-9a-f]{20}[fp][0-9a-f]{10}$/.test(scene), 'EXAMPLE_POSTER_INVALID', '示例家谱图片已失效');
+  const slugHash = scene.slice(1, 21);
+  const mode = scene.slice(21, 22);
+  const personHash = scene.slice(22);
+  const templates = await listAll('example_templates', { status: 'published' }, 100);
+  const template = templates.find(function (item) {
+    return item.publishedContent && hash(cleanText(item.slug, 80), 20) === slugHash;
+  });
+  assert(template, 'EXAMPLE_NOT_FOUND', '该示例家谱已下架或暂不可用');
+  let viewPersonId = '';
+  if (mode === 'p') {
+    const example = publicExampleContent(template);
+    const person = example.persons.find(function (item) { return hash(item._id, 10) === personHash; });
+    assert(person, 'PERSON_NOT_FOUND', '分享视角成员不存在');
+    viewPersonId = person._id;
+  }
+  return {
+    slug: cleanText(template.slug, 80),
+    viewMode: mode === 'p' ? 'perspective' : 'full',
+    viewPersonId: viewPersonId
+  };
 }
 
 function paymentMode() {
@@ -3349,6 +3526,8 @@ const handlers = {
   'change.list': changeList,
   'change.review': changeReview,
   'invite.create': inviteCreate,
+  'invite.createPoster': inviteCreatePoster,
+  'invite.getMiniCode': inviteGetMiniCode,
   'invite.list': inviteList,
   'invite.revoke': inviteRevoke,
   'invite.preview': invitePreview,
@@ -3363,7 +3542,9 @@ const handlers = {
   'media.getPresentation': mediaGetPresentation,
   'feedbackGroup.get': feedbackGroupGet,
   'examples.list': examplesList,
-  'examples.get': examplesGet
+  'examples.get': examplesGet,
+  'examples.getMiniCode': examplesGetMiniCode,
+  'examples.resolvePoster': examplesResolvePoster
 };
 
 exports.main = async function (event) {

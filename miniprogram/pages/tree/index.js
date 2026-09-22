@@ -7,6 +7,8 @@ const personGender = require('../../utils/person-gender');
 const childRank = require('../../utils/child-rank');
 const shareInvite = require('../../utils/share-invite');
 const shareCard = require('../../utils/share-card');
+const posterInvite = require('../../utils/poster-invite');
+const treePosterFlow = require('../../utils/tree-poster-flow');
 
 const MAX_INTERACTIVE_NODES = 80;
 
@@ -71,6 +73,7 @@ Page({
     shareCreating: false,
     shareCard: null,
     systemShareCard: shareCard.create({ kind: 'discovery' }),
+    posterGenerating: false,
     showShareReminder: false,
     relationOptions: [
       { key: 'father', label: '父亲' },
@@ -90,10 +93,12 @@ Page({
   },
 
   onHide: function () {
+    treePosterFlow.cancel(this);
     this.resetPageOrientation();
   },
 
   onUnload: function () {
+    treePosterFlow.cancel(this);
     if (this._graphSettleTimer) clearTimeout(this._graphSettleTimer);
     if (this._orientationTimer) clearTimeout(this._orientationTimer);
     this.syncPageChrome(false);
@@ -517,6 +522,31 @@ Page({
     const family = this.data.currentFamily;
     if (!family) return;
     wx.navigateTo({ url: '/pages/display-settings/index?familyId=' + encodeURIComponent(family._id) });
+  },
+
+  generatePoster: function () {
+    const family = this.data.currentFamily;
+    if (!family || this.data.posterGenerating || !this.data.nodes.length) return;
+    const ownerId = (app.globalData.user || {})._id || '';
+    const page = this;
+    treePosterFlow.generate(this, {
+      canvasId: 'tree-poster-canvas',
+      familyName: family.name,
+      prepareCode: function () {
+        return posterInvite.get({
+          ownerId: ownerId,
+          familyId: family._id,
+          viewMode: page.data.viewMode,
+          viewPersonId: page.data.viewpointId
+        });
+      },
+      onPrepared: function (invitation) {
+        api.call('share.record', { stage: 'prepared', invitationId: invitation.invitationId }).catch(function () {});
+      },
+      sharePayload: function (invitation) {
+        return { invitationId: invitation.invitationId };
+      }
+    });
   },
 
   saveGraphPreference: function (family, nameLayout, viewMode, personId) {

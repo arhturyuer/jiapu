@@ -33,7 +33,7 @@
       <view class="section-heading"><text class="section-title">邀请管理</text><text class="muted-text">{{invitations.length}} 条</text></view>
       <view class="empty-invite surface-card" wx:if="{{!invitations.length}}">还没有生成过邀请</view>
       <view class="invite-list surface-card" wx:else>
-        <view class="invite-row" wx:for="{{invitations}}" wx:key="_id"><view class="invite-copy"><text class="invite-name">{{item.roleText}} · {{item.viewMode === 'perspective' ? item.viewPersonName + '视角' : '完整家谱'}}</text><text class="invite-meta">{{item.statusText}} · 已使用 {{item.useCount}}/{{item.maxUses}}</text></view><button class="revoke-button" wx:if="{{item.displayStatus === 'active'}}" data-id="{{item._id}}" bindtap="revokeInvite">撤销</button></view>
+        <view class="invite-row" wx:for="{{invitations}}" wx:key="_id"><view class="invite-copy"><text class="invite-name">{{item.inviteTitle}}</text><text class="invite-meta">{{item.statusText}} · {{item.usageText}}</text></view><button class="revoke-button" wx:if="{{item.displayStatus === 'active'}}" data-id="{{item._id}}" bindtap="revokeInvite">撤销</button></view>
         <button class="secondary-button" wx:if="{{hasMoreInvites}}" loading="{{loadingMoreInvites}}" bindtap="loadMoreInvites">加载更多邀请</button>
       </view>
     </view>

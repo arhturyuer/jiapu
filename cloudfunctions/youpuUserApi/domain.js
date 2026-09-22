@@ -108,8 +108,8 @@ function hasAlternateConnection(startId, targetId, excludedRelationId, relations
 
 function invitationState(invitation, now) {
   if (invitation.status !== 'active') return invitation.status;
-  if (new Date(invitation.expiresAt).getTime() <= Number(now || Date.now())) return 'expired';
-  if ((invitation.useCount || 0) >= invitation.maxUses) return 'exhausted';
+  if (invitation.expiresAt && new Date(invitation.expiresAt).getTime() <= Number(now || Date.now())) return 'expired';
+  if (Number(invitation.maxUses || 0) > 0 && (invitation.useCount || 0) >= invitation.maxUses) return 'exhausted';
   return 'active';
 }
 

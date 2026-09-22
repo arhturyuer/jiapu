@@ -4,9 +4,16 @@ const format = require('../../utils/format');
 
 function decorateInvitations(items) {
   return (items || []).map(function (item) {
+    const poster = item.purpose === 'poster';
     return Object.assign({}, item, {
       roleText: format.roleText(item.role),
-      statusText: item.displayStatus === 'active' ? '有效' : item.displayStatus === 'revoked' ? '已撤销' : item.displayStatus === 'expired' ? '已过期' : '已用完'
+      inviteTitle: poster
+        ? '高清图片 · 仅查看'
+        : format.roleText(item.role) + ' · ' + (item.viewMode === 'perspective' ? item.viewPersonName + '视角' : '完整家谱'),
+      statusText: item.displayStatus === 'active'
+        ? (poster ? '长期有效' : '有效')
+        : item.displayStatus === 'revoked' ? '已撤销' : item.displayStatus === 'expired' ? '已过期' : '已用完',
+      usageText: poster ? '已加入 ' + Number(item.useCount || 0) + ' 人' : '已使用 ' + Number(item.useCount || 0) + '/' + Number(item.maxUses || 0)
     });
   });
 }

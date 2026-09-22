@@ -1,0 +1,2 @@
+.tree-poster-canvas { position: fixed; left: -10px; top: -10px; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.poster-generating { position: fixed; left: 50%; top: 50%; z-index: 90; min-width: 250rpx; padding: 28rpx 34rpx; display: flex; align-items: center; justify-content: center; gap: 18rpx; transform: translate(-50%, -50%); color: #245C4A; background: rgba(255, 254, 250, .97); border: 2rpx solid #D8DED9; border-radius: 24rpx; box-shadow: 0 14rpx 42rpx rgba(36, 59, 49, .16); font-size: 26rpx; }

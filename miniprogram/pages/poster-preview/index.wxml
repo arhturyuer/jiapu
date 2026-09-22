@@ -1,0 +1,27 @@
+<view class="preview-page">
+  <view class="preview-error" wx:if="{{error}}">
+    <text class="preview-error-title">图片无法预览</text>
+    <text class="preview-error-copy">{{error}}</text>
+    <button class="secondary-button" bindtap="goBack">返回家谱</button>
+  </view>
+  <block wx:else>
+    <scroll-view class="preview-scroll" scroll-y enhanced show-scrollbar="{{false}}">
+      <image class="poster-image" src="{{filePath}}" mode="widthFix"></image>
+    </scroll-view>
+    <view class="preview-actions">
+      <button class="secondary-button preview-button" loading="{{sharing}}" disabled="{{sharing || saving}}" bindtap="shareImage">发送给好友</button>
+      <button class="primary-button preview-button" loading="{{saving}}" disabled="{{sharing || saving}}" bindtap="saveImage">保存图片</button>
+    </view>
+  </block>
+  <view class="permission-mask" wx:if="{{permissionGuide}}">
+    <view class="permission-card">
+      <text class="permission-title">需要相册权限</text>
+      <text class="permission-copy">{{permissionGuide === 'miniprogram' ? '请在小程序设置中开启“保存到相册”。' : '请在系统授权页为微信开启照片权限。'}}</text>
+      <view class="permission-actions">
+        <button class="secondary-button permission-button" bindtap="closePermissionGuide">取消</button>
+        <button class="primary-button permission-button" wx:if="{{permissionGuide === 'miniprogram'}}" open-type="openSetting" bindopensetting="onMiniProgramSetting">去设置</button>
+        <button class="primary-button permission-button" wx:else bindtap="openSystemAlbumSetting">去系统设置</button>
+      </view>
+    </view>
+  </view>
+</view>

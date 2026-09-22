@@ -14,6 +14,7 @@
     "pages/person-list/index",
     "pages/change-list/index",
     "pages/invite/index",
+    "pages/poster-preview/index",
     "pages/privacy/index",
     "pages/feedback-group/index",
     "pages/family-manage/index",
@@ -62,6 +63,9 @@
   "permission": {
     "scope.camera": {
       "desc": "仅在你主动为家谱人物选择拍照时使用相机"
+    },
+    "scope.writePhotosAlbum": {
+      "desc": "仅在你主动保存家谱高清分享图片时写入手机相册"
     }
   },
   "style": "v2",

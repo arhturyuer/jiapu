@@ -125,6 +125,7 @@
       <view class="graph-control graph-control-text" bindtap="fitWholeGraph">全谱</view>
       <view class="graph-control graph-control-text orientation-control {{orientationChanging ? 'is-disabled' : ''}}" bindtap="togglePageOrientation">{{orientationChanging ? '切换中' : isLandscape ? '竖屏' : '横屏'}}</view>
       <view class="graph-control graph-control-text" bindtap="openDisplaySettings">设置</view>
+      <view class="graph-control graph-control-text {{posterGenerating ? 'is-disabled' : ''}}" bindtap="generatePoster">图片</view>
     </view>
 
     <view class="graph-help" wx:if="{{nodes.length > 0}}">
@@ -268,3 +269,5 @@
   </view>
 </view>
 <canvas type="2d" id="tree-share-card" class="share-card-canvas"></canvas>
+<canvas type="2d" id="tree-poster-canvas" class="tree-poster-canvas"></canvas>
+<view class="poster-generating" wx:if="{{posterGenerating}}"><view class="loading-dot"></view><text>正在生成图片</text></view>

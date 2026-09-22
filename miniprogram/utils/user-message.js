@@ -24,6 +24,8 @@ const MESSAGE_BY_CODE = {
   INVALID_INVITATION: '这张邀请已无法使用，请让家人重新发送',
   INVITE_INVALID: '这张邀请已无法使用，请让家人重新发送',
   INVITE_ALREADY_INACTIVE: '这张邀请已失效',
+  MINI_CODE_FAILED: '小程序码生成失败，请稍后重试',
+  MINI_CODE_FILE_FAILED: '小程序码暂时无法保存，请重试',
   MEMBERSHIP_REQUIRED: '这项功能需要家庭会员',
   BACKUP_IN_PROGRESS: '家庭备份正在生成，请稍候',
   BACKUP_COOLDOWN: '每 7 天可生成一次家庭备份',

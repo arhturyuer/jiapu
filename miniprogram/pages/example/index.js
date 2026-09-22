@@ -5,10 +5,16 @@ const graphViewport = require('../../utils/graph-viewport');
 const shareCard = require('../../utils/share-card');
 const personGender = require('../../utils/person-gender');
 const exampleDisplayPreference = require('../../utils/example-display-preference');
+const examplePosterCode = require('../../utils/example-poster-code');
+const treePosterFlow = require('../../utils/tree-poster-flow');
 const MAX_INTERACTIVE_NODES = 80;
 
 function exampleDetailUrl(slug, personId) {
   return '/pages/example-person-detail/index?slug=' + encodeURIComponent(slug) + '&id=' + encodeURIComponent(personId);
+}
+
+function decodedScene(value) {
+  try { return decodeURIComponent(value || ''); } catch (error) { return ''; }
 }
 
 Page({
@@ -19,11 +25,24 @@ Page({
     pageOrientation: 'portrait', isLandscape: false, orientationChanging: false,
     collapsedPersonIds: [], hiddenBranchCount: 0, canExpandAll: false, nameLayout: 'horizontal', showChildRankBadge: false, showGenderBadge: false, showGenderColors: true, viewMode: 'full', viewpointId: '', viewpointName: '',
     selectedPersonId: '', selectedPerson: null, showMemberSheet: false, showPerspectiveSheet: false, perspectiveKeyword: '', perspectiveResults: [],
-    showTour: false, tourStep: 1,
+    showTour: false, tourStep: 1, posterGenerating: false,
     shareCard: shareCard.create({ kind: 'example' })
   },
 
   onLoad: function (options) {
+    const scene = decodedScene(options.scene);
+    if (scene) {
+      const self = this;
+      this._shareSource = 'example_poster';
+      api.call('examples.resolvePoster', { scene: scene }).then(function (data) {
+        self._initialPersonId = data.viewPersonId || '';
+        self.setData({ slug: data.slug });
+        return self.loadExample();
+      }).catch(function (error) {
+        self.setData({ loading: false, error: api.userMessage(error, '示例家谱图片已失效') });
+      });
+      return;
+    }
     const slug = options.slug || '';
     this._initialPersonId = options.personId || '';
     this._shareSource = options.source || '';
@@ -35,9 +54,9 @@ Page({
     this.applyDisplayPreference();
     this.syncPageOrientationSoon();
   },
-  onHide: function () { this.resetPageOrientation(); },
+  onHide: function () { treePosterFlow.cancel(this); this.resetPageOrientation(); },
   onPullDownRefresh: function () { this.loadExample().then(function () { wx.stopPullDownRefresh(); }); },
-  onUnload: function () { if (this._graphSettleTimer) clearTimeout(this._graphSettleTimer); if (this._orientationTimer) clearTimeout(this._orientationTimer); this.syncPageChrome(false); },
+  onUnload: function () { treePosterFlow.cancel(this); if (this._graphSettleTimer) clearTimeout(this._graphSettleTimer); if (this._orientationTimer) clearTimeout(this._orientationTimer); this.syncPageChrome(false); },
 
   loadExample: function () {
     const self = this;
@@ -62,7 +81,7 @@ Page({
         }
         if (!wx.getStorageSync('youpu_example_tour_' + example.slug)) self.setData({ showTour: true, tourStep: 1 });
         self.prepareExampleShare();
-        if (self._shareSource === 'example_share' && !self._shareOpenRecorded) {
+        if (['example_share', 'example_poster'].includes(self._shareSource) && !self._shareOpenRecorded) {
           self._shareOpenRecorded = true;
           api.call('share.record', { stage: 'opened', kind: 'example', slug: example.slug }).catch(function () {});
         }
@@ -210,6 +229,28 @@ Page({
   openDisplaySettings: function () {
     const slug = this.displayPreferenceSlug();
     if (slug) wx.navigateTo({ url: '/pages/display-settings/index?exampleSlug=' + encodeURIComponent(slug) });
+  },
+  generatePoster: function () {
+    const example = this.data.example;
+    if (!example || this.data.posterGenerating || !this.data.nodes.length) return;
+    const page = this;
+    treePosterFlow.generate(this, {
+      canvasId: 'example-poster-canvas',
+      familyName: example.title || example.name || '示例家谱',
+      prepareCode: function () {
+        return examplePosterCode.get({
+          slug: page.data.slug,
+          viewMode: page.data.viewMode,
+          viewPersonId: page.data.viewpointId
+        });
+      },
+      onPrepared: function () {
+        api.call('share.record', { stage: 'prepared', kind: 'example', slug: page.data.slug }).catch(function () {});
+      },
+      sharePayload: function () {
+        return { kind: 'example', slug: page.data.slug };
+      }
+    });
   },
   onGraphScale: function (event) { if (event.detail.scale) { this._currentGraphScale = event.detail.scale; this.scheduleGraphSettle(); } },
   onGraphChange: function (event) { if (typeof event.detail.x === 'number') this._currentGraphX = event.detail.x; if (typeof event.detail.y === 'number') this._currentGraphY = event.detail.y; this.scheduleGraphSettle(); },
