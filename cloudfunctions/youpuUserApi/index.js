@@ -312,7 +312,8 @@ function normalizeFamilyPreference(value) {
     nameLayout: preference.nameLayout === 'vertical' ? 'vertical' : 'horizontal',
     showChildRankBadge: hasSavedPreference ? preference.showChildRankBadge !== false : false,
     showGenderBadge: hasSavedPreference ? preference.showGenderBadge !== false : false,
-    showGenderColors: preference.showGenderColors !== false
+    showGenderColors: preference.showGenderColors !== false,
+    autoCollapseEnabled: preference.autoCollapseEnabled !== false
   };
 }
 
@@ -1307,7 +1308,7 @@ async function familySetPreference(event) {
     if (Object.prototype.hasOwnProperty.call(event, 'nameLayout')) {
       preference.nameLayout = event.nameLayout === 'vertical' ? 'vertical' : 'horizontal';
     }
-    ['showChildRankBadge', 'showGenderBadge', 'showGenderColors'].forEach(function (field) {
+    ['showChildRankBadge', 'showGenderBadge', 'showGenderColors', 'autoCollapseEnabled'].forEach(function (field) {
       if (!Object.prototype.hasOwnProperty.call(event, field)) return;
       assert(typeof event[field] === 'boolean', 'INVALID_PREFERENCE', '显示设置格式不正确');
       preference[field] = event[field];

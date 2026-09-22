@@ -131,7 +131,7 @@
     <view class="graph-help" wx:if="{{nodes.length > 0}}">
       <text wx:if="{{graphRendering}}">正在分批绘制 {{renderedCount}} / {{totalVisibleCount}} 人</text>
       <text wx:elif="{{selectedPersonId && !showMemberSheet}}">关系已高亮，再次点击成员或点“•••”进行操作</text>
-      <text wx:elif="{{hiddenBranchCount > 0}}">已智能收起 {{hiddenBranchCount}} 人，点击 +人数 可展开分支</text>
+      <text wx:elif="{{hiddenBranchCount > 0}}">已收起 {{hiddenBranchCount}} 人，点击 +人数 可展开分支</text>
       <text wx:else>{{viewMode === 'full' ? '拖动查看全谱，点击成员进行操作' : '当前从' + viewpointName + '查看关系'}}</text>
     </view>
   </block>

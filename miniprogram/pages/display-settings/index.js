@@ -8,7 +8,8 @@ function normalizedPreference(value) {
     nameLayout: preference.nameLayout === 'vertical' ? 'vertical' : 'horizontal',
     showChildRankBadge: preference.showChildRankBadge === true,
     showGenderBadge: preference.showGenderBadge === true,
-    showGenderColors: preference.showGenderColors !== false
+    showGenderColors: preference.showGenderColors !== false,
+    autoCollapseEnabled: preference.autoCollapseEnabled !== false
   };
 }
 
@@ -24,6 +25,7 @@ Page({
     showChildRankBadge: false,
     showGenderBadge: false,
     showGenderColors: true,
+    autoCollapseEnabled: true,
     saving: false,
     savingField: ''
   },
@@ -76,7 +78,7 @@ Page({
 
   togglePreference: function (event) {
     const field = event.currentTarget.dataset.field;
-    if (this.data.saving || ['showChildRankBadge', 'showGenderBadge', 'showGenderColors'].indexOf(field) < 0) return;
+    if (this.data.saving || ['showChildRankBadge', 'showGenderBadge', 'showGenderColors', 'autoCollapseEnabled'].indexOf(field) < 0) return;
     this.savePreference(field, Boolean(event.detail.value));
   },
 

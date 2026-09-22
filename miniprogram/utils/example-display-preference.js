@@ -10,7 +10,8 @@ function normalize(value, fallbackNameLayout) {
       : fallbackNameLayout === 'vertical' ? 'vertical' : 'horizontal',
     showChildRankBadge: hasSavedPreference ? preference.showChildRankBadge !== false : false,
     showGenderBadge: hasSavedPreference ? preference.showGenderBadge !== false : false,
-    showGenderColors: preference.showGenderColors !== false
+    showGenderColors: preference.showGenderColors !== false,
+    autoCollapseEnabled: preference.autoCollapseEnabled !== false
   };
 }
 

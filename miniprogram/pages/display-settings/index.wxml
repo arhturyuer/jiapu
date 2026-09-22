@@ -23,5 +23,12 @@
     </view>
   </view>
 
+  <view class="section-block">
+    <view class="section-heading"><text class="section-title">浏览体验</text></view>
+    <view class="setting-list surface-card">
+      <view class="setting-row"><view class="setting-copy"><text class="setting-title">智能收起</text><text class="setting-desc">家谱人数较多时自动收起部分分支，让画面更加流畅</text></view><switch color="#245C4A" checked="{{autoCollapseEnabled}}" disabled="{{saving}}" data-field="autoCollapseEnabled" bindchange="togglePreference" /></view>
+    </view>
+  </view>
+
   <text class="save-state">{{saving ? '正在保存...' : '修改后自动保存'}}</text>
 </view>

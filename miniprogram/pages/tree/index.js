@@ -48,6 +48,7 @@ Page({
     showChildRankBadge: false,
     showGenderBadge: false,
     showGenderColors: true,
+    autoCollapseEnabled: true,
     viewMode: 'full',
     viewpointId: '',
     viewpointName: '',
@@ -155,15 +156,15 @@ Page({
           mode = 'full';
           personId = '';
         }
+        const preference = data.preference || {};
+        const autoCollapseEnabled = preference.autoCollapseEnabled !== false;
         let collapsedPersonIds = self.data.collapsedPersonIds;
-        if (self._autoCollapseFamilyId !== data.family._id) {
-          collapsedPersonIds = graphLayout.suggestCollapsedIds(persons, data.relations || [], {
-            limit: 36,
-            focusId: personId
-          });
+        if (self._autoCollapseFamilyId !== data.family._id || self.data.autoCollapseEnabled !== autoCollapseEnabled) {
+          collapsedPersonIds = autoCollapseEnabled
+            ? graphLayout.suggestCollapsedIds(persons, data.relations || [], { limit: 36, focusId: personId })
+            : [];
           self._autoCollapseFamilyId = data.family._id;
         }
-        const preference = data.preference || {};
         const nameLayout = preference.nameLayout === 'vertical' ? 'vertical' : 'horizontal';
         self.setData({
           currentFamily: data.family,
@@ -178,6 +179,7 @@ Page({
           showChildRankBadge: preference.showChildRankBadge === true,
           showGenderBadge: preference.showGenderBadge === true,
           showGenderColors: preference.showGenderColors !== false,
+          autoCollapseEnabled: autoCollapseEnabled,
           viewMode: mode,
           viewpointId: personId,
           collapsedPersonIds: collapsedPersonIds,
@@ -584,7 +586,7 @@ Page({
   },
 
   expandAllBranches: function () {
-    if (this.data.rawPersons.length > MAX_INTERACTIVE_NODES) {
+    if (this.data.autoCollapseEnabled && this.data.rawPersons.length > MAX_INTERACTIVE_NODES) {
       wx.showToast({ title: '家谱较大，请按分支展开', icon: 'none' });
       return;
     }
@@ -597,7 +599,7 @@ Page({
   expandBranch: function (event) {
     const personId = event.currentTarget.dataset.id;
     let collapsed = this.data.collapsedPersonIds.filter(function (id) { return id !== personId; });
-    if (this.data.rawPersons.length > MAX_INTERACTIVE_NODES) {
+    if (this.data.autoCollapseEnabled && this.data.rawPersons.length > MAX_INTERACTIVE_NODES) {
       collapsed = graphLayout.suggestCollapsedIds(this.data.rawPersons, this.data.rawRelations, {
         limit: MAX_INTERACTIVE_NODES,
         focusId: personId

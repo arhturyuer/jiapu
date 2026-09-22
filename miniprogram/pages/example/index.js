@@ -23,7 +23,7 @@ Page({
     loading: true, error: '', slug: '', example: null, rawPersons: [], rawRelations: [], nodes: [], lines: [], junctions: [],
     canvasWidth: 750, canvasHeight: 900, graphScale: 1, graphX: 0, graphY: 0, graphScaleMin: 0.32, graphZoomClass: 'zoom-detail',
     pageOrientation: 'portrait', isLandscape: false, orientationChanging: false,
-    collapsedPersonIds: [], hiddenBranchCount: 0, canExpandAll: false, nameLayout: 'horizontal', showChildRankBadge: false, showGenderBadge: false, showGenderColors: true, viewMode: 'full', viewpointId: '', viewpointName: '',
+    collapsedPersonIds: [], hiddenBranchCount: 0, canExpandAll: false, nameLayout: 'horizontal', showChildRankBadge: false, showGenderBadge: false, showGenderColors: true, autoCollapseEnabled: true, viewMode: 'full', viewpointId: '', viewpointName: '',
     selectedPersonId: '', selectedPerson: null, showMemberSheet: false, showPerspectiveSheet: false, perspectiveKeyword: '', perspectiveResults: [],
     showTour: false, tourStep: 1, posterGenerating: false,
     shareCard: shareCard.create({ kind: 'example' })
@@ -68,8 +68,10 @@ Page({
         return personGender.decorate(Object.assign({}, person, { initial: (person.name || '家').slice(0, 1), metaText: person.birthDate ? person.birthDate.slice(0, 4) + '年' : '' }));
       });
       const relations = example.relations || [];
-      const collapsed = graphLayout.suggestCollapsedIds(persons, relations, { limit: 36 });
       const preference = exampleDisplayPreference.get(example.slug || self.data.slug);
+      const collapsed = preference.autoCollapseEnabled
+        ? graphLayout.suggestCollapsedIds(persons, relations, { limit: 36 })
+        : [];
       self.setData(Object.assign({ loading: false, example: example, rawPersons: persons, rawRelations: relations, perspectiveResults: persons, collapsedPersonIds: collapsed, selectedPersonId: '', selectedPerson: null }, preference), function () {
         self.syncPageChrome(self.data.isLandscape);
         const initialPersonId = self._initialPersonId;
@@ -96,10 +98,17 @@ Page({
     // Always lay out the graph from the stored preference so card dimensions,
     // vertical names and connection coordinates remain in sync.
     const preference = exampleDisplayPreference.normalize(savedPreference || exampleDisplayPreference.get(this.displayPreferenceSlug()));
+    let collapsedPersonIds = this.data.collapsedPersonIds;
+    if (preference.autoCollapseEnabled !== this.data.autoCollapseEnabled) {
+      collapsedPersonIds = preference.autoCollapseEnabled
+        ? graphLayout.suggestCollapsedIds(this.data.rawPersons, this.data.rawRelations, { limit: 36, focusId: this.data.viewpointId })
+        : [];
+    }
     this.renderGraph(this.data.viewMode, this.data.viewpointId, {
       preserveViewport: true,
       nameLayout: preference.nameLayout,
-      statePatch: preference
+      collapsedPersonIds: collapsedPersonIds,
+      statePatch: Object.assign({}, preference, { collapsedPersonIds: collapsedPersonIds })
     });
   },
 
@@ -290,8 +299,8 @@ Page({
   },
   useSelectedPerspective: function () { if (this.data.selectedPerson) { this.closeMemberSheet(); this.setPerspective(this.data.selectedPerson._id); } },
   showFullGraph: function () { this.renderGraph('full', '', { selectedPersonId: '', statePatch: { viewMode: 'full', viewpointId: '', viewpointName: '', selectedPersonId: '', selectedPerson: null, showMemberSheet: false } }); },
-  expandAllBranches: function () { if (this.data.rawPersons.length > MAX_INTERACTIVE_NODES) return wx.showToast({ title: '家谱较大，请按分支展开', icon: 'none' }); this.renderGraph(this.data.viewMode, this.data.viewpointId, { collapsedPersonIds: [], statePatch: { collapsedPersonIds: [] } }); },
-  expandBranch: function (event) { const id = event.currentTarget.dataset.id; const collapsed = this.data.collapsedPersonIds.filter(function (item) { return item !== id; }); this.renderGraph(this.data.viewMode, this.data.viewpointId, { collapsedPersonIds: collapsed, statePatch: { collapsedPersonIds: collapsed } }); },
+  expandAllBranches: function () { if (this.data.autoCollapseEnabled && this.data.rawPersons.length > MAX_INTERACTIVE_NODES) return wx.showToast({ title: '家谱较大，请按分支展开', icon: 'none' }); this.renderGraph(this.data.viewMode, this.data.viewpointId, { collapsedPersonIds: [], statePatch: { collapsedPersonIds: [] } }); },
+  expandBranch: function (event) { const id = event.currentTarget.dataset.id; let collapsed = this.data.collapsedPersonIds.filter(function (item) { return item !== id; }); if (this.data.autoCollapseEnabled && this.data.rawPersons.length > MAX_INTERACTIVE_NODES) collapsed = graphLayout.suggestCollapsedIds(this.data.rawPersons, this.data.rawRelations, { limit: MAX_INTERACTIVE_NODES, focusId: id }); this.renderGraph(this.data.viewMode, this.data.viewpointId, { collapsedPersonIds: collapsed, statePatch: { collapsedPersonIds: collapsed } }); },
   toggleSelectedBranch: function () { const person = this.data.selectedPerson; if (!person) return; const collapsed = this.data.collapsedPersonIds.slice(); const index = collapsed.indexOf(person._id); if (index >= 0) collapsed.splice(index, 1); else collapsed.push(person._id); this.renderGraph(this.data.viewMode, this.data.viewpointId, { collapsedPersonIds: collapsed, selectedPersonId: '', statePatch: { collapsedPersonIds: collapsed, selectedPersonId: '', selectedPerson: null, showMemberSheet: false } }); },
   openMemberDetail: function () { if (this.data.selectedPerson) wx.navigateTo({ url: exampleDetailUrl(this.data.slug, this.data.selectedPerson._id) }); },
   explainCreate: function () { const self = this; wx.showModal({ title: '在自己的家谱中继续', content: '创建自己的家谱后，你可以添加亲属、编辑资料、管理关系并邀请家人共同维护。', confirmText: '去创建', success: function (result) { if (result.confirm) self.createFamily(); } }); },

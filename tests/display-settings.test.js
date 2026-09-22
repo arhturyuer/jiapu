@@ -41,6 +41,7 @@ test('显示设置加载新用户默认偏好', async function () {
     assert.equal(page.data.showChildRankBadge, false);
     assert.equal(page.data.showGenderBadge, false);
     assert.equal(page.data.showGenderColors, true);
+    assert.equal(page.data.autoCollapseEnabled, true);
   } finally {
     api.call = previousCall;
   }
@@ -120,7 +121,8 @@ test('示例显示设置仅使用按示例隔离的本地偏好', async function
       nameLayout: 'vertical',
       showChildRankBadge: false,
       showGenderBadge: false,
-      showGenderColors: true
+      showGenderColors: true,
+      autoCollapseEnabled: true
     });
     assert.equal(exampleDisplayPreference.get('other').nameLayout, 'horizontal');
     assert.equal(exampleDisplayPreference.get('other').showChildRankBadge, false);
@@ -150,7 +152,8 @@ test('示例设置保存后立即刷新上一张示例家谱画布', async funct
       nameLayout: 'vertical',
       showChildRankBadge: false,
       showGenderBadge: false,
-      showGenderColors: true
+      showGenderColors: true,
+      autoCollapseEnabled: true
     }]);
   } finally {
     global.wx = previousWx;
@@ -164,6 +167,7 @@ test('服务端为新用户返回新默认值，为已有偏好保留旧默认�
   assert.match(source, /showChildRankBadge: hasSavedPreference \? preference\.showChildRankBadge !== false : false/);
   assert.match(source, /showGenderBadge: hasSavedPreference \? preference\.showGenderBadge !== false : false/);
   assert.match(source, /showGenderColors: preference\.showGenderColors !== false/);
+  assert.match(source, /autoCollapseEnabled: preference\.autoCollapseEnabled !== false/);
   assert.match(source, /const existing = await maybeGet\(transaction, 'user_family_preferences', id\)/);
   assert.match(source, /const preference = normalizeFamilyPreference\(existing\)/);
   assert.match(source, /assert\(typeof event\[field\] === 'boolean', 'INVALID_PREFERENCE'/);
@@ -175,12 +179,38 @@ test('示例家谱仅在没有本地显示偏好时采用新默认值', function
     nameLayout: 'horizontal',
     showChildRankBadge: false,
     showGenderBadge: false,
-    showGenderColors: true
+    showGenderColors: true,
+    autoCollapseEnabled: true
   });
   assert.deepEqual(exampleDisplayPreference.normalize({ nameLayout: 'vertical' }), {
     nameLayout: 'vertical',
     showChildRankBadge: true,
     showGenderBadge: true,
-    showGenderColors: true
+    showGenderColors: true,
+    autoCollapseEnabled: true
   });
+  assert.equal(exampleDisplayPreference.normalize({ autoCollapseEnabled: false }).autoCollapseEnabled, false);
+});
+
+test('智能收起开关保存 false 并按家谱使缓存失效', async function () {
+  const previousCall = api.call;
+  const invalidations = [];
+  const app = {
+    getCurrentFamily: function () { return { _id: 'family-1' }; },
+    invalidateCache: function (value) { invalidations.push(value); }
+  };
+  const page = loadPage(app);
+  page.data.familyId = 'family-1';
+  api.call = function (type, payload) {
+    assert.equal(type, 'family.setPreference');
+    assert.deepEqual(payload, { familyId: 'family-1', autoCollapseEnabled: false });
+    return Promise.resolve({ preference: { autoCollapseEnabled: false } });
+  };
+  try {
+    await page.savePreference('autoCollapseEnabled', false);
+    assert.equal(page.data.autoCollapseEnabled, false);
+    assert.deepEqual(invalidations, [{ graph: 'family-1' }]);
+  } finally {
+    api.call = previousCall;
+  }
 });
