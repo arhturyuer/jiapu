@@ -547,6 +547,9 @@ Page({
       },
       sharePayload: function (invitation) {
         return { invitationId: invitation.invitationId };
+      },
+      entrancePath: function (invitation) {
+        return '/pages/invite/index?token=' + encodeURIComponent(invitation.token);
       }
     });
   },

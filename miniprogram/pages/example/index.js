@@ -258,6 +258,12 @@ Page({
       },
       sharePayload: function () {
         return { kind: 'example', slug: page.data.slug };
+      },
+      entrancePath: function () {
+        const path = '/pages/example/index?slug=' + encodeURIComponent(page.data.slug) + '&source=example_poster';
+        return page.data.viewMode === 'perspective' && page.data.viewpointId
+          ? path + '&personId=' + encodeURIComponent(page.data.viewpointId)
+          : path;
       }
     });
   },

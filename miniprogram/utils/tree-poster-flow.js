@@ -53,7 +53,8 @@ function generate(page, options) {
     posterSession.set({
       filePath: result.poster.filePath,
       familyName: value.familyName,
-      sharePayload: value.sharePayload ? value.sharePayload(result.code) : null
+      sharePayload: value.sharePayload ? value.sharePayload(result.code) : null,
+      entrancePath: value.entrancePath ? value.entrancePath(result.code) : '/pages/tree/index'
     });
     wx.navigateTo({
       url: '/pages/poster-preview/index',

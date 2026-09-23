@@ -60,6 +60,7 @@ Page({
     filePath: '',
     familyName: '',
     sharePayload: null,
+    entrancePath: '/pages/tree/index',
     error: '',
     saving: false,
     sharing: false,
@@ -75,7 +76,8 @@ Page({
     this.setData({
       filePath: session.filePath,
       familyName: session.familyName || '家谱',
-      sharePayload: session.sharePayload || (session.invitationId ? { invitationId: session.invitationId } : null)
+      sharePayload: session.sharePayload || (session.invitationId ? { invitationId: session.invitationId } : null),
+      entrancePath: session.entrancePath || '/pages/tree/index'
     });
   },
 
@@ -100,6 +102,8 @@ Page({
     this.setData({ sharing: true });
     wx.showShareImageMenu({
       path: this.data.filePath,
+      needShowEntrance: true,
+      entrancePath: this.data.entrancePath,
       success: function () {
         if (self.data.sharePayload) {
           api.call('share.record', Object.assign({ stage: 'sent' }, self.data.sharePayload)).catch(function () {});
@@ -183,6 +187,10 @@ Page({
   },
 
   goBack: function () {
-    wx.navigateBack();
+    if (typeof getCurrentPages === 'function' && getCurrentPages().length > 1) {
+      wx.navigateBack();
+      return;
+    }
+    wx.switchTab({ url: '/pages/tree/index' });
   }
 });

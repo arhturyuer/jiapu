@@ -8,6 +8,8 @@ const root = path.resolve(__dirname, '..');
 const graph = require(path.join(root, 'miniprogram/utils/graph-layout.js'));
 const poster = require(path.join(root, 'miniprogram/utils/tree-poster.js'));
 const posterInvite = require(path.join(root, 'miniprogram/utils/poster-invite.js'));
+const posterSession = require(path.join(root, 'miniprogram/utils/poster-session.js'));
+const treePosterFlow = require(path.join(root, 'miniprogram/utils/tree-poster-flow.js'));
 
 function loadPage(relativePath) {
   let definition = null;
@@ -135,6 +137,7 @@ test('真实与示例家谱共用一键生成和两个底部操作', function ()
   assert.match(exampleScript, /treePosterFlow\.generate\(this/);
   assert.match(flowScript, /treePoster\.render/);
   assert.match(flowScript, /pages\/poster-preview\/index/);
+  assert.match(flowScript, /entrancePath: value\.entrancePath/);
   assert.match(treeScript, /onHide:[\s\S]*treePosterFlow\.cancel\(this\)/);
   assert.match(exampleScript, /onHide:[\s\S]*treePosterFlow\.cancel\(this\)/);
   assert.equal((previewTemplate.match(/class="[^"]*preview-button/g) || []).length, 2, '预览底部只保留两个主操作');
@@ -146,6 +149,69 @@ test('真实与示例家谱共用一键生成和两个底部操作', function ()
   assert.match(previewScript, /wx\.openAppAuthorizeSetting\(/);
   assert.match(previewScript, /wx\.authorize\([\s\S]*scope: 'scope\.writePhotosAlbum'/, '首次保存应显式申请小程序相册权限');
   assert.match(previewScript, /Object\.assign\(\{ stage: 'sent' \}, self\.data\.sharePayload\)/);
+});
+
+test('图片消息入口保留真实家谱邀请和示例人物视角', function () {
+  const previousGetApp = global.getApp;
+  const originalGenerate = treePosterFlow.generate;
+  let options;
+  global.getApp = function () { return { globalData: { user: { _id: 'test-user' } } }; };
+  treePosterFlow.generate = function (page, value) { options = value; };
+  try {
+    const tree = createPage(loadPage('../miniprogram/pages/tree/index'), {
+      currentFamily: { _id: 'family-1', name: '测试家谱' },
+      nodes: [{ _id: 'person-1' }]
+    });
+    tree.generatePoster();
+    assert.equal(options.entrancePath({ token: 'invite+token/1' }), '/pages/invite/index?token=invite%2Btoken%2F1');
+
+    const example = createPage(loadPage('../miniprogram/pages/example/index'), {
+      example: { title: '示例家谱' }, slug: 'example-1', nodes: [{ _id: 'person-1' }],
+      viewMode: 'perspective', viewpointId: 'person/1'
+    });
+    example.generatePoster();
+    assert.equal(options.entrancePath(), '/pages/example/index?slug=example-1&source=example_poster&personId=person%2F1');
+    example.data.viewMode = 'full';
+    assert.equal(options.entrancePath(), '/pages/example/index?slug=example-1&source=example_poster');
+  } finally {
+    treePosterFlow.generate = originalGenerate;
+    global.getApp = previousGetApp;
+  }
+});
+
+test('分享图片使用业务入口，旧图片冷启动时返回家谱', function () {
+  const previousWx = global.wx;
+  const previousGetCurrentPages = global.getCurrentPages;
+  const calls = [];
+  global.wx = {
+    showShareImageMenu: function (options) { calls.push(options); },
+    navigateBack: function () { calls.push('navigateBack'); },
+    switchTab: function (options) { calls.push(options.url); }
+  };
+  try {
+    const preview = createPage(loadPage('../miniprogram/pages/poster-preview/index'));
+    posterSession.set({ filePath: '/tmp/poster.png', entrancePath: '/pages/invite/index?token=test-token' });
+    preview.onLoad();
+    preview.shareImage();
+    assert.equal(calls[0].path, '/tmp/poster.png');
+    assert.equal(calls[0].needShowEntrance, true);
+    assert.equal(calls[0].entrancePath, '/pages/invite/index?token=test-token');
+    assert.equal(posterSession.take(), null, '预览会话只供本地页面读取一次');
+
+    const coldStart = createPage(loadPage('../miniprogram/pages/poster-preview/index'));
+    coldStart.onLoad();
+    assert.match(coldStart.data.error, /图片已经失效/);
+    global.getCurrentPages = function () { return [coldStart]; };
+    coldStart.goBack();
+    assert.equal(calls[1], '/pages/tree/index');
+    global.getCurrentPages = function () { return [preview, coldStart]; };
+    coldStart.goBack();
+    assert.equal(calls[2], 'navigateBack');
+  } finally {
+    posterSession.clear();
+    global.wx = previousWx;
+    global.getCurrentPages = previousGetCurrentPages;
+  }
 });
 
 test('示例家谱图片码保留全谱或人物视角', function () {
