@@ -1,10 +1,21 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import * as XLSX from 'xlsx';
-import { callOps, getErrorMessage } from '../cloudbase';
+import { callOps, getErrorMessage, getValidationIssues } from '../cloudbase';
+// @ts-ignore Pure ESM validation is also exercised directly by the Node test suite.
+import { groupValidationIssues, issuesForRow, validateExampleContent } from '../example-validation.js';
 import ExampleGraphPreview from './ExampleGraphPreview.vue';
 
 type Row = Record<string, any>;
+type ValidationIssue = {
+  code: string;
+  scope: 'person' | 'relation' | 'content';
+  field: string;
+  message: string;
+  rowIndex?: number;
+  sheetRow?: number;
+  relatedRows?: number[];
+};
 const props = defineProps<{ isSuperAdmin: boolean }>();
 const loading = ref(true);
 const saving = ref(false);
@@ -21,7 +32,8 @@ const selectedPersonId = ref('');
 const selectedRelationId = ref('');
 const dirty = ref(false);
 const fileInput = ref<HTMLInputElement | null>(null);
-const pendingImport = ref<{ content: Row; meta: Row; errors: string[] } | null>(null);
+const serverValidationIssues = ref<ValidationIssue[]>([]);
+const pendingImport = ref<{ content: Row; meta: Row; issues: ValidationIssue[]; canLoad: boolean } | null>(null);
 const relationForm = reactive({ fromPersonId: '', toPersonId: '', type: 'parent_child' });
 const draft = reactive<any>({
   _id: '', title: '', slug: '', description: '', tagsText: '', sortOrder: 0, shareTitle: '', shareDescription: '',
@@ -29,6 +41,7 @@ const draft = reactive<any>({
 });
 
 let localSequence = 0;
+let skipNextDirtyMark = false;
 function localId(kind: string): string { localSequence += 1; return `local-${kind}-${Date.now().toString(36)}-${localSequence}`; }
 function blankContent(title = ''): Row {
   const father = localId('person'); const mother = localId('person'); const child = localId('person');
@@ -51,16 +64,35 @@ const filteredRows = computed(() => rows.value.filter((item) => {
   const matchesStatus = status.value === 'all' || item.status === status.value;
   return matchesStatus && `${item.title} ${item.slug}`.toLowerCase().includes(search.value.trim().toLowerCase());
 }));
-const visiblePersons = computed(() => draft.content.persons.filter((person: Row) => {
-  const query = personSearch.value.trim();
-  return !query || String(person.name || '').includes(query);
-}));
-const graphErrors = computed(() => validateContent(draft.content));
+const visiblePersons = computed(() => draft.content.persons
+  .map((person: Row, index: number) => ({ person, index }))
+  .filter(({ person }: { person: Row }) => {
+    const query = personSearch.value.trim();
+    return !query || String(person.name || '').includes(query);
+  }));
+const relationRows = computed(() => draft.content.relations.map((relation: Row, index: number) => ({ relation, index })));
+const validationIssues = computed<ValidationIssue[]>(() => validateExampleContent(draft.content));
+const displayedIssues = computed<ValidationIssue[]>(() => {
+  const seen = new Set<string>();
+  return validationIssues.value.concat(serverValidationIssues.value).filter((item) => {
+    const key = `${item.code}:${item.scope}:${item.rowIndex ?? ''}:${item.message}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+});
+const groupedDraftIssues = computed(() => groupValidationIssues(displayedIssues.value));
+const pendingImportGroups = computed(() => groupValidationIssues(pendingImport.value?.issues || []));
 
-watch(draft, () => { if (draft._id) dirty.value = true; }, { deep: true });
+watch(draft, () => {
+  if (skipNextDirtyMark) skipNextDirtyMark = false;
+  else if (draft._id) dirty.value = true;
+  serverValidationIssues.value = [];
+}, { deep: true });
 
 function resetDraft(source: Row = {}): void {
   const content = structuredClone(source.draftContent || blankContent(source.title || ''));
+  skipNextDirtyMark = true;
   Object.assign(draft, {
     _id: source._id || '', title: source.title || '', slug: source.slug || '', description: source.description || '',
     tagsText: Array.isArray(source.tags) ? source.tags.join('、') : '', sortOrder: source.sortOrder || 0,
@@ -68,6 +100,7 @@ function resetDraft(source: Row = {}): void {
   });
   relationForm.fromPersonId = content.persons[0]?._id || '';
   relationForm.toPersonId = content.persons[1]?._id || '';
+  serverValidationIssues.value = [];
   dirty.value = false;
 }
 
@@ -126,22 +159,37 @@ async function createTemplate(): Promise<void> {
 }
 async function saveDraft(): Promise<void> {
   if (!draft._id || saving.value) return;
-  const errors = validateContent(draft.content);
-  if (errors.length) { error.value = `保存草稿前请修正：${errors[0]}`; return; }
+  if (validationIssues.value.length) {
+    error.value = `保存草稿前请修正全部 ${validationIssues.value.length} 项问题。`;
+    focusIssue(validationIssues.value[0]);
+    return;
+  }
   saving.value = true; error.value = '';
   try {
     const result = await callOps<{ templateId: string; draftContent: Row }>('examples.updateDraft', payload());
     if (result.draftContent) {
+      skipNextDirtyMark = true;
       draft.content = result.draftContent;
       relationForm.fromPersonId = draft.content.persons[0]?._id || '';
       relationForm.toPersonId = draft.content.persons[1]?._id || '';
     }
     dirty.value = false; notice.value = '草稿已保存，人物与关系的内部标识已由服务端同步。'; await loadList();
-  } catch (err) { error.value = `保存草稿失败：${getErrorMessage(err, '请重试')}`; }
+  } catch (err) {
+    serverValidationIssues.value = getValidationIssues(err) as ValidationIssue[];
+    if (serverValidationIssues.value.length) focusIssue(serverValidationIssues.value[0]);
+    error.value = `保存草稿失败：${getErrorMessage(err, '请重试')}`;
+  }
   finally { saving.value = false; }
 }
 async function runAction(action: string, extra: Row = {}): Promise<void> {
   if (!draft._id || !props.isSuperAdmin) return;
+  if (action === 'examples.publish' && (dirty.value || validationIssues.value.length)) {
+    error.value = validationIssues.value.length
+      ? `发布前请修正全部 ${validationIssues.value.length} 项问题并保存草稿。`
+      : '发布前请先保存当前草稿。';
+    if (validationIssues.value.length) focusIssue(validationIssues.value[0]);
+    return;
+  }
   saving.value = true;
   try {
     await callOps(action, { templateId: draft._id, ...extra });
@@ -165,38 +213,36 @@ function addRelation(): void {
 }
 function removeRelation(id: string): void { draft.content.relations = draft.content.relations.filter((relation: Row) => relation._id !== id); }
 function scrollTo(kind: string, id: string): void {
-  if (kind === 'person') selectedPersonId.value = id; else selectedRelationId.value = id;
-  document.getElementById(`${kind}-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  if (kind === 'person') {
+    selectedPersonId.value = id;
+    personSearch.value = '';
+  } else selectedRelationId.value = id;
+  void nextTick(() => document.getElementById(`${kind}-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
 }
-
-function validateContent(content: Row): string[] {
-  const errors: string[] = []; const names = new Set<string>(); const ids = new Set<string>();
-  const nameById: Record<string, string> = {};
-  content.persons.forEach((person: Row, index: number) => {
-    const name = String(person.name || '').trim();
-    if (!name) errors.push(`人物第 ${index + 1} 行缺少姓名`);
-    else if (names.has(name)) errors.push(`人物姓名重复：${name}`);
-    names.add(name); ids.add(person._id); nameById[person._id] = name;
-  });
-  if (content.persons.length < 3) errors.push('示例至少需要 3 位人物');
-  const relationKeys = new Set<string>(); const children: Record<string, string[]> = {};
-  content.relations.forEach((relation: Row, index: number) => {
-    const fromName = nameById[relation.fromPersonId] || ''; const toName = nameById[relation.toPersonId] || '';
-    if (!['parent_child', 'spouse'].includes(relation.type)) errors.push(`关系第 ${index + 1} 行类型无效`);
-    if (!ids.has(relation.fromPersonId) || !ids.has(relation.toPersonId) || !fromName || !toName || relation.fromPersonId === relation.toPersonId) errors.push(`关系第 ${index + 1} 行人物姓名无效`);
-    const pair = relation.type === 'spouse' && fromName > toName ? [toName, fromName] : [fromName, toName];
-    const key = `${relation.type}:${pair.join(':')}`;
-    if (relationKeys.has(key)) errors.push(`关系重复：${key}`); relationKeys.add(key);
-    if (relation.type === 'parent_child') (children[relation.fromPersonId] ||= []).push(relation.toPersonId);
-  });
-  const visiting = new Set<string>(); const visited = new Set<string>();
-  const visit = (id: string): boolean => {
-    if (visiting.has(id)) return true; if (visited.has(id)) return false;
-    visiting.add(id); const cyclic = (children[id] || []).some(visit); visiting.delete(id); visited.add(id); return cyclic;
-  };
-  if (Array.from(ids).some(visit)) errors.push('父母子女关系存在祖先循环');
-  if (content.relations.length < 2) errors.push('示例至少需要 2 条关系');
-  return errors;
+function rowIssues(scope: 'person' | 'relation', index: number): ValidationIssue[] {
+  return issuesForRow(displayedIssues.value, scope, index);
+}
+function personExists(id: string): boolean {
+  return draft.content.persons.some((person: Row) => person._id === id);
+}
+function validRelationType(type: string): boolean {
+  return ['parent_child', 'spouse'].includes(type);
+}
+function focusIssue(item: ValidationIssue): void {
+  if (item.scope === 'person' && item.rowIndex !== undefined) {
+    const person = draft.content.persons[item.rowIndex];
+    if (person) scrollTo('person', person._id);
+    return;
+  }
+  if (item.scope === 'relation' && item.rowIndex !== undefined) {
+    const relation = draft.content.relations[item.rowIndex];
+    if (relation) scrollTo('relation', relation._id);
+    return;
+  }
+  document.getElementById('example-validation-summary')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+function issueKey(item: ValidationIssue, index: number): string {
+  return `${item.code}-${item.scope}-${item.rowIndex ?? 'all'}-${index}`;
 }
 
 function metadataRows(source: Row = draft): Row[] {
@@ -245,30 +291,60 @@ async function importFiles(event: Event): Promise<void> {
       collected[lower.includes('person') || file.name.includes('人物') ? '人物' : lower.includes('relation') || file.name.includes('关系') ? '关系' : '家谱资料'] = rowsFromSheet(book.Sheets[book.SheetNames[0]]);
     }
   }
+  const structuralIssues: ValidationIssue[] = [];
+  if (!Object.prototype.hasOwnProperty.call(collected, '人物')) {
+    structuralIssues.push({ code: 'EXAMPLE_IMPORT_PERSON_SHEET_REQUIRED', scope: 'content', field: 'persons', message: '导入文件缺少“人物”表，无法载入草稿' });
+  }
+  if (!Object.prototype.hasOwnProperty.call(collected, '关系')) {
+    structuralIssues.push({ code: 'EXAMPLE_IMPORT_RELATION_SHEET_REQUIRED', scope: 'content', field: 'relations', message: '导入文件缺少“关系”表，无法载入草稿' });
+  }
   const meta = Object.fromEntries((collected.家谱资料 || []).map((row) => [row.字段, row.值]));
   const people = (collected.人物 || []).map((person) => ({
     _id: localId('import-person'), name: String(person.姓名 || '').trim(), gender: person.性别 || 'unknown', lifeStatus: person.在世状态 || 'unknown',
     birthDate: String(person.出生日期 || ''), deathDate: String(person.去世日期 || ''), birthPlace: String(person.籍贯 || ''), bio: String(person.人物简介 || '')
   }));
-  const peopleByName = new Map<string, Row>(); people.forEach((person) => { if (!peopleByName.has(person.name)) peopleByName.set(person.name, person); });
+  const peopleByName = new Map<string, Row[]>();
+  people.forEach((person) => {
+    const matches = peopleByName.get(person.name) || [];
+    matches.push(person);
+    peopleByName.set(person.name, matches);
+  });
   const relations = (collected.关系 || []).map((relation) => {
     const fromName = String(relation.起始人物姓名 || '').trim(); const toName = String(relation.结束人物姓名 || '').trim();
-    return { _id: localId('import-relation'), type: normalizeType(relation.关系类型), fromPersonId: peopleByName.get(fromName)?._id || '', toPersonId: peopleByName.get(toName)?._id || '', fromName, toName };
+    const fromMatches = peopleByName.get(fromName) || []; const toMatches = peopleByName.get(toName) || [];
+    return {
+      _id: localId('import-relation'), type: normalizeType(relation.关系类型),
+      fromPersonId: fromMatches.length === 1 ? fromMatches[0]._id : '',
+      toPersonId: toMatches.length === 1 ? toMatches[0]._id : '',
+      fromName, toName
+    };
   });
   const content = { family: { name: String(meta.名称 || draft.title), description: String(meta.简介 || draft.description) }, persons: people, relations };
-  const errors = validateContent(content);
-  relations.forEach((relation, index) => { if (!relation.fromPersonId || !relation.toPersonId) errors.push(`关系第 ${index + 1} 行引用的人名未在人物表找到`); });
-  pendingImport.value = { content, meta, errors: Array.from(new Set(errors)) };
+  const issues = structuralIssues.concat(validateExampleContent(content) as ValidationIssue[]);
+  pendingImport.value = { content, meta, issues, canLoad: structuralIssues.length === 0 };
   (event.target as HTMLInputElement).value = '';
 }
-async function confirmImport(): Promise<void> {
-  if (!pendingImport.value || pendingImport.value.errors.length) return;
+function applyPendingImport(): boolean {
+  if (!pendingImport.value || !pendingImport.value.canLoad) return false;
   const item = pendingImport.value;
   Object.assign(draft, {
     title: String(item.meta.名称 || draft.title), description: String(item.meta.简介 || ''), tagsText: String(item.meta.标签 || ''), sortOrder: Number(item.meta.排序) || 0,
     shareTitle: String(item.meta.分享标题 || ''), shareDescription: String(item.meta.分享说明 || ''), content: item.content
   });
-  pendingImport.value = null; await saveDraft();
+  relationForm.fromPersonId = item.content.persons[0]?._id || '';
+  relationForm.toPersonId = item.content.persons[1]?._id || '';
+  pendingImport.value = null;
+  notice.value = '';
+  return true;
+}
+function loadImportForEditing(): void {
+  if (!applyPendingImport()) return;
+  error.value = `导入内容已载入本地草稿，请修正全部 ${validationIssues.value.length} 项问题后再保存。`;
+  if (validationIssues.value.length) focusIssue(validationIssues.value[0]);
+}
+async function confirmImport(): Promise<void> {
+  if (!pendingImport.value || pendingImport.value.issues.length || !applyPendingImport()) return;
+  await saveDraft();
 }
 
 onMounted(loadList);
@@ -276,25 +352,45 @@ onMounted(loadList);
 
 <template>
   <section class="example-manager">
-    <header class="manager-header"><div><p class="eyebrow">OFFICIAL READ-ONLY CONTENT</p><h2>多示例家谱库</h2><p>以姓名维护人物和关系；内部标识仅由服务端生成。</p></div><button class="primary" :disabled="saving" @click="createTemplate">新建示例</button></header>
+    <header class="manager-header">
+      <div><p class="eyebrow">OFFICIAL READ-ONLY CONTENT</p><h2>多示例家谱库</h2><p>以姓名维护人物和关系；内部标识仅由服务端生成。</p></div>
+      <button class="primary" :disabled="saving" @click="createTemplate">新建示例</button>
+    </header>
     <p v-if="error" class="message error">{{ error }} <button v-if="failedSelection" class="retry" @click="retrySelected">重试加载</button><small v-if="failedSelection">错误详情包含请求 ID，可用于日志检索。</small></p>
     <p v-if="notice" class="message success">{{ notice }}</p>
     <div class="manager-layout">
       <aside class="template-list"><input v-model="search" placeholder="搜索名称或 slug"/><select v-model="status"><option value="all">全部状态</option><option value="draft">草稿</option><option value="published">已发布</option><option value="archived">已归档</option></select><button v-for="item in filteredRows" :key="item._id" :class="{ active:selected?._id===item._id }" @click="selectTemplate(item)"><strong>{{ item.title }}</strong><span>{{ item.slug }}</span><small>{{ item.personCount }} 人 · {{ item.relationCount }} 条关系 · {{ item.updatedAt ? new Date(item.updatedAt).toLocaleDateString() : '未更新' }}</small><em :class="item.status">{{ item.status === 'published' ? `已发布 v${item.publishedVersion}` : item.status === 'archived' ? '已归档' : '草稿' }}</em></button><div v-if="loading" class="state">正在读取示例…</div></aside>
       <section v-if="selected" class="editor">
-        <div class="editor-actions"><button class="secondary" :disabled="saving" @click="saveDraft">{{ dirty ? '保存草稿 *' : '草稿已保存' }}</button><button class="secondary" @click="downloadTemplate">下载模板</button><button class="secondary" @click="exportExcel">导出 Excel</button><button class="secondary" @click="exportCsv">导出 CSV</button><button class="secondary" @click="openImport">导入表格</button><input ref="fileInput" class="hidden" type="file" accept=".xlsx,.xls,.csv" multiple @change="importFiles"/><template v-if="isSuperAdmin"><button v-if="selected.status !== 'archived'" class="primary publish-button" :disabled="saving" @click="runAction('examples.publish')">{{ selected.status === 'published' ? '发布更新' : '发布' }}</button><button v-if="selected.status === 'published'" class="secondary" :disabled="saving" @click="runAction('examples.unpublish')">下架</button><button v-if="selected.status !== 'published'" class="danger-button" :disabled="saving" @click="runAction('examples.archive')">归档</button></template></div>
+        <div class="editor-actions">
+          <button class="secondary" :disabled="saving" :aria-disabled="Boolean(validationIssues.length)" @click="saveDraft">{{ dirty ? '保存草稿 *' : '草稿已保存' }}</button>
+          <button class="secondary" @click="downloadTemplate">下载模板</button><button class="secondary" @click="exportExcel">导出 Excel</button><button class="secondary" @click="exportCsv">导出 CSV</button><button class="secondary" @click="openImport">导入表格</button>
+          <input ref="fileInput" class="hidden" type="file" accept=".xlsx,.xls,.csv" multiple @change="importFiles"/>
+          <template v-if="isSuperAdmin"><button v-if="selected.status !== 'archived'" class="primary publish-button" :disabled="saving || dirty || Boolean(validationIssues.length)" @click="runAction('examples.publish')">{{ selected.status === 'published' ? '发布更新' : '发布' }}</button><button v-if="selected.status === 'published'" class="secondary" :disabled="saving" @click="runAction('examples.unpublish')">下架</button><button v-if="selected.status !== 'published'" class="danger-button" :disabled="saving" @click="runAction('examples.archive')">归档</button></template>
+        </div>
+        <section v-if="displayedIssues.length" id="example-validation-summary" class="validation-summary" aria-live="polite">
+          <div><h3>发现 {{ displayedIssues.length }} 项问题</h3><p>点击下列错误可定位到对应人物或关系；全部修正后才能保存和发布。</p></div>
+          <div v-if="groupedDraftIssues.person.length" class="issue-group"><strong>人物问题</strong><button v-for="(item,index) in groupedDraftIssues.person" :key="issueKey(item,index)" @click="focusIssue(item)">{{ item.message }}</button></div>
+          <div v-if="groupedDraftIssues.relation.length" class="issue-group"><strong>关系问题</strong><button v-for="(item,index) in groupedDraftIssues.relation" :key="issueKey(item,index)" @click="focusIssue(item)">{{ item.message }}</button></div>
+          <div v-if="groupedDraftIssues.content.length" class="issue-group"><strong>整体问题</strong><button v-for="(item,index) in groupedDraftIssues.content" :key="issueKey(item,index)" @click="focusIssue(item)">{{ item.message }}</button></div>
+        </section>
         <section class="editor-section"><h3>家谱资料</h3><div class="field-grid"><label>示例名称<input v-model="draft.title"/></label><label>稳定链接标识<input v-model="draft.slug" disabled/></label><label>标签<input v-model="draft.tagsText" placeholder="用逗号分隔"/></label><label>排序<input v-model.number="draft.sortOrder" type="number" min="0"/></label><label class="wide">简介<textarea v-model="draft.description"/></label><label>微信分享标题<input v-model="draft.shareTitle"/></label><label>微信分享说明<input v-model="draft.shareDescription"/></label></div></section>
-        <section class="editor-section"><div class="section-head"><div><h3>人物表（{{ draft.content.persons.length }}）</h3><p class="muted">姓名必须唯一，用于维护所有关系。</p></div><div><input v-model="personSearch" placeholder="筛选姓名"/><button class="secondary compact" @click="addPerson">添加人物</button></div></div><div class="table-wrap"><table><thead><tr><th>姓名</th><th>性别</th><th>状态</th><th>出生</th><th>去世</th><th>籍贯</th><th>简介</th><th></th></tr></thead><tbody><tr v-for="person in visiblePersons" :id="`person-${person._id}`" :key="person._id" :class="{ selected: selectedPersonId===person._id }" @click="selectedPersonId=person._id"><td><input v-model="person.name" placeholder="唯一姓名"/></td><td><select v-model="person.gender"><option value="unknown">未填写</option><option value="male">男</option><option value="female">女</option></select></td><td><select v-model="person.lifeStatus"><option value="unknown">未填写</option><option value="living">健在</option><option value="deceased">已故</option></select></td><td><input v-model="person.birthDate" placeholder="YYYY-MM-DD"/></td><td><input v-model="person.deathDate" placeholder="YYYY-MM-DD"/></td><td><input v-model="person.birthPlace"/></td><td><input v-model="person.bio"/></td><td><button class="text-danger" @click.stop="removePerson(person._id)">删除</button></td></tr></tbody></table></div></section>
-        <section class="editor-section"><div class="section-head"><div><h3>关系表（{{ draft.content.relations.length }}）</h3><p class="muted">用人物姓名建立关系，不需要填写任何 ID。</p></div><div class="relation-create"><select v-model="relationForm.fromPersonId"><option v-for="person in draft.content.persons" :key="person._id" :value="person._id">{{ person.name || '未命名人物' }}</option></select><select v-model="relationForm.type"><option value="parent_child">父母 → 子女</option><option value="spouse">伴侣</option></select><select v-model="relationForm.toPersonId"><option v-for="person in draft.content.persons" :key="person._id" :value="person._id">{{ person.name || '未命名人物' }}</option></select><button class="secondary compact" @click="addRelation">添加关系</button></div></div><div class="table-wrap"><table><thead><tr><th>起始人物</th><th>关系类型</th><th>结束人物</th><th></th></tr></thead><tbody><tr v-for="relation in draft.content.relations" :id="`relation-${relation._id}`" :key="relation._id" :class="{ selected:selectedRelationId===relation._id }" @click="selectedRelationId=relation._id"><td><select v-model="relation.fromPersonId"><option v-for="person in draft.content.persons" :key="person._id" :value="person._id">{{ person.name || '未命名人物' }}</option></select></td><td><select v-model="relation.type"><option value="parent_child">父母 → 子女</option><option value="spouse">伴侣</option></select></td><td><select v-model="relation.toPersonId"><option v-for="person in draft.content.persons" :key="person._id" :value="person._id">{{ person.name || '未命名人物' }}</option></select></td><td><button class="text-danger" @click.stop="removeRelation(relation._id)">删除</button></td></tr></tbody></table></div></section>
-        <section class="editor-section"><h3>关系图校对（图谱预览）</h3><p class="muted">拖动查看全谱；点击人物或关系线可定位到对应表格行。</p><ul v-if="graphErrors.length" class="graph-errors"><li v-for="item in graphErrors" :key="item">{{ item }}</li></ul><ExampleGraphPreview :persons="draft.content.persons" :relations="draft.content.relations" :selected-person-id="selectedPersonId" :selected-relation-id="selectedRelationId" @select-person="scrollTo('person',$event)" @select-relation="scrollTo('relation',$event)"/></section>
+        <section class="editor-section">
+          <div class="section-head"><div><h3>人物表（{{ draft.content.persons.length }}）</h3><p class="muted">姓名必须唯一，用于维护所有关系。</p></div><div><input v-model="personSearch" placeholder="筛选姓名"/><button class="secondary compact" @click="addPerson">添加人物</button></div></div>
+          <div class="table-wrap"><table><thead><tr><th>#</th><th>姓名</th><th>性别</th><th>状态</th><th>出生</th><th>去世</th><th>籍贯</th><th>简介</th><th></th></tr></thead><tbody><template v-for="entry in visiblePersons" :key="entry.person._id"><tr :id="`person-${entry.person._id}`" :class="{ selected:selectedPersonId===entry.person._id, invalid:rowIssues('person',entry.index).length }" @click="selectedPersonId=entry.person._id"><td>{{ entry.index + 1 }}</td><td><input v-model="entry.person.name" placeholder="唯一姓名"/></td><td><select v-model="entry.person.gender"><option value="unknown">未填写</option><option value="male">男</option><option value="female">女</option></select></td><td><select v-model="entry.person.lifeStatus"><option value="unknown">未填写</option><option value="living">健在</option><option value="deceased">已故</option></select></td><td><input v-model="entry.person.birthDate" placeholder="YYYY-MM-DD"/></td><td><input v-model="entry.person.deathDate" placeholder="YYYY-MM-DD"/></td><td><input v-model="entry.person.birthPlace"/></td><td><input v-model="entry.person.bio"/></td><td><button class="text-danger" @click.stop="removePerson(entry.person._id)">删除</button></td></tr><tr v-if="rowIssues('person',entry.index).length" class="inline-issues"><td colspan="9"><span v-for="(item,index) in rowIssues('person',entry.index)" :key="issueKey(item,index)">{{ item.message }}</span></td></tr></template></tbody></table></div>
+        </section>
+        <section class="editor-section">
+          <div class="section-head"><div><h3>关系表（{{ draft.content.relations.length }}）</h3><p class="muted">用人物姓名建立关系，不需要填写任何 ID。</p></div><div class="relation-create"><select v-model="relationForm.fromPersonId"><option v-for="person in draft.content.persons" :key="person._id" :value="person._id">{{ person.name || '未命名人物' }}</option></select><select v-model="relationForm.type"><option value="parent_child">父母 → 子女</option><option value="spouse">伴侣</option></select><select v-model="relationForm.toPersonId"><option v-for="person in draft.content.persons" :key="person._id" :value="person._id">{{ person.name || '未命名人物' }}</option></select><button class="secondary compact" @click="addRelation">添加关系</button></div></div>
+          <div class="table-wrap"><table><thead><tr><th>#</th><th>起始人物</th><th>关系类型</th><th>结束人物</th><th></th></tr></thead><tbody><template v-for="entry in relationRows" :key="entry.relation._id"><tr :id="`relation-${entry.relation._id}`" :class="{ selected:selectedRelationId===entry.relation._id, invalid:rowIssues('relation',entry.index).length }" @click="selectedRelationId=entry.relation._id"><td>{{ entry.index + 1 }}</td><td><select v-model="entry.relation.fromPersonId"><option v-if="!personExists(entry.relation.fromPersonId)" :value="entry.relation.fromPersonId" disabled>未匹配：{{ entry.relation.fromName || '未填写' }}</option><option v-for="person in draft.content.persons" :key="person._id" :value="person._id">{{ person.name || '未命名人物' }}</option></select></td><td><select v-model="entry.relation.type"><option v-if="!validRelationType(entry.relation.type)" :value="entry.relation.type" disabled>无效类型：{{ entry.relation.type || '空' }}</option><option value="parent_child">父母 → 子女</option><option value="spouse">伴侣</option></select></td><td><select v-model="entry.relation.toPersonId"><option v-if="!personExists(entry.relation.toPersonId)" :value="entry.relation.toPersonId" disabled>未匹配：{{ entry.relation.toName || '未填写' }}</option><option v-for="person in draft.content.persons" :key="person._id" :value="person._id">{{ person.name || '未命名人物' }}</option></select></td><td><button class="text-danger" @click.stop="removeRelation(entry.relation._id)">删除</button></td></tr><tr v-if="rowIssues('relation',entry.index).length" class="inline-issues"><td colspan="5"><span v-for="(item,issueIndex) in rowIssues('relation',entry.index)" :key="issueKey(item,issueIndex)">{{ item.message }}</span></td></tr></template></tbody></table></div>
+        </section>
+        <section class="editor-section"><h3>关系图校对（图谱预览）</h3><p class="muted">拖动查看全谱；点击人物或关系线可定位到对应表格行。</p><ExampleGraphPreview :persons="draft.content.persons" :relations="draft.content.relations" :selected-person-id="selectedPersonId" :selected-relation-id="selectedRelationId" @select-person="scrollTo('person',$event)" @select-relation="scrollTo('relation',$event)"/></section>
         <section v-if="versions.length" class="editor-section"><h3>发布版本</h3><div class="versions"><article v-for="version in versions" :key="version._id"><span>v{{ version.version }}</span><small>{{ version.publishedByName || '运营人员' }} · {{ new Date(version.publishedAt).toLocaleString('zh-CN') }}</small><button v-if="isSuperAdmin" class="secondary compact" @click="runAction('examples.rollback',{versionId:version._id})">回滚到此版本</button></article></div></section>
       </section>
       <section v-else class="editor empty"><h3>选择或新建一个示例</h3></section>
     </div>
-    <div v-if="pendingImport" class="import-mask"><section class="import-dialog"><h3>导入预览</h3><p>将整体替换当前草稿：{{ pendingImport.content.persons.length }} 人、{{ pendingImport.content.relations.length }} 条关系。</p><ul v-if="pendingImport.errors.length"><li v-for="item in pendingImport.errors" :key="item">{{ item }}</li></ul><p v-else class="ok">姓名与关系基础校验通过；确认后由服务端生成隐藏 ID 并完成最终校验。</p><div><button class="secondary" @click="pendingImport=null">取消</button><button class="primary" :disabled="Boolean(pendingImport.errors.length)||saving" @click="confirmImport">确认覆盖并保存</button></div></section></div>
+    <div v-if="pendingImport" class="import-mask"><section class="import-dialog"><h3>导入预览</h3><p>将整体替换当前草稿：{{ pendingImport.content.persons.length }} 人、{{ pendingImport.content.relations.length }} 条关系。</p><div v-if="pendingImport.issues.length" class="import-issues"><section v-if="pendingImportGroups.person.length"><h4>人物问题（{{ pendingImportGroups.person.length }}）</h4><ul><li v-for="(item,index) in pendingImportGroups.person" :key="issueKey(item,index)">{{ item.message }}</li></ul></section><section v-if="pendingImportGroups.relation.length"><h4>关系问题（{{ pendingImportGroups.relation.length }}）</h4><ul><li v-for="(item,index) in pendingImportGroups.relation" :key="issueKey(item,index)">{{ item.message }}</li></ul></section><section v-if="pendingImportGroups.content.length"><h4>整体问题（{{ pendingImportGroups.content.length }}）</h4><ul><li v-for="(item,index) in pendingImportGroups.content" :key="issueKey(item,index)">{{ item.message }}</li></ul></section></div><p v-else class="ok">姓名与关系校验通过；确认后由服务端生成隐藏 ID 并完成最终校验。</p><div class="import-actions"><button class="secondary" @click="pendingImport=null">取消</button><button v-if="pendingImport.issues.length && pendingImport.canLoad" class="secondary" @click="loadImportForEditing">载入草稿修改</button><button v-if="!pendingImport.issues.length" class="primary" :disabled="saving" @click="confirmImport">确认覆盖并保存</button></div></section></div>
   </section>
 </template>
 
 <style scoped>
-.example-manager{min-height:560px}.manager-header,.editor-actions,.section-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.manager-header{margin-bottom:20px}.manager-header h2{margin:0;font:650 30px/1.15 Georgia,"Noto Serif SC",serif}.manager-header p:not(.eyebrow),.muted{color:#65706a}.muted{margin:5px 0 0;font-size:12px}.message{padding:12px;border-radius:10px}.error{color:#9f3030;background:#fff0ee}.error small{margin-left:8px;color:#8a5b5b}.retry{margin-left:8px;color:inherit;background:transparent;border:0;text-decoration:underline}.success,.ok{color:#286147;background:#edf7f1}.manager-layout{display:grid;grid-template-columns:280px minmax(0,1fr);background:#fff;border:1px solid #dfe5e1;border-radius:18px}.template-list{min-height:650px;padding:12px;background:#f6f8f5;border-right:1px solid #e4e9e5}.template-list>input,.template-list>select{width:100%;margin-bottom:8px}.template-list button{width:100%;margin-bottom:8px;padding:12px;display:grid;gap:4px;background:#fff;border:1px solid #e0e6e2;border-radius:11px;text-align:left}.template-list button.active,.selected{outline:2px solid #245c4a;background:#edf7f1!important}.template-list span,.template-list small{overflow:hidden;color:#718079;font-size:11px;text-overflow:ellipsis;white-space:nowrap}.template-list em{width:max-content;padding:3px 7px;color:#85601b;background:#fff1d8;border-radius:99px;font-size:10px;font-style:normal}.template-list em.published{color:#346352;background:#e7f0ec}.template-list em.archived{color:#6e7772;background:#edf0ee}.editor{min-width:0;padding:24px}.editor.empty{display:grid;place-content:center}.editor-actions{position:sticky;top:0;z-index:3;padding-bottom:16px;background:#fff;flex-wrap:wrap}.editor-section{margin-top:22px;padding-top:22px;border-top:1px solid #e8ece9}.editor-section h3{margin:0 0 8px}.field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.field-grid label{display:grid;gap:6px;font-size:12px;font-weight:700}.wide{grid-column:1/-1}.field-grid textarea{min-height:64px}.table-wrap{overflow:auto;border:1px solid #e3e8e4;border-radius:10px}table{width:100%;border-collapse:collapse;font-size:12px}th,td{padding:8px;border-bottom:1px solid #edf0ee;white-space:nowrap;text-align:left}th{color:#65706a;background:#f7f9f7}td input,td select{min-width:86px;padding:5px}.relation-create{display:flex;gap:6px}.relation-create select{max-width:160px}.compact{min-height:32px;padding:0 10px}.text-danger{color:#a13333;background:transparent;border:0;font-weight:700}.graph-errors{padding:10px 28px;color:#9f3030;background:#fff5f3;border-radius:8px}.versions article{padding:10px;display:grid;grid-template-columns:55px 1fr auto;gap:8px;background:#f8faf7;border:1px solid #e3e8e4;border-radius:10px}.hidden{display:none}.import-mask{position:fixed;z-index:20;inset:0;display:grid;place-items:center;background:rgba(23,35,31,.42)}.import-dialog{width:min(520px,calc(100vw - 40px));padding:24px;background:#fff;border-radius:16px}.import-dialog ul{max-height:180px;overflow:auto;color:#9f3030}.import-dialog>div{display:flex;justify-content:flex-end;gap:10px}@media(max-width:900px){.manager-layout{grid-template-columns:1fr}.template-list{min-height:0;border-right:0;border-bottom:1px solid #e4e9e5}.field-grid{grid-template-columns:1fr}.relation-create{flex-wrap:wrap}}
+.example-manager{min-height:560px}.manager-header,.editor-actions,.section-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.manager-header{margin-bottom:20px}.manager-header h2{margin:0;font:650 30px/1.15 Georgia,"Noto Serif SC",serif}.manager-header p:not(.eyebrow),.muted{color:#65706a}.muted{margin:5px 0 0;font-size:12px}.message{padding:12px;border-radius:10px}.error{color:#9f3030;background:#fff0ee}.error small{margin-left:8px;color:#8a5b5b}.retry{margin-left:8px;color:inherit;background:transparent;border:0;text-decoration:underline}.success,.ok{color:#286147;background:#edf7f1}.manager-layout{display:grid;grid-template-columns:280px minmax(0,1fr);background:#fff;border:1px solid #dfe5e1;border-radius:18px}.template-list{min-height:650px;padding:12px;background:#f6f8f5;border-right:1px solid #e4e9e5}.template-list>input,.template-list>select{width:100%;margin-bottom:8px}.template-list button{width:100%;margin-bottom:8px;padding:12px;display:grid;gap:4px;background:#fff;border:1px solid #e0e6e2;border-radius:11px;text-align:left}.template-list button.active,.selected{outline:2px solid #245c4a;background:#edf7f1!important}.template-list span,.template-list small{overflow:hidden;color:#718079;font-size:11px;text-overflow:ellipsis;white-space:nowrap}.template-list em{width:max-content;padding:3px 7px;color:#85601b;background:#fff1d8;border-radius:99px;font-size:10px;font-style:normal}.template-list em.published{color:#346352;background:#e7f0ec}.template-list em.archived{color:#6e7772;background:#edf0ee}.editor{min-width:0;padding:24px}.editor.empty{display:grid;place-content:center}.editor-actions{position:sticky;top:0;z-index:3;padding-bottom:16px;background:#fff;flex-wrap:wrap}.editor-actions button[aria-disabled="true"]{border-color:#d8aaa4;color:#9f3030}.editor-section{margin-top:22px;padding-top:22px;border-top:1px solid #e8ece9}.editor-section h3{margin:0 0 8px}.field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.field-grid label{display:grid;gap:6px;font-size:12px;font-weight:700}.wide{grid-column:1/-1}.field-grid textarea{min-height:64px}.validation-summary{display:grid;gap:10px;padding:14px 16px;border:1px solid #e1aaa3;border-radius:12px;color:#7f2929;background:#fff5f3}.validation-summary h3,.validation-summary p{margin:0}.validation-summary p{margin-top:4px;font-size:12px}.issue-group{display:grid;gap:5px}.issue-group button{padding:0;border:0;color:#9f3030;background:transparent;text-align:left;text-decoration:underline;cursor:pointer}.table-wrap{overflow:auto;border:1px solid #e3e8e4;border-radius:10px}table{width:100%;border-collapse:collapse;font-size:12px}th,td{padding:8px;border-bottom:1px solid #edf0ee;white-space:nowrap;text-align:left}th{color:#65706a;background:#f7f9f7}td input,td select{min-width:86px;padding:5px}tr.invalid>td{background:#fff5f3}tr.invalid input,tr.invalid select{border-color:#cc7469}.inline-issues td{padding:6px 12px;color:#9f3030;background:#fff0ee;white-space:normal}.inline-issues span{display:block}.relation-create{display:flex;gap:6px}.relation-create select{max-width:160px}.compact{min-height:32px;padding:0 10px}.text-danger{color:#a13333;background:transparent;border:0;font-weight:700}.versions article{padding:10px;display:grid;grid-template-columns:55px 1fr auto;gap:8px;background:#f8faf7;border:1px solid #e3e8e4;border-radius:10px}.hidden{display:none}.import-mask{position:fixed;z-index:20;inset:0;display:grid;place-items:center;background:rgba(23,35,31,.42)}.import-dialog{width:min(720px,calc(100vw - 40px));max-height:calc(100vh - 48px);overflow:auto;padding:24px;background:#fff;border-radius:16px}.import-issues{display:grid;gap:12px}.import-issues section{padding:10px 12px;border-radius:9px;background:#fff5f3}.import-issues h4{margin:0 0 5px;color:#7f2929}.import-dialog ul{margin:0;padding-left:22px;color:#9f3030}.import-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}@media(max-width:900px){.manager-layout{grid-template-columns:1fr}.template-list{min-height:0;border-right:0;border-bottom:1px solid #e4e9e5}.field-grid{grid-template-columns:1fr}.relation-create{flex-wrap:wrap}}
 </style>

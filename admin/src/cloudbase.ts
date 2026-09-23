@@ -62,6 +62,14 @@ export function getErrorMessage(error: unknown, fallback: string): string {
   return message || (code ? `${fallback}（错误码：${code}）` : fallback);
 }
 
+export function getValidationIssues(error: unknown): UnknownRecord[] {
+  const record = asRecord(error);
+  const details = asRecord(record?.details);
+  const issues = details?.validationIssues;
+  if (!Array.isArray(issues)) return [];
+  return issues.map(asRecord).filter((item): item is UnknownRecord => Boolean(item && typeof item.message === 'string'));
+}
+
 export async function signIn(email: string, password: string): Promise<void> {
   try {
     const result = await auth.signInWithPassword({
@@ -113,6 +121,7 @@ export async function callOps<T>(action: string, data: Record<string, unknown> =
     code?: string;
     message?: string;
     requestId?: string;
+    details?: unknown;
   };
   if (!result.success) {
     const messages: Record<string, string> = {
@@ -137,7 +146,7 @@ export async function callOps<T>(action: string, data: Record<string, unknown> =
       : message;
     const messageWithRequestId = result.requestId ? `${baseMessage}（请求 ID：${result.requestId}）` : baseMessage;
     const error = new Error(messageWithRequestId);
-    Object.assign(error, { code: result.code, requestId: result.requestId });
+    Object.assign(error, { code: result.code, requestId: result.requestId, details: result.details });
     throw error;
   }
   return result.data as T;

@@ -57,7 +57,9 @@ test('运营后台支持表格导入导出与基于共享布局的关系图校�
   assert.match(manager, /导出 Excel/);
   assert.match(manager, /导出 CSV/);
   assert.match(manager, /导入预览/);
-  assert.match(manager, /父母子女关系存在祖先循环/);
+  assert.match(manager, /载入草稿修改/);
+  assert.match(manager, /rowIssues\('relation'/);
+  assert.match(manager, /未匹配：/);
   assert.match(manager, /整体替换当前草稿/);
   assert.match(graph, /miniprogram\/utils\/graph-layout\.js/);
   assert.match(graph, /layoutGraph\(props\.persons/);
@@ -73,11 +75,12 @@ test('运营后台支持表格导入导出与基于共享布局的关系图校�
 
 test('示例表格按唯一姓名管理，内部人物与关系标识由服务端维护', function () {
   const manager = read('admin/src/components/ExampleManager.vue');
+  const validation = read('admin/src/example-validation.js');
   const ops = read('cloudfunctions/youpuOpsApi/index.js');
   assert.doesNotMatch(manager, /人物ID|关系ID|起始人物ID|结束人物ID/);
   assert.match(manager, /起始人物姓名/);
   assert.match(manager, /结束人物姓名/);
-  assert.match(manager, /人物姓名重复/);
+  assert.match(validation, /姓名重复/);
   assert.match(manager, /fromPersonName/);
   assert.match(ops, /function generatedExampleId/);
   assert.match(ops, /EXAMPLE_PERSON_NAME_DUPLICATE/);
@@ -101,6 +104,8 @@ test('示例接口提供可观测错误、强写入审计与健康检查', funct
   assert.match(ops, /type: 'ops_request_failed'/);
   assert.match(ops, /async function writeRequiredExampleAudit/);
   assert.match(ops, /EXAMPLE_AUDIT_WRITE_FAILED/);
+  assert.match(ops, /exampleValidation\.validateExampleContent/);
+  assert.match(ops, /details: error\.code && error\.details/);
   assert.match(ops, /async function examplesHealth/);
   assert.match(ops, /'examples\.health': examplesHealth/);
 });
@@ -135,6 +140,8 @@ test('运营端详情失败可重试并展示请求 ID', function () {
   assert.match(manager, /加载示例草稿失败/);
   assert.match(manager, /请求 ID/);
   assert.match(cloudbase, /请求 ID：\$\{result\.requestId\}/);
+  assert.match(cloudbase, /getValidationIssues/);
+  assert.match(cloudbase, /details: result\.details/);
 });
 
 test('示例图谱复用真实家谱的选中连线、定位与只读资料交互', function () {

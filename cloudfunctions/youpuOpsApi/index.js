@@ -1,6 +1,7 @@
 const cloud = require('wx-server-sdk');
 const crypto = require('crypto');
 const participation = require('./participation');
+const exampleValidation = require('./example-validation');
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
@@ -10,9 +11,10 @@ const FEEDBACK_GROUP_SETTINGS_ID = 'active';
 const MODERATION_CONFIG_ID = 'moderation';
 const FEEDBACK_QR_MAX_BYTES = 1024 * 1024;
 class OpsError extends Error {
-  constructor(code, message) {
+  constructor(code, message, details) {
     super(message);
     this.code = code;
+    if (details) this.details = details;
   }
 }
 
@@ -42,8 +44,28 @@ function generatedExampleId(kind, used) {
   return id;
 }
 
+function exampleValidationMessage(code) {
+  const messages = {
+    EXAMPLE_PERSON_NAME_REQUIRED: '每位示例人物都需要姓名',
+    EXAMPLE_PERSON_NAME_DUPLICATE: '示例人物姓名不能重复，请修改后再保存',
+    EXAMPLE_RELATION_PERSON_NOT_FOUND: '示例关系中的人物姓名必须与人物表完全一致',
+    EXAMPLE_INVALID_RELATION: '示例关系信息不完整',
+    EXAMPLE_RELATION_DUPLICATE: '示例关系不能重复',
+    EXAMPLE_RELATION_CYCLE: '示例父母子女关系不能形成循环',
+    EXAMPLE_MIN_PERSONS: '示例家谱至少需要 3 位人物',
+    EXAMPLE_MAX_PERSONS: '示例家谱最多支持 50 位人物',
+    EXAMPLE_MIN_RELATIONS: '示例家谱至少需要 2 条关系',
+    EXAMPLE_MAX_RELATIONS: '示例家谱最多支持 100 条关系'
+  };
+  return messages[code] || '示例家谱内容校验失败，请修改后再保存';
+}
+
 function normalizeExampleContent(input, existingContent) {
   const source = input || {};
+  const validationIssues = exampleValidation.validateExampleContent(exampleValidation.resolveNamesForValidation(source));
+  if (validationIssues.length) {
+    throw new OpsError(validationIssues[0].code, exampleValidationMessage(validationIssues[0].code), { validationIssues: validationIssues });
+  }
   const family = source.family || {};
   const previous = existingContent || {};
   const previousPersons = Array.isArray(previous.persons) ? previous.persons : [];
@@ -1977,6 +1999,7 @@ exports.main = async function (event, context) {
       success: false,
       code: error.code || 'SERVER_ERROR',
       message: error.code ? error.message : '运营服务暂时不可用',
+      details: error.code && error.details ? error.details : undefined,
       requestId: requestId
     };
   }
