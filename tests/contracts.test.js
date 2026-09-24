@@ -131,6 +131,10 @@ test('关于页使用正式版实际版本并按最新在前展示受控更新�
   const verifier = fs.readFileSync(path.join(root, 'deployment/verify-release-note.mjs'), 'utf8');
   assert.deepEqual(releaseInfo.validateReleaseNotes(releaseNotes), [
     {
+      version: '1.4.0',
+      summary: '优化家谱图效果。'
+    },
+    {
       version: '1.2.9',
       summary: '新增家谱横竖屏切换与横屏沉浸浏览，精简画布操作并优化竖屏底部空间。'
     },

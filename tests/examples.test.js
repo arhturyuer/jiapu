@@ -66,11 +66,22 @@ test('运营后台支持表格导入导出与基于共享布局的关系图校�
   assert.match(graph, /selectRelation/);
   assert.match(graph, /selectPerson/);
   assert.match(graph, /class="relation-hit"/);
-  assert.match(graph, /nodeHeight\.value/);
+  assert.match(graph, /nodeHeight = computed/);
   assert.match(graph, /:height="nodeHeight"/);
+  assert.match(graph, /line\.relationIds/);
+  assert.match(graph, /chooseLine\(hit\)/);
+  assert.match(graph, /pendingRelationIds/);
+  assert.match(graph, /layout\.crossings/);
+  assert.doesNotMatch(graph, /function segment\(style:/);
   assert.doesNotMatch(graph, /height="116"/);
   assert.doesNotMatch(graph, /relation-hit" :class="\{ selected:/);
   assert.doesNotMatch(graph, /\.relation-hit\.selected/);
+  const userPage = read('miniprogram/pages/tree/index.js');
+  const examplePage = read('miniprogram/pages/example/index.js');
+  const userCanvas = read('miniprogram/pages/tree/index.wxml');
+  const exampleCanvas = read('miniprogram/pages/example/index.wxml');
+  for (const source of [userPage, examplePage]) assert.match(source, /crossings: result\.crossings/);
+  for (const source of [userCanvas, exampleCanvas]) assert.match(source, /wx:for="\{\{crossings\}\}"/);
 });
 
 test('示例表格按唯一姓名管理，内部人物与关系标识由服务端维护', function () {

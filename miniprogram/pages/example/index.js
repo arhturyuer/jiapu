@@ -20,7 +20,7 @@ function decodedScene(value) {
 Page({
   data: {
     selectedKinship: null,
-    loading: true, error: '', slug: '', example: null, rawPersons: [], rawRelations: [], nodes: [], lines: [], junctions: [],
+    loading: true, error: '', slug: '', example: null, rawPersons: [], rawRelations: [], nodes: [], lines: [], junctions: [], crossings: [],
     canvasWidth: 750, canvasHeight: 900, graphScale: 1, graphX: 0, graphY: 0, graphScaleMin: 0.32, graphZoomClass: 'zoom-detail',
     pageOrientation: 'portrait', isLandscape: false, orientationChanging: false,
     collapsedPersonIds: [], hiddenBranchCount: 0, canExpandAll: false, nameLayout: 'horizontal', showChildRankBadge: false, showGenderBadge: false, showGenderColors: true, autoCollapseEnabled: true, viewMode: 'full', viewpointId: '', viewpointName: '',
@@ -146,7 +146,7 @@ Page({
     const viewpoint = this.data.rawPersons.find(function (person) { return person._id === viewpointId; });
     const self = this;
     this._lastLayout = result;
-    this.setData(Object.assign({ selectedKinship: this.data.showMemberSheet ? kinship.memberKinshipCard(kinshipDetails, selectedPersonId, viewpoint ? viewpoint.name : '', this.data.rawPersons) : null, nodes: result.nodes, lines: result.lines, junctions: result.junctions || [], canvasWidth: result.width, canvasHeight: result.height, viewpointName: viewpoint ? viewpoint.name : '', hiddenBranchCount: result.hiddenCount || 0, canExpandAll: (result.hiddenCount || 0) > 0 && this.data.rawPersons.length <= MAX_INTERACTIVE_NODES }, optionsValue.statePatch || {}), function () {
+    this.setData(Object.assign({ selectedKinship: this.data.showMemberSheet ? kinship.memberKinshipCard(kinshipDetails, selectedPersonId, viewpoint ? viewpoint.name : '', this.data.rawPersons) : null, nodes: result.nodes, lines: result.lines, junctions: result.junctions || [], crossings: result.crossings || [], canvasWidth: result.width, canvasHeight: result.height, viewpointName: viewpoint ? viewpoint.name : '', hiddenBranchCount: result.hiddenCount || 0, canExpandAll: (result.hiddenCount || 0) > 0 && this.data.rawPersons.length <= MAX_INTERACTIVE_NODES }, optionsValue.statePatch || {}), function () {
       if (optionsValue.preserveViewport) return;
       if (mode === 'perspective' && viewpointId) self.fitGraph(viewpointId, false, { minimumFocusScale: 0.6 }); else self.fitGraph('', true);
     });

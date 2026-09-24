@@ -85,6 +85,20 @@ function drawLines(ctx, layout, sizing) {
     ctx.lineWidth = line.lineRole === 'spouse' ? 5 : line.lineRole === 'rail' ? 3 : 4;
     ctx.stroke();
   });
+  (layout.crossings || []).forEach(function (crossing) {
+    const x = sizing.graphX + crossing.x;
+    const y = sizing.graphY + crossing.y;
+    ctx.beginPath();
+    ctx.arc(x, y, 7, 0, Math.PI * 2);
+    ctx.fillStyle = '#F7F4EC';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(x, y - 7);
+    ctx.lineTo(x, y + 7);
+    ctx.strokeStyle = crossing.isSpouse ? '#829D91' : '#A6B7AE';
+    ctx.lineWidth = 4;
+    ctx.stroke();
+  });
   (layout.junctions || []).forEach(function (junction) {
     ctx.beginPath();
     ctx.arc(sizing.graphX + junction.x, sizing.graphY + junction.y, 7, 0, Math.PI * 2);

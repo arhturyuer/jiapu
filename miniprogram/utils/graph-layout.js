@@ -24,6 +24,8 @@ const JUNCTION_RADIUS = 7;
 const LINE_OVERLAP = 2;
 const MAX_ANIMATED_CHILDREN = 12;
 const FAMILY_RAIL_CLEARANCE = 24;
+const FAMILY_RAIL_SPACING = 24;
+const CROSSING_RADIUS = 7;
 const kinship = require('./kinship');
 const personGenderDisplay = require('./person-gender');
 const childRank = require('./child-rank');
@@ -779,6 +781,7 @@ function createSegment(id, type, lineRole, x1, y1, x2, y2, options) {
     flowStep: typeof optionsValue.flowStep === 'number' ? optionsValue.flowStep : -1,
     flowRole: optionsValue.flowRole || '',
     familyKey: optionsValue.familyKey || '',
+    relationIds: optionsValue.relationIds || [],
     railLane: typeof optionsValue.railLane === 'number' ? optionsValue.railLane : -1,
     style: 'left:' + (x1 - offsetX) + 'rpx;top:' + (y1 - offsetY) + 'rpx;width:' + (length + overlap) + 'rpx;transform:rotate(' + angle + 'deg);'
   };
@@ -786,6 +789,111 @@ function createSegment(id, type, lineRole, x1, y1, x2, y2, options) {
 
 function pairKey(firstId, secondId) {
   return firstId < secondId ? firstId + '|' + secondId : secondId + '|' + firstId;
+}
+
+function createSpouseConnections(nodesById, relations, selectedPersonId, metrics) {
+  const lines = [];
+  const junctions = [];
+  const byPair = {};
+  const spouseRelations = relations.filter(function (relation) { return relation.type === 'spouse'; });
+  const spouseCounts = {};
+  spouseRelations.forEach(function (relation) {
+    spouseCounts[relation.fromPersonId] = (spouseCounts[relation.fromPersonId] || 0) + 1;
+    spouseCounts[relation.toPersonId] = (spouseCounts[relation.toPersonId] || 0) + 1;
+  });
+  const nodesByRow = {};
+  Object.keys(nodesById).forEach(function (id) {
+    const node = nodesById[id];
+    if (!nodesByRow[node.y]) nodesByRow[node.y] = [];
+    nodesByRow[node.y].push(node);
+  });
+  Object.keys(nodesByRow).forEach(function (row) {
+    nodesByRow[row].sort(function (first, second) { return first.x - second.x || first._id.localeCompare(second._id); });
+  });
+
+  const routes = spouseRelations.map(function (relation) {
+    const first = nodesById[relation.fromPersonId];
+    const second = nodesById[relation.toPersonId];
+    if (!first || !second) return null;
+    const left = first.x <= second.x ? first : second;
+    const right = left === first ? second : first;
+    const between = (nodesByRow[left.y] || []).filter(function (node) {
+      return node._id !== left._id && node._id !== right._id &&
+        node.x < right.x && node.x + metrics.nodeWidth > left.x + metrics.nodeWidth;
+    });
+    return { relation: relation, first: first, second: second, left: left, right: right, remote: between.length > 0 };
+  }).filter(Boolean);
+
+  const sidePorts = {};
+  routes.forEach(function (route) {
+    [route.left, route.right].forEach(function (node) {
+      const direction = node === route.left ? 1 : -1;
+      const key = node._id + ':' + direction;
+      if (!sidePorts[key]) sidePorts[key] = [];
+      sidePorts[key].push({ route: route, node: node, direction: direction });
+    });
+  });
+  const maxSideCount = Math.max(1, ...Object.keys(sidePorts).map(function (key) { return sidePorts[key].length; }));
+  const occupiedPorts = {};
+  let maxPortLane = 0;
+  routes.slice().sort(function (first, second) {
+    return Number(first.remote) - Number(second.remote) || first.relation._id.localeCompare(second.relation._id);
+  }).forEach(function (route) {
+    const leftKey = route.left._id + ':1';
+    const rightKey = route.right._id + ':-1';
+    if (!occupiedPorts[leftKey]) occupiedPorts[leftKey] = new Set();
+    if (!occupiedPorts[rightKey]) occupiedPorts[rightKey] = new Set();
+    for (let lane = 0; lane < 2 * maxSideCount; lane += 1) {
+      if (occupiedPorts[leftKey].has(lane) || occupiedPorts[rightKey].has(lane)) continue;
+      occupiedPorts[leftKey].add(lane);
+      occupiedPorts[rightKey].add(lane);
+      route.portLane = lane;
+      maxPortLane = Math.max(maxPortLane, lane);
+      break;
+    }
+  });
+  const portSpacing = Math.min(20, (metrics.nodeHeight - 36) / (2 * Math.ceil(maxPortLane / 2 || 1)));
+  routes.forEach(function (route) {
+    const lane = route.portLane;
+    const offset = lane === 0 ? 0 : (lane % 2 ? -1 : 1) * Math.ceil(lane / 2) * portSpacing;
+    route.portY = route.left.y + metrics.nodeHeight / 2 + offset;
+  });
+  routes.forEach(function (route) {
+    const relation = route.relation;
+    const key = pairKey(route.first._id, route.second._id);
+    const familyKey = 'spouse:' + key;
+    const relationIds = [relation._id];
+    const startX = route.left.x + metrics.nodeWidth;
+    const endX = route.right.x;
+    const y = route.portY;
+    // The card layer covers the middle of a remote couple's straight line.
+    const line = createSegment('spouse-' + relation._id, 'spouse', 'spouse', startX, y, endX, y,
+      { familyKey: familyKey, relationIds: relationIds });
+    if (line) lines.push(line);
+    let junctionX = (startX + endX) / 2;
+    if (route.remote) {
+      const hub = (spouseCounts[route.first._id] || 0) >= (spouseCounts[route.second._id] || 0) ? route.first : route.second;
+      const remote = hub === route.left ? route.right : route.left;
+      const row = nodesByRow[remote.y];
+      const remoteIndex = row.findIndex(function (node) { return node._id === remote._id; });
+      const neighbor = row[remoteIndex + (remote === route.left ? 1 : -1)];
+      junctionX = remote === route.left
+        ? (remote.x + metrics.nodeWidth + neighbor.x) / 2
+        : (neighbor.x + metrics.nodeWidth + remote.x) / 2;
+    } else {
+      junctionX = (startX + endX) / 2;
+    }
+    const junction = {
+      _id: 'junction-' + relation._id, x: junctionX, y: y,
+      parentIds: [route.first._id, route.second._id],
+      flowStarts: [[startX, y, junctionX, y], [endX, y, junctionX, y]],
+      isActive: selectedPersonId === route.first._id || selectedPersonId === route.second._id
+    };
+    junction.style = 'left:' + (junction.x - JUNCTION_RADIUS) + 'rpx;top:' + (junction.y - JUNCTION_RADIUS) + 'rpx;';
+    byPair[key] = junction;
+    junctions.push(junction);
+  });
+  return { lines: lines, junctions: junctions, byPair: byPair };
 }
 
 function assignFamilyRailLanes(sourceGroups, nodesById, relations, metrics) {
@@ -801,15 +909,13 @@ function assignFamilyRailLanes(sourceGroups, nodesById, relations, metrics) {
     const parentBottom = Math.max.apply(null, group.parentIds.map(function (parentId) {
       return nodesById[parentId].y + metrics.nodeHeight;
     }));
-    const childCenters = group.children.map(function (child) { return child.x + metrics.nodeWidth / 2; });
+    const childCenters = group.children.map(function (child) { return group.childPorts[child._id]; });
     group.childTop = childTop;
     group.parentBottom = parentBottom;
     group.minX = Math.min.apply(null, childCenters.concat(group.source.x));
     group.maxX = Math.max.apply(null, childCenters.concat(group.source.x));
     group.rowKey = String(childTop);
-    group.requiresDedicatedLane = group.parentIds.some(function (parentId) {
-      return (spouseCounts[parentId] || 0) > 1;
-    });
+    group.requiresDedicatedLane = group.parentIds.some(function (parentId) { return (spouseCounts[parentId] || 0) > 1; });
     return group;
   });
   const groupsByRow = {};
@@ -818,89 +924,103 @@ function assignFamilyRailLanes(sourceGroups, nodesById, relations, metrics) {
     groupsByRow[group.rowKey].push(group);
   });
 
+  const requiredShifts = [];
   Object.keys(groupsByRow).forEach(function (rowKey) {
     const rowGroups = groupsByRow[rowKey].sort(function (first, second) {
       return first.minX - second.minX || first.maxX - second.maxX || first._id.localeCompare(second._id);
     });
     const lanes = [];
     rowGroups.forEach(function (group) {
-      let laneIndex = -1;
-      if (!group.requiresDedicatedLane) {
-        laneIndex = lanes.findIndex(function (lane) {
-          return !lane.isDedicated && group.minX > lane.maxX + LINE_OVERLAP;
+      let laneIndex = lanes.findIndex(function (lane) {
+        return lane.every(function (other) {
+          const intervalsOverlap = group.minX <= other.maxX + LINE_OVERLAP && other.minX <= group.maxX + LINE_OVERLAP;
+          const sharedMultiSpouseParent = (group.requiresDedicatedLane || other.requiresDedicatedLane) &&
+            group.parentIds.some(function (id) { return other.parentIds.indexOf(id) >= 0; });
+          return !intervalsOverlap && !sharedMultiSpouseParent;
         });
-      }
+      });
       if (laneIndex < 0) {
         laneIndex = lanes.length;
-        lanes.push({ maxX: group.maxX, isDedicated: group.requiresDedicatedLane });
-      } else {
-        lanes[laneIndex].maxX = group.maxX;
+        lanes.push([]);
       }
+      lanes[laneIndex].push(group);
       group.railLane = laneIndex;
     });
 
+    // Reorder occupied lanes when it reduces vertical trunks or child drops
+    // crossing another family's horizontal rail. Lane membership stays fixed.
+    if (lanes.length > 1 && lanes.length <= 12 && rowGroups.length <= 48) {
+      function insideRail(x, group) {
+        return x > group.minX + CROSSING_RADIUS && x < group.maxX - CROSSING_RADIUS;
+      }
+      function crossingCost() {
+        let count = 0;
+        for (let upperIndex = 0; upperIndex < lanes.length; upperIndex += 1) {
+          for (let lowerIndex = upperIndex + 1; lowerIndex < lanes.length; lowerIndex += 1) {
+            lanes[upperIndex].forEach(function (upper) {
+              lanes[lowerIndex].forEach(function (lower) {
+                upper.children.forEach(function (child) {
+                  if (insideRail(upper.childPorts[child._id], lower)) count += 1;
+                });
+                if (insideRail(lower.source.x, upper)) count += 1;
+              });
+            });
+          }
+        }
+        return count;
+      }
+      let bestCost = crossingCost();
+      for (let pass = 0; pass < lanes.length; pass += 1) {
+        let improved = false;
+        for (let index = 0; index < lanes.length - 1; index += 1) {
+          const previous = lanes[index];
+          lanes[index] = lanes[index + 1];
+          lanes[index + 1] = previous;
+          const cost = crossingCost();
+          if (cost < bestCost) { bestCost = cost; improved = true; }
+          else {
+            lanes[index + 1] = lanes[index];
+            lanes[index] = previous;
+          }
+        }
+        if (!improved) break;
+      }
+      lanes.forEach(function (lane, index) {
+        lane.forEach(function (group) { group.railLane = index; });
+      });
+    }
+
     const rowParentBottom = Math.max.apply(null, rowGroups.map(function (group) { return group.parentBottom; }));
     const childTop = rowGroups[0].childTop;
-    const lowerRailY = rowParentBottom + FAMILY_RAIL_CLEARANCE;
-    const upperRailY = childTop - FAMILY_RAIL_CLEARANCE;
+    const railUpperLimit = childTop;
+    const available = railUpperLimit - rowParentBottom - FAMILY_RAIL_CLEARANCE * 2;
+    const span = (lanes.length - 1) * FAMILY_RAIL_SPACING;
+    if (available < span) requiredShifts.push({ childTop: childTop, extra: span - available });
+    const firstRailY = rowParentBottom + FAMILY_RAIL_CLEARANCE + Math.max(0, available - span) / 2;
     rowGroups.forEach(function (group) {
-      if (lanes.length === 1) {
-        group.railY = Math.min(
-          group.childTop - 40,
-          group.parentBottom + Math.max(40, (group.childTop - group.parentBottom) * 0.44)
-        );
-        return;
-      }
-      group.railY = lowerRailY + (upperRailY - lowerRailY) * group.railLane / (lanes.length - 1);
+      group.railY = firstRailY + group.railLane * FAMILY_RAIL_SPACING;
     });
   });
-  return groups;
+  return { groups: groups, requiredShifts: requiredShifts };
 }
 
 function createFamilyConnections(nodesById, relations, selectedPersonId, metrics) {
-  const lines = [];
-  const junctions = [];
-  const spouseJunctions = {};
-  const spouseRelations = relations.filter(function (relation) { return relation.type === 'spouse'; });
-
-  spouseRelations.forEach(function (relation) {
-    const first = nodesById[relation.fromPersonId];
-    const second = nodesById[relation.toPersonId];
-    if (!first || !second) return;
-    const left = first.x <= second.x ? first : second;
-    const right = left === first ? second : first;
-    const startX = left.x + metrics.nodeWidth;
-    const endX = right.x;
-    const y = left.y + metrics.nodeHeight / 2;
-    const key = pairKey(first._id, second._id);
-    const junction = {
-      _id: 'junction-' + relation._id,
-      x: (startX + endX) / 2,
-      y: y,
-      parentIds: [first._id, second._id],
-      flowStarts: [
-        [startX, y, (startX + endX) / 2, y],
-        [endX, y, (startX + endX) / 2, y]
-      ],
-      isActive: selectedPersonId === first._id || selectedPersonId === second._id
-    };
-    junction.style = 'left:' + (junction.x - JUNCTION_RADIUS) + 'rpx;top:' + (junction.y - JUNCTION_RADIUS) + 'rpx;';
-    spouseJunctions[key] = junction;
-    const spouseLine = createSegment('spouse-' + relation._id, 'spouse', 'spouse', startX, y, endX, y);
-    if (spouseLine) lines.push(spouseLine);
-    junctions.push(junction);
-  });
+  const spouseConnections = createSpouseConnections(nodesById, relations, selectedPersonId, metrics);
+  const lines = spouseConnections.lines;
+  const junctions = spouseConnections.junctions;
+  const spouseJunctions = spouseConnections.byPair;
 
   const parentsByChild = {};
   relations.forEach(function (relation) {
     if (relation.type !== 'parent_child' || !nodesById[relation.fromPersonId] || !nodesById[relation.toPersonId]) return;
     if (!parentsByChild[relation.toPersonId]) parentsByChild[relation.toPersonId] = [];
-    parentsByChild[relation.toPersonId].push(relation.fromPersonId);
+    parentsByChild[relation.toPersonId].push(relation);
   });
 
   const sourceGroups = {};
   Object.keys(parentsByChild).forEach(function (childId) {
-    const parentIds = parentsByChild[childId];
+    const childRelations = parentsByChild[childId];
+    const parentIds = Array.from(new Set(childRelations.map(function (relation) { return relation.fromPersonId; })));
     let pairedParents = [];
     let pairedKey = '';
     for (let firstIndex = 0; firstIndex < parentIds.length && !pairedKey; firstIndex += 1) {
@@ -918,9 +1038,13 @@ function createFamilyConnections(nodesById, relations, selectedPersonId, metrics
       const child = nodesById[childId];
       const rowKey = key + '@' + child.y;
       if (!sourceGroups[rowKey]) {
-        sourceGroups[rowKey] = { _id: rowKey, source: source, parentIds: ids, children: [] };
+        sourceGroups[rowKey] = { _id: rowKey, source: source, parentIds: ids, children: [],
+          childRelationIds: {}, childPorts: {} };
       }
       sourceGroups[rowKey].children.push(child);
+      sourceGroups[rowKey].childRelationIds[childId] = childRelations.filter(function (relation) {
+        return ids.indexOf(relation.fromPersonId) >= 0;
+      }).map(function (relation) { return relation._id; });
     }
 
     if (pairedKey) {
@@ -936,26 +1060,50 @@ function createFamilyConnections(nodesById, relations, selectedPersonId, metrics
     });
   });
 
-  const familyGroups = assignFamilyRailLanes(sourceGroups, nodesById, relations, metrics);
+  const childGroups = {};
+  Object.keys(sourceGroups).forEach(function (groupKey) {
+    const group = sourceGroups[groupKey];
+    group.children.forEach(function (child) {
+      if (!childGroups[child._id]) childGroups[child._id] = [];
+      childGroups[child._id].push(group);
+    });
+  });
+  Object.keys(childGroups).forEach(function (childId) {
+    const groups = childGroups[childId].sort(function (first, second) { return first._id.localeCompare(second._id); });
+    const child = nodesById[childId];
+    const spacing = Math.min(12, (metrics.nodeWidth - 24) / Math.max(1, groups.length - 1));
+    groups.forEach(function (group, index) {
+      group.childPorts[childId] = child.x + metrics.nodeWidth / 2 + (index - (groups.length - 1) / 2) * spacing;
+    });
+  });
+
+  const allocation = assignFamilyRailLanes(sourceGroups, nodesById, relations, metrics);
+  const familyGroups = allocation.groups;
   familyGroups.forEach(function (group) {
     const groupKey = group._id;
     const source = group.source;
     const railY = group.railY;
+    const relationIds = group.children.reduce(function (ids, child) {
+      return ids.concat(group.childRelationIds[child._id] || []);
+    }, []);
     let segment = createSegment('trunk-' + groupKey, 'parent', 'trunk', source.x, source.y, source.x, railY, {
       familyKey: groupKey,
-      railLane: group.railLane
+      railLane: group.railLane,
+      relationIds: relationIds
     });
     if (segment) lines.push(segment);
     segment = createSegment('rail-' + groupKey, 'parent', 'rail', group.minX, railY, group.maxX, railY, {
       familyKey: groupKey,
-      railLane: group.railLane
+      railLane: group.railLane,
+      relationIds: relationIds
     });
     if (segment) lines.push(segment);
     group.children.forEach(function (child) {
-      const childX = child.x + metrics.nodeWidth / 2;
+      const childX = group.childPorts[child._id];
       const drop = createSegment('drop-' + groupKey + '-' + child._id, 'parent', 'drop', childX, railY, childX, child.y, {
         familyKey: groupKey,
-        railLane: group.railLane
+        railLane: group.railLane,
+        relationIds: group.childRelationIds[child._id]
       });
       if (drop) lines.push(drop);
     });
@@ -1015,7 +1163,7 @@ function createFamilyConnections(nodesById, relations, selectedPersonId, metrics
     if (trunkFlow) lines.push(trunkFlow);
 
     activeChildren.forEach(function (child) {
-      const childX = child.x + metrics.nodeWidth / 2;
+      const childX = group.childPorts[child._id];
       const path = [
         [source.x, railY, childX, railY],
         [childX, railY, childX, child.y]
@@ -1047,7 +1195,31 @@ function createFamilyConnections(nodesById, relations, selectedPersonId, metrics
   junctions.forEach(function (junction) {
     junction.style = 'left:' + (junction.x - JUNCTION_RADIUS) + 'rpx;top:' + (junction.y - JUNCTION_RADIUS) + 'rpx;';
   });
-  return { lines: lines, junctions: junctions };
+  return { lines: lines, junctions: junctions, requiredShifts: allocation.requiredShifts,
+    requiredTopShift: 0 };
+}
+
+function findLineCrossings(lines) {
+  const horizontal = lines.filter(function (line) { return !line.isFlow && Math.abs(line.y1 - line.y2) < 0.01; });
+  const vertical = lines.filter(function (line) { return !line.isFlow && Math.abs(line.x1 - line.x2) < 0.01; });
+  const seen = new Set();
+  const crossings = [];
+  horizontal.forEach(function (rail) {
+    const minX = Math.min(rail.x1, rail.x2), maxX = Math.max(rail.x1, rail.x2);
+    vertical.forEach(function (drop) {
+      if (rail.familyKey === drop.familyKey) return;
+      const minY = Math.min(drop.y1, drop.y2), maxY = Math.max(drop.y1, drop.y2);
+      if (drop.x1 <= minX + CROSSING_RADIUS || drop.x1 >= maxX - CROSSING_RADIUS ||
+        rail.y1 <= minY + CROSSING_RADIUS || rail.y1 >= maxY - CROSSING_RADIUS) return;
+      const key = drop.x1.toFixed(2) + ':' + rail.y1.toFixed(2);
+      if (seen.has(key)) return;
+      seen.add(key);
+      crossings.push({ _id: 'crossing-' + key, x: drop.x1, y: rail.y1,
+        isSpouse: drop.lineRole === 'spouse',
+        style: 'left:' + (drop.x1 - CROSSING_RADIUS) + 'rpx;top:' + (rail.y1 - CROSSING_RADIUS) + 'rpx;' });
+    });
+  });
+  return crossings;
 }
 
 function layoutGraph(personsInput, relationsInput, options) {
@@ -1133,11 +1305,28 @@ function layoutGraph(personsInput, relationsInput, options) {
     canvasWidth = Math.max(750, Math.max.apply(null, nodes.map(function (node) { return node.x; })) + metrics.nodeWidth + metrics.marginX);
     canvasHeight = Math.max(900, Math.max.apply(null, nodes.map(function (node) { return node.y; })) + metrics.nodeHeight + metrics.marginY);
   }
-  const connections = createFamilyConnections(nodesById, relations, optionsValue.selectedPersonId || '', metrics);
+  let connections = createFamilyConnections(nodesById, relations, optionsValue.selectedPersonId || '', metrics);
+  const shiftsByRow = {};
+  connections.requiredShifts.forEach(function (shift) {
+    shiftsByRow[shift.childTop] = Math.max(shiftsByRow[shift.childTop] || 0, shift.extra);
+  });
+  const rowShifts = Object.keys(shiftsByRow).map(Number).sort(function (a, b) { return a - b; });
+  const topShift = connections.requiredTopShift;
+  if (rowShifts.length || topShift) {
+    nodes.forEach(function (node) {
+      const extra = rowShifts.reduce(function (sum, row) { return sum + (node.y >= row ? shiftsByRow[row] : 0); }, topShift);
+      node.y += extra;
+      node.style = 'left:' + node.x + 'rpx;top:' + node.y + 'rpx;width:' + metrics.nodeWidth + 'rpx;height:' + metrics.nodeHeight + 'rpx;';
+    });
+    canvasHeight += topShift + rowShifts.reduce(function (sum, row) { return sum + shiftsByRow[row]; }, 0);
+    connections = createFamilyConnections(nodesById, relations, optionsValue.selectedPersonId || '', metrics);
+  }
+  const crossings = findLineCrossings(connections.lines);
   return {
     nodes: nodes,
     lines: connections.lines,
     junctions: connections.junctions,
+    crossings: crossings,
     nameLayout: nameLayout,
     nodeWidth: metrics.nodeWidth,
     nodeHeight: metrics.nodeHeight,

@@ -82,6 +82,8 @@
           <view class="flow-runner flow-step-{{item.flowStep}}" wx:if="{{item.isAnimatedFlow}}"></view>
         </view>
 
+        <view wx:for="{{crossings}}" wx:key="_id" class="line-crossing {{item.isSpouse ? 'is-spouse' : ''}}" style="{{item.style}}"></view>
+
         <view
           wx:for="{{junctions}}"
           wx:key="_id"
