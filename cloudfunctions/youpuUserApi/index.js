@@ -2800,6 +2800,13 @@ function publicExampleContent(template) {
     shareTitle: cleanText(template.shareTitle, 60),
     shareDescription: cleanText(template.shareDescription, 100),
     publishedVersion: Number(template.publishedVersion) || 0,
+    defaultDisplayPreference: {
+      nameLayout: template.publishedDisplayPreference && template.publishedDisplayPreference.nameLayout === 'vertical' ? 'vertical' : 'horizontal',
+      showChildRankBadge: !!(template.publishedDisplayPreference && template.publishedDisplayPreference.showChildRankBadge === true),
+      showGenderBadge: !!(template.publishedDisplayPreference && template.publishedDisplayPreference.showGenderBadge === true),
+      showGenderColors: !template.publishedDisplayPreference || template.publishedDisplayPreference.showGenderColors !== false,
+      autoCollapseEnabled: !template.publishedDisplayPreference || template.publishedDisplayPreference.autoCollapseEnabled !== false
+    },
     personCount: people.length,
     relationCount: relations.length,
     persons: people,

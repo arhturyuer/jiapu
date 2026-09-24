@@ -192,6 +192,49 @@ test('示例家谱仅在没有本地显示偏好时采用新默认值', function
   assert.equal(exampleDisplayPreference.normalize({ autoCollapseEnabled: false }).autoCollapseEnabled, false);
 });
 
+test('示例已发布默认值只影响没有本地偏好的设备，首次修改保留其他默认项', function () {
+  const previousWx = global.wx;
+  const storage = {};
+  const defaults = { nameLayout: 'vertical', showChildRankBadge: true, showGenderBadge: true, showGenderColors: false, autoCollapseEnabled: false };
+  global.wx = {
+    getStorageSync: function (key) { return storage[key]; },
+    setStorageSync: function (key, value) { storage[key] = value; }
+  };
+  try {
+    assert.deepEqual(exampleDisplayPreference.get('demo', defaults), defaults);
+    const saved = exampleDisplayPreference.saveField('demo', 'showGenderBadge', false, defaults);
+    assert.deepEqual(saved, { ...defaults, showGenderBadge: false });
+    assert.deepEqual(exampleDisplayPreference.get('demo', { ...defaults, nameLayout: 'horizontal' }), saved);
+    assert.deepEqual(exampleDisplayPreference.get('other', defaults), defaults);
+    storage.youpu_example_name_layout_legacy = 'vertical';
+    assert.equal(exampleDisplayPreference.get('legacy', { ...defaults, nameLayout: 'horizontal' }).nameLayout, 'vertical');
+    storage.youpu_example_name_layout_legacy = 'horizontal';
+    assert.equal(exampleDisplayPreference.get('legacy', defaults).nameLayout, 'horizontal');
+  } finally {
+    global.wx = previousWx;
+  }
+});
+
+test('示例设置页显示当前示例的发布默认值', async function () {
+  const previousWx = global.wx;
+  const previousGetCurrentPages = global.getCurrentPages;
+  const defaults = { nameLayout: 'vertical', showChildRankBadge: true, showGenderBadge: false, showGenderColors: false, autoCollapseEnabled: false };
+  global.wx = { getStorageSync: function () { return undefined; } };
+  global.getCurrentPages = function () { return [{ data: { example: { slug: 'demo', title: '虚构示例', defaultDisplayPreference: defaults } } }, {}]; };
+  try {
+    const page = loadPage({ getCurrentFamily: function () { return null; } });
+    await page.onLoad({ exampleSlug: 'demo' });
+    assert.equal(page.data.family.name, '虚构示例');
+    assert.equal(page.data.nameLayout, 'vertical');
+    assert.equal(page.data.showChildRankBadge, true);
+    assert.equal(page.data.showGenderColors, false);
+    assert.equal(page.data.autoCollapseEnabled, false);
+  } finally {
+    global.wx = previousWx;
+    global.getCurrentPages = previousGetCurrentPages;
+  }
+});
+
 test('智能收起开关保存 false 并按家谱使缓存失效', async function () {
   const previousCall = api.call;
   const invalidations = [];

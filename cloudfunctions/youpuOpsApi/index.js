@@ -1674,6 +1674,22 @@ function publicExampleTemplate(template) {
   };
 }
 
+function normalizeExampleDisplayPreference(input, fallback) {
+  const defaults = { nameLayout: 'horizontal', showChildRankBadge: false, showGenderBadge: false, showGenderColors: true, autoCollapseEnabled: true };
+  const source = input === undefined ? (fallback || defaults) : input;
+  assert(source && typeof source === 'object' && !Array.isArray(source), 'EXAMPLE_DISPLAY_PREFERENCE_INVALID', '示例默认展示设置格式无效');
+  const fields = Object.keys(defaults);
+  Object.keys(source).forEach(function (field) {
+    assert(fields.includes(field), 'EXAMPLE_DISPLAY_PREFERENCE_INVALID', '示例默认展示设置包含未知字段');
+  });
+  const result = Object.assign({}, defaults, source);
+  assert(['horizontal', 'vertical'].includes(result.nameLayout), 'EXAMPLE_DISPLAY_PREFERENCE_INVALID', '姓名排列设置无效');
+  fields.slice(1).forEach(function (field) {
+    assert(typeof result[field] === 'boolean', 'EXAMPLE_DISPLAY_PREFERENCE_INVALID', '示例默认展示开关必须为布尔值');
+  });
+  return result;
+}
+
 function normalizeExampleMetadata(event, fallback) {
   const source = event || {};
   const existing = fallback || {};
@@ -1742,6 +1758,8 @@ async function examplesDetail(event, context) {
   return {
     template: Object.assign(publicExampleTemplate(template), {
       draftContent: template.draftContent || { family: { name: template.title || '', description: template.description || '' }, persons: [], relations: [] },
+      draftDisplayPreference: normalizeExampleDisplayPreference(undefined, template.draftDisplayPreference),
+      publishedDisplayPreference: normalizeExampleDisplayPreference(undefined, template.publishedDisplayPreference),
       shareTitle: template.shareTitle || '',
       shareDescription: template.shareDescription || ''
     }),
@@ -1761,6 +1779,7 @@ async function examplesCreate(event, context) {
     persons: [{ _id: 'person-1', name: '示例人物一' }, { _id: 'person-2', name: '示例人物二' }, { _id: 'person-3', name: '示例人物三' }],
     relations: [{ _id: 'relation-1', type: 'parent_child', fromPersonId: 'person-1', toPersonId: 'person-2' }, { _id: 'relation-2', type: 'parent_child', fromPersonId: 'person-1', toPersonId: 'person-3' }]
   });
+  const displayPreference = normalizeExampleDisplayPreference(event.draftDisplayPreference);
   return opsMutate(operator, 'examples.create', event, async function (transaction) {
     // CloudBase transactions report a missing document differently across
     // environments. For creation, an absent fixed-ID document is the expected
@@ -1780,6 +1799,7 @@ async function examplesCreate(event, context) {
           shareDescription: meta.shareDescription,
           status: 'draft',
           draftContent: content,
+          draftDisplayPreference: displayPreference,
           publishedVersion: 0,
           createdBy: operator._id,
           createdAt: db.serverDate(),
@@ -1803,11 +1823,12 @@ async function examplesUpdateDraft(event, context) {
     const meta = normalizeExampleMetadata(event, template);
     assert(meta.slug === template.slug, 'EXAMPLE_SLUG_IMMUTABLE', '创建后不能修改示例链接标识');
     const content = normalizeExampleContent(event.draftContent || template.draftContent, template.draftContent);
+    const displayPreference = normalizeExampleDisplayPreference(event.draftDisplayPreference, template.draftDisplayPreference);
     await transaction.collection('example_templates').doc(template._id).update({
-      data: Object.assign({}, meta, { draftContent: content, updatedAt: db.serverDate() })
+      data: Object.assign({}, meta, { draftContent: content, draftDisplayPreference: displayPreference, updatedAt: db.serverDate() })
     });
     await writeRequiredExampleAudit(transaction, operator, 'ops.example.update_draft', template._id, '运营后台编辑', '更新示例草稿', event.requestId);
-    return { templateId: template._id, draftContent: content };
+    return { templateId: template._id, draftContent: content, draftDisplayPreference: displayPreference };
   });
 }
 
@@ -1818,20 +1839,21 @@ async function examplesPublish(event, context) {
     const template = await getExampleTemplate(event.templateId, transaction);
     assert(template.status !== 'archived', 'EXAMPLE_ARCHIVED', '已归档的示例不能发布');
     const content = normalizeExampleContent(template.draftContent, template.draftContent);
+    const displayPreference = normalizeExampleDisplayPreference(undefined, template.draftDisplayPreference);
     const version = Number(template.publishedVersion || 0) + 1;
     const versionId = 'example_version_' + hash(template._id + ':' + version, 32);
     await transaction.collection('example_template_versions').doc(versionId).set({
       data: {
         templateId: template._id,
         version: version,
-        snapshot: { title: template.title, description: template.description, tags: template.tags || [], sortOrder: template.sortOrder || 0, shareTitle: template.shareTitle || '', shareDescription: template.shareDescription || '', content: content },
+        snapshot: { title: template.title, description: template.description, tags: template.tags || [], sortOrder: template.sortOrder || 0, shareTitle: template.shareTitle || '', shareDescription: template.shareDescription || '', content: content, displayPreference: displayPreference },
         publishedBy: operator._id,
         publishedByName: operator.displayName || '',
         publishedAt: db.serverDate()
       }
     });
     await transaction.collection('example_templates').doc(template._id).update({
-      data: { status: 'published', publishedVersion: version, publishedContent: content, publishedAt: db.serverDate(), updatedAt: db.serverDate() }
+      data: { status: 'published', publishedVersion: version, publishedContent: content, publishedDisplayPreference: displayPreference, publishedAt: db.serverDate(), updatedAt: db.serverDate() }
     });
     await writeRequiredExampleAudit(transaction, operator, 'ops.example.publish', template._id, '运营后台发布', '发布示例家谱 v' + version, event.requestId);
     return { templateId: template._id, version: version };
@@ -1861,6 +1883,7 @@ async function examplesRollback(event, context) {
     assert(version && version.templateId === template._id, 'EXAMPLE_VERSION_NOT_FOUND', '示例历史版本不存在');
     const snapshot = version.snapshot || {};
     assert(snapshot.content, 'EXAMPLE_VERSION_INVALID', '示例历史版本不完整');
+    const displayPreference = normalizeExampleDisplayPreference(undefined, snapshot.displayPreference);
     const nextVersion = Number(template.publishedVersion || 0) + 1;
     const nextVersionId = 'example_version_' + hash(template._id + ':' + nextVersion, 32);
     await transaction.collection('example_template_versions').doc(nextVersionId).set({
@@ -1883,7 +1906,9 @@ async function examplesRollback(event, context) {
         shareTitle: snapshot.shareTitle || '',
         shareDescription: snapshot.shareDescription || '',
         draftContent: snapshot.content,
+        draftDisplayPreference: displayPreference,
         publishedContent: snapshot.content,
+        publishedDisplayPreference: displayPreference,
         status: 'published',
         publishedVersion: nextVersion,
         publishedAt: db.serverDate(),

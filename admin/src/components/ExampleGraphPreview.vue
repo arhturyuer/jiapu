@@ -6,15 +6,19 @@ import graphLayout from '../../../miniprogram/utils/graph-layout.js';
 import { computed, ref } from 'vue';
 
 type Row = Record<string, any>;
-const props = defineProps<{ persons: Row[]; relations: Row[]; selectedPersonId?: string; selectedRelationId?: string }>();
+type DisplayPreference = { nameLayout: 'horizontal' | 'vertical'; showChildRankBadge: boolean; showGenderBadge: boolean; showGenderColors: boolean; autoCollapseEnabled: boolean };
+const props = defineProps<{ persons: Row[]; relations: Row[]; displayPreference: DisplayPreference; selectedPersonId?: string; selectedRelationId?: string }>();
 const emit = defineEmits<{ selectPerson: [id: string]; selectRelation: [id: string] }>();
 const zoom = ref(0.72);
 const pan = ref({ x: 0, y: 0 });
 const drag = ref<{ x: number; y: number; panX: number; panY: number } | null>(null);
 const pendingRelationIds = ref<string[]>([]);
 
+const collapsedIds = computed<string[]>(() => props.displayPreference.autoCollapseEnabled
+  ? graphLayout.suggestCollapsedIds(props.persons || [], props.relations || [], { limit: 36 }) : []);
 const layout = computed(() => graphLayout.layoutGraph(props.persons || [], props.relations || [], {
-  mode: 'full', viewpointId: '', collapsedIds: [], selectedPersonId: props.selectedPersonId || ''
+  mode: 'full', viewpointId: '', collapsedIds: collapsedIds.value, nameLayout: props.displayPreference.nameLayout,
+  selectedPersonId: props.selectedPersonId || ''
 }));
 const viewBox = computed(() => `0 0 ${layout.value.width} ${layout.value.height}`);
 const lines = computed<Row[]>(() => (layout.value.lines as Row[]).filter((line: Row) => !line.isFlow));
@@ -49,18 +53,19 @@ function onPointerUp(): void { drag.value = null; }
 
 <template>
   <div class="graph-preview">
-    <div class="graph-preview-tools"><span>实时关系图</span><button type="button" @click="zoom = Math.min(1.6, zoom + .12)">＋</button><button type="button" @click="zoom = Math.max(.35, zoom - .12)">－</button><button type="button" @click="resetView">适配</button></div>
+    <div class="graph-preview-tools"><span>实时关系图 · {{ layout.nodes.length }} / {{ persons.length }} 人</span><button type="button" @click="zoom = Math.min(1.6, zoom + .12)">＋</button><button type="button" @click="zoom = Math.max(.35, zoom - .12)">－</button><button type="button" @click="resetView">适配</button></div>
     <div class="graph-stage" @wheel="onWheel" @pointerdown="onPointerDown" @pointermove="onPointerMove" @pointerup="onPointerUp" @pointercancel="onPointerUp">
       <svg :viewBox="viewBox" :style="{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }" aria-label="示例家谱关系图">
         <line v-for="line in lines" :key="line._id" :x1="line.x1" :y1="line.y1" :x2="line.x2" :y2="line.y2" :class="['graph-line', `line-${line.lineRole}`, { flow: line.isFlow, selected: line.relationIds?.includes(selectedRelationId) }]" />
         <g v-for="crossing in layout.crossings" :key="crossing._id" class="line-crossing" :class="{ 'is-spouse': crossing.isSpouse }"><circle :cx="crossing.x" :cy="crossing.y" r="7"/><line :x1="crossing.x" :x2="crossing.x" :y1="crossing.y - 7" :y2="crossing.y + 7"/></g>
         <line v-for="hit in relationHits" :key="`hit-${hit._id}`" :x1="hit.x1" :y1="hit.y1" :x2="hit.x2" :y2="hit.y2" class="relation-hit" @click.stop="chooseLine(hit)" />
-        <g v-for="node in layout.nodes" :key="node._id" class="graph-node" :class="[node.genderClass, { selected: node._id === selectedPersonId }]" :transform="`translate(${node.x}, ${node.y})`" @click.stop="emit('selectPerson', node._id)">
+        <g v-for="node in layout.nodes" :key="node._id" class="graph-node" :class="[displayPreference.showGenderColors ? node.genderClass : 'gender-neutral', { selected: node._id === selectedPersonId }]" :transform="`translate(${node.x}, ${node.y})`" @click.stop="emit('selectPerson', node._id)">
           <rect class="node-card" :width="nodeWidth" :height="nodeHeight" rx="18"/>
-          <rect class="gender-marker" x="8" y="8" width="38" height="24" rx="12"/>
-          <text x="27" y="25" text-anchor="middle" class="gender-marker-text">{{ node.genderText }}</text>
-          <text :x="nodeWidth / 2" :y="nodeHeight / 2 - 15" text-anchor="middle" class="node-name">{{ node.name || '未命名人物' }}</text>
-          <text :x="nodeWidth / 2" :y="nodeHeight / 2 + 18" text-anchor="middle" class="node-meta">{{ node.relationLabel || node.genderText }}</text>
+          <template v-if="displayPreference.showGenderBadge"><rect class="gender-marker" x="8" y="8" width="38" height="24" rx="12"/><text x="27" y="25" text-anchor="middle" class="gender-marker-text">{{ node.genderText }}</text></template>
+          <template v-if="displayPreference.nameLayout === 'vertical'"><text :x="nodeWidth / 2" y="37" text-anchor="middle" class="node-name node-name-vertical"><tspan v-for="(character,index) in Array.from(node.name || '未命名').slice(0,4)" :key="index" :x="nodeWidth / 2" :dy="index ? 30 : 0">{{ character }}</tspan></text></template>
+          <template v-else><text :x="nodeWidth / 2" :y="nodeHeight / 2 - 15" text-anchor="middle" class="node-name">{{ node.name || '未命名人物' }}</text><text v-if="node.birthDate" :x="nodeWidth / 2" :y="nodeHeight / 2 + 18" text-anchor="middle" class="node-meta">{{ node.birthDate.slice(0,4) }}年</text></template>
+          <template v-if="displayPreference.showChildRankBadge && node.childRankLabel"><rect class="child-rank-background" x="-13" y="-20" width="70" height="31" rx="15"/><text x="22" y="1" text-anchor="middle" class="child-rank-text">{{ node.childRankLabel }}</text></template>
+          <template v-if="node.hiddenDescendantCount > 0"><rect class="branch-count-background" :x="nodeWidth - 55" :y="nodeHeight - 8" width="72" height="28" rx="14"/><text :x="nodeWidth - 19" :y="nodeHeight + 11" text-anchor="middle" class="branch-count-text">+{{ node.hiddenDescendantCount }} 人</text></template>
         </g>
       </svg>
       <p v-if="!layout.nodes.length" class="empty">添加人物和关系后会在这里显示关系图。</p>
@@ -78,4 +83,10 @@ function onPointerUp(): void { drag.value = null; }
 .relation-choice { max-height:160px; padding:10px 12px; display:flex; flex-wrap:wrap; align-items:center; gap:8px; overflow-y:auto; border-top:1px solid #dfe7e2; background:#fffefa; font-size:12px; }
 .relation-choice button { padding:6px 9px; color:#245c4a; background:#fff; border:1px solid #ccd8d1; border-radius:7px; cursor:pointer; }
 .relation-choice .choice-close { margin-left:auto; }
+.graph-node.gender-neutral .node-card { fill:#fffefa; stroke:#d8ded9; }
+.node-name-vertical { font-size:25px; }
+.child-rank-background { fill:#f5e8c9; stroke:#f7f4ec; stroke-width:3; }
+.child-rank-text { fill:#7a4b13; font-size:13px; font-weight:700; }
+.branch-count-background { fill:#245c4a; stroke:#f7f4ec; stroke-width:3; }
+.branch-count-text { fill:#fffefa; font-size:12px; font-weight:700; }
 </style>
