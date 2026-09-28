@@ -42,11 +42,12 @@ function legacyNameLayout(slug) {
   }
 }
 
-function get(slug, exampleDefaults) {
-  const fallbackNameLayout = legacyNameLayout(slug);
+function get(slug, exampleDefaults, publishedVersion) {
+  const version = Number.isInteger(publishedVersion) && publishedVersion > 0 ? publishedVersion : null;
+  const fallbackNameLayout = version ? null : legacyNameLayout(slug);
   try {
     const saved = wx.getStorageSync(EXAMPLE_DISPLAY_PREFERENCE_KEY_PREFIX + slug);
-    if (saved) return normalize(saved, fallbackNameLayout);
+    if (saved && (!version || saved._publishedVersion === version)) return normalize(saved, fallbackNameLayout);
   } catch (error) {
     // A storage read failure is equivalent to having no local preference.
   }
@@ -55,18 +56,21 @@ function get(slug, exampleDefaults) {
   return defaults;
 }
 
-function save(slug, preference) {
+function save(slug, preference, publishedVersion) {
   const normalized = normalize(preference);
   try {
-    wx.setStorageSync(EXAMPLE_DISPLAY_PREFERENCE_KEY_PREFIX + slug, normalized);
+    const value = Number.isInteger(publishedVersion) && publishedVersion > 0
+      ? Object.assign({ _publishedVersion: publishedVersion }, normalized)
+      : normalized;
+    wx.setStorageSync(EXAMPLE_DISPLAY_PREFERENCE_KEY_PREFIX + slug, value);
   } catch (error) {}
   return normalized;
 }
 
-function saveField(slug, field, value, exampleDefaults) {
-  const preference = get(slug, exampleDefaults);
+function saveField(slug, field, value, exampleDefaults, publishedVersion) {
+  const preference = get(slug, exampleDefaults, publishedVersion);
   preference[field] = value;
-  return save(slug, preference);
+  return save(slug, preference, publishedVersion);
 }
 
 module.exports = {

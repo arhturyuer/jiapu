@@ -131,6 +131,10 @@ test('关于页使用正式版实际版本并按最新在前展示受控更新�
   const verifier = fs.readFileSync(path.join(root, 'deployment/verify-release-note.mjs'), 'utf8');
   assert.deepEqual(releaseInfo.validateReleaseNotes(releaseNotes), [
     {
+      version: '1.4.1',
+      summary: '修复示例家谱默认展示设置在用户端未生效的问题。'
+    },
+    {
       version: '1.4.0',
       summary: '优化家谱图效果。'
     },

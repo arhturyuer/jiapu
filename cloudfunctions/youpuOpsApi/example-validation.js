@@ -1,7 +1,7 @@
 const PERSON_MIN = 3;
-const PERSON_MAX = 50;
+const PERSON_MAX = 200;
 const RELATION_MIN = 2;
-const RELATION_MAX = 100;
+const RELATION_MAX = 400;
 
 function text(value) {
   return String(value || '').trim();
@@ -99,7 +99,7 @@ function validateExampleContent(content) {
   const nameRows = new Map();
 
   if (persons.length < PERSON_MIN) issues.push(issue('EXAMPLE_MIN_PERSONS', 'content', 'persons', '示例家谱至少需要 3 位人物，当前仅 ' + persons.length + ' 位'));
-  if (persons.length > PERSON_MAX) issues.push(issue('EXAMPLE_MAX_PERSONS', 'content', 'persons', '示例家谱最多支持 50 位人物，当前有 ' + persons.length + ' 位，请删除超出的 ' + (persons.length - PERSON_MAX) + ' 位'));
+  if (persons.length > PERSON_MAX) issues.push(issue('EXAMPLE_MAX_PERSONS', 'content', 'persons', '示例家谱最多支持 ' + PERSON_MAX + ' 位人物，当前有 ' + persons.length + ' 位，请删除超出的 ' + (persons.length - PERSON_MAX) + ' 位'));
 
   persons.forEach(function (person, index) {
     const id = text(person && person._id);
@@ -119,7 +119,7 @@ function validateExampleContent(content) {
   });
 
   if (relations.length < RELATION_MIN) issues.push(issue('EXAMPLE_MIN_RELATIONS', 'content', 'relations', '示例家谱至少需要 2 条关系，当前仅 ' + relations.length + ' 条'));
-  if (relations.length > RELATION_MAX) issues.push(issue('EXAMPLE_MAX_RELATIONS', 'content', 'relations', '示例家谱最多支持 100 条关系，当前有 ' + relations.length + ' 条，请删除超出的 ' + (relations.length - RELATION_MAX) + ' 条'));
+  if (relations.length > RELATION_MAX) issues.push(issue('EXAMPLE_MAX_RELATIONS', 'content', 'relations', '示例家谱最多支持 ' + RELATION_MAX + ' 条关系，当前有 ' + relations.length + ' 条，请删除超出的 ' + (relations.length - RELATION_MAX) + ' 条'));
 
   const relationGroups = new Map();
   const parentEdges = [];

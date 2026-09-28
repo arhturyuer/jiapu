@@ -52,7 +52,8 @@ Page({
       const example = previousPage && previousPage.data && previousPage.data.example;
       const matchingExample = example && example.slug === this.data.exampleSlug ? example : null;
       this._exampleDefaults = matchingExample && matchingExample.defaultDisplayPreference;
-      const preference = exampleDisplayPreference.get(this.data.exampleSlug, matchingExample && matchingExample.defaultDisplayPreference);
+      this._exampleVersion = matchingExample && matchingExample.publishedVersion;
+      const preference = exampleDisplayPreference.get(this.data.exampleSlug, this._exampleDefaults, this._exampleVersion);
       this.setData(Object.assign({
         loading: false,
         error: '',
@@ -91,7 +92,7 @@ Page({
     const self = this;
     const previous = this.data[field];
     if (this.data.isExample) {
-      const examplePreference = exampleDisplayPreference.saveField(this.data.exampleSlug, field, value, this._exampleDefaults);
+      const examplePreference = exampleDisplayPreference.saveField(this.data.exampleSlug, field, value, this._exampleDefaults, this._exampleVersion);
       this.setData(Object.assign({ saving: false, savingField: '' }, examplePreference));
       this.refreshExamplePreview(examplePreference);
       return Promise.resolve(examplePreference);

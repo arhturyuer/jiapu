@@ -1,7 +1,7 @@
 const PERSON_MIN = 3;
-const PERSON_MAX = 50;
+const PERSON_MAX = 200;
 const RELATION_MIN = 2;
-const RELATION_MAX = 100;
+const RELATION_MAX = 400;
 
 function text(value) {
   return String(value || '').trim();

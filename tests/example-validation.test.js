@@ -32,6 +32,23 @@ function people(names) {
   return names.map(function (name, index) { return { _id: 'p' + index, name: name }; });
 }
 
+function largeExample(personCount, relationCount) {
+  const persons = people(Array.from({ length: personCount }, function (_, index) { return '虚构人物' + index; }));
+  const relations = [];
+  for (let from = 0; from < personCount && relations.length < relationCount; from += 1) {
+    for (let to = from + 1; to < personCount && relations.length < relationCount; to += 1) {
+      relations.push({
+        _id: 'r' + relations.length,
+        type: 'parent_child',
+        fromPersonId: 'p' + from,
+        toPersonId: 'p' + to
+      });
+    }
+  }
+  assert.equal(relations.length, relationCount);
+  return content(persons, relations);
+}
+
 test('有效的示例家谱不产生校验错误，前后端结果一致', function () {
   const value = content(people(['甲', '乙', '丙']), [
     { _id: 'r1', type: 'spouse', fromPersonId: 'p0', toPersonId: 'p1' },
@@ -184,12 +201,115 @@ test('多个独立祖先循环全部返回', function () {
   assert.deepEqual(cycles.map(function (item) { return item.relatedRows; }), [[0, 1, 2], [3, 4, 5]]);
 });
 
-test('人物和关系超出上限时明确拒绝而不静默截断', function () {
-  const persons = people(Array.from({ length: 51 }, function (_, index) { return '人物' + index; }));
-  const relations = Array.from({ length: 101 }, function (_, index) {
-    return { type: 'parent_child', fromPersonId: 'p0', toPersonId: 'p' + ((index % 50) + 1) };
-  });
-  const issues = adminValidation.validateExampleContent(content(persons, relations));
-  assert.ok(issues.some(function (item) { return item.code === 'EXAMPLE_MAX_PERSONS'; }));
-  assert.ok(issues.some(function (item) { return item.code === 'EXAMPLE_MAX_RELATIONS'; }));
+test('199/399 与 200/400 边界通过校验且保存不丢失末尾记录', function () {
+  for (const [personCount, relationCount] of [[199, 399], [200, 400]]) {
+    const value = largeExample(personCount, relationCount);
+    assert.deepEqual(adminValidation.validateExampleContent(value), []);
+    assert.deepEqual(serverValidation.validateExampleContent(value), []);
+    const saved = normalizeLikeOpsRequest(value);
+    assert.equal(saved.persons.length, personCount);
+    assert.equal(saved.relations.length, relationCount);
+    assert.equal(saved.persons.at(-1).name, '虚构人物' + (personCount - 1));
+    assert.equal(saved.relations.at(-1).toPersonId, saved.persons[Number(value.relations.at(-1).toPersonId.slice(1))]._id);
+    const savedAgain = normalizeLikeOpsRequest(saved, saved);
+    assert.equal(savedAgain.persons.length, personCount);
+    assert.equal(savedAgain.relations.length, relationCount);
+    assert.equal(savedAgain.persons.at(-1)._id, saved.persons.at(-1)._id);
+    assert.equal(savedAgain.relations.at(-1)._id, saved.relations.at(-1)._id);
+  }
+});
+
+test('201 人和 401 条关系分别明确拒绝，前后端错误一致', function () {
+  for (const [personCount, relationCount, expectedCode, expectedMessage] of [
+    [201, 400, 'EXAMPLE_MAX_PERSONS', '示例家谱最多支持 200 位人物'],
+    [200, 401, 'EXAMPLE_MAX_RELATIONS', '示例家谱最多支持 400 条关系']
+  ]) {
+    const value = largeExample(personCount, relationCount);
+    const adminIssues = adminValidation.validateExampleContent(value);
+    const serverIssues = serverValidation.validateExampleContent(value);
+    assert.deepEqual(serverIssues, adminIssues);
+    assert.deepEqual(adminIssues.map(function (item) { return item.code; }), [expectedCode]);
+    assert.match(adminIssues[0].message, new RegExp(expectedMessage));
+    assert.throws(function () { normalizeLikeOpsRequest(value); }, function (error) {
+      assert.equal(error.code, expectedCode);
+      assert.equal(error.message, expectedMessage);
+      assert.deepEqual(JSON.parse(JSON.stringify(error.details.validationIssues)), adminIssues);
+      return true;
+    });
+  }
+});
+
+test('200 人和 400 条关系发布、回滚后用户端仍完整读取', async function () {
+  const saved = normalizeLikeOpsRequest(largeExample(200, 400));
+  const source = fs.readFileSync(path.join(root, 'cloudfunctions/youpuOpsApi/index.js'), 'utf8');
+  const publishStart = source.indexOf('async function examplesPublish(');
+  const publishEnd = source.indexOf('\nasync function examplesUnpublish(', publishStart);
+  const rollbackStart = source.indexOf('async function examplesRollback(');
+  const rollbackEnd = source.indexOf('\nasync function examplesArchive(', rollbackStart);
+  assert.ok(publishStart >= 0 && publishEnd > publishStart && rollbackStart >= 0 && rollbackEnd > rollbackStart);
+
+  const template = {
+    _id: 'example-test', slug: 'example-test', title: '虚构示例', status: 'draft',
+    draftContent: saved, publishedVersion: 0
+  };
+  const versions = new Map();
+  const transaction = {
+    collection: function (name) {
+      return {
+        doc: function (id) {
+          return {
+            set: async function ({ data }) { assert.equal(name, 'example_template_versions'); versions.set(id, data); },
+            update: async function ({ data }) { assert.equal(name, 'example_templates'); assert.equal(id, template._id); Object.assign(template, data); }
+          };
+        }
+      };
+    }
+  };
+  const context = {
+    result: null,
+    requireOperator: async function () { return { _id: 'operator-test' }; },
+    ensureExampleCollections: async function () {},
+    opsMutate: async function (_, __, ___, callback) { return callback(transaction); },
+    getExampleTemplate: async function () { return template; },
+    findExampleDocument: async function (_, id) { return versions.get(id); },
+    normalizeExampleContent: normalizeLikeOpsRequest,
+    normalizeExampleDisplayPreference: function (_, fallback) { return fallback || {}; },
+    writeRequiredExampleAudit: async function () {},
+    assert: function (condition, code, message) { if (!condition) { const error = new Error(message); error.code = code; throw error; } },
+    cleanText: function (value) { return String(value || ''); },
+    hash: function (value, length) { return crypto.createHash('sha256').update(String(value)).digest('hex').slice(0, length); },
+    db: { serverDate: function () { return 'test-date'; } }
+  };
+  vm.runInNewContext(source.slice(publishStart, publishEnd) + source.slice(rollbackStart, rollbackEnd) +
+    '\nresult = { publish: examplesPublish, rollback: examplesRollback };', context);
+
+  const published = await context.result.publish({ templateId: template._id }, {});
+  assert.equal(published.version, 1);
+  const firstVersionId = Array.from(versions.keys())[0];
+  assert.equal(template.publishedContent.persons.length, 200);
+  assert.equal(template.publishedContent.relations.length, 400);
+  assert.equal(versions.get(firstVersionId).snapshot.content.relations.length, 400);
+
+  template.draftContent = normalizeLikeOpsRequest(content(saved.persons.slice(0, 3), saved.relations.slice(0, 2)));
+  await context.result.publish({ templateId: template._id }, {});
+  assert.equal(template.publishedContent.persons.length, 3);
+  const rolledBack = await context.result.rollback({ templateId: template._id, versionId: firstVersionId }, {});
+  assert.equal(rolledBack.version, 3);
+  assert.equal(template.draftContent.persons.length, 200);
+  assert.equal(template.publishedContent.relations.length, 400);
+
+  const userSource = fs.readFileSync(path.join(root, 'cloudfunctions/youpuUserApi/index.js'), 'utf8');
+  const publicContent = userSource.match(/function publicExampleContent\(template\) \{[\s\S]*?\n\}/);
+  assert.ok(publicContent);
+  const userContext = {
+    template: template,
+    result: null,
+    cleanText: function (value) { return String(value || ''); },
+    publicExamplePerson: function (person) { return person; }
+  };
+  vm.runInNewContext(publicContent[0] + '\nresult = publicExampleContent(template);', userContext);
+  assert.equal(userContext.result.personCount, 200);
+  assert.equal(userContext.result.relationCount, 400);
+  assert.equal(userContext.result.persons.at(-1).name, '虚构人物199');
+  assert.equal(userContext.result.relations.length, 400);
 });

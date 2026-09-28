@@ -174,7 +174,7 @@ test('服务端为新用户返回新默认值，为已有偏好保留旧默认�
   assert.match(source, /await requireMembership\(event\.familyId, ACTIVE_ROLES, db, openid\)/);
 });
 
-test('示例家谱仅在没有本地显示偏好时采用新默认值', function () {
+test('示例家谱显示偏好归一化兼容旧字段默认值', function () {
   assert.deepEqual(exampleDisplayPreference.normalize(null), {
     nameLayout: 'horizontal',
     showChildRankBadge: false,
@@ -192,7 +192,7 @@ test('示例家谱仅在没有本地显示偏好时采用新默认值', function
   assert.equal(exampleDisplayPreference.normalize({ autoCollapseEnabled: false }).autoCollapseEnabled, false);
 });
 
-test('示例已发布默认值只影响没有本地偏好的设备，首次修改保留其他默认项', function () {
+test('无发布版本的旧示例沿用本地偏好优先规则，首次修改保留其他默认项', function () {
   const previousWx = global.wx;
   const storage = {};
   const defaults = { nameLayout: 'vertical', showChildRankBadge: true, showGenderBadge: true, showGenderColors: false, autoCollapseEnabled: false };
@@ -212,6 +212,54 @@ test('示例已发布默认值只影响没有本地偏好的设备，首次修�
     assert.equal(exampleDisplayPreference.get('legacy', defaults).nameLayout, 'horizontal');
   } finally {
     global.wx = previousWx;
+  }
+});
+
+test('示例发布新版本后旧设备采用新默认值，随后个人修改仅在当前版本生效', function () {
+  const previousWx = global.wx;
+  const storage = {
+    youpu_example_display_preference_demo: {
+      nameLayout: 'horizontal', showChildRankBadge: false, showGenderBadge: false,
+      showGenderColors: true, autoCollapseEnabled: true
+    },
+    youpu_example_name_layout_demo: 'vertical'
+  };
+  const oldDefaults = { nameLayout: 'horizontal', autoCollapseEnabled: true };
+  const newDefaults = { nameLayout: 'horizontal', autoCollapseEnabled: false };
+  global.wx = {
+    getStorageSync: function (key) { return storage[key]; },
+    setStorageSync: function (key, value) { storage[key] = value; }
+  };
+  try {
+    assert.equal(exampleDisplayPreference.get('demo', newDefaults, 1).autoCollapseEnabled, false);
+    assert.equal(exampleDisplayPreference.get('demo', newDefaults, 1).nameLayout, 'horizontal');
+    const changed = exampleDisplayPreference.saveField('demo', 'autoCollapseEnabled', true, newDefaults, 1);
+    assert.equal(changed.autoCollapseEnabled, true);
+    assert.equal(exampleDisplayPreference.get('demo', newDefaults, 1).autoCollapseEnabled, true);
+    assert.equal(exampleDisplayPreference.get('demo', newDefaults, 2).autoCollapseEnabled, false);
+    assert.equal(exampleDisplayPreference.get('demo', oldDefaults, 2).autoCollapseEnabled, true);
+  } finally {
+    global.wx = previousWx;
+  }
+});
+
+test('示例设置页按已发布版本忽略旧本地智能收起值', async function () {
+  const previousWx = global.wx;
+  const previousGetCurrentPages = global.getCurrentPages;
+  const storage = { youpu_example_display_preference_demo: { autoCollapseEnabled: true } };
+  global.wx = { getStorageSync: function (key) { return storage[key]; }, setStorageSync: function (key, value) { storage[key] = value; } };
+  global.getCurrentPages = function () {
+    return [{ data: { example: { slug: 'demo', title: '虚构示例', publishedVersion: 3, defaultDisplayPreference: { autoCollapseEnabled: false } } } }, {}];
+  };
+  try {
+    const page = loadPage({ getCurrentFamily: function () { return null; } });
+    await page.onLoad({ exampleSlug: 'demo' });
+    assert.equal(page.data.autoCollapseEnabled, false);
+    await page.savePreference('autoCollapseEnabled', true);
+    assert.equal(exampleDisplayPreference.get('demo', { autoCollapseEnabled: false }, 3).autoCollapseEnabled, true);
+  } finally {
+    global.wx = previousWx;
+    global.getCurrentPages = previousGetCurrentPages;
   }
 });
 

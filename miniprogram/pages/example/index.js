@@ -68,7 +68,7 @@ Page({
         return personGender.decorate(Object.assign({}, person, { initial: (person.name || '家').slice(0, 1), metaText: person.birthDate ? person.birthDate.slice(0, 4) + '年' : '' }));
       });
       const relations = example.relations || [];
-      const preference = exampleDisplayPreference.get(example.slug || self.data.slug, example.defaultDisplayPreference);
+      const preference = exampleDisplayPreference.get(example.slug || self.data.slug, example.defaultDisplayPreference, example.publishedVersion);
       const collapsed = preference.autoCollapseEnabled
         ? graphLayout.suggestCollapsedIds(persons, relations, { limit: 36 })
         : [];
@@ -97,7 +97,7 @@ Page({
     // canvas (for example when a hidden page's previous refresh was dropped).
     // Always lay out the graph from the stored preference so card dimensions,
     // vertical names and connection coordinates remain in sync.
-    const preference = savedPreference || exampleDisplayPreference.get(this.displayPreferenceSlug(), this.data.example.defaultDisplayPreference);
+    const preference = savedPreference || exampleDisplayPreference.get(this.displayPreferenceSlug(), this.data.example.defaultDisplayPreference, this.data.example.publishedVersion);
     let collapsedPersonIds = this.data.collapsedPersonIds;
     if (preference.autoCollapseEnabled !== this.data.autoCollapseEnabled) {
       collapsedPersonIds = preference.autoCollapseEnabled

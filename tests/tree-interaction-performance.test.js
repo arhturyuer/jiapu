@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const shareCard = require('../miniprogram/utils/share-card');
+const api = require('../miniprogram/utils/api');
 
 function loadTreePage(app) {
   let definition = null;
@@ -322,6 +323,40 @@ test('示例家谱关闭智能收起时全展开，重新开启时保护当前�
   assert.equal(page.data.autoCollapseEnabled, true);
   assert.ok(page.data.collapsedPersonIds.length > 0);
   assert.ok(page.data.nodes.some(function (person) { return person._id === 'p42'; }));
+});
+
+test('200 人示例新发布默认关闭智能收起时忽略旧版本本地开关', async function () {
+  const previousWx = global.wx;
+  const previousCall = api.call;
+  const graph = largeGraph(200);
+  const page = createExamplePage({ slug: 'example-200' });
+  page.syncPageChrome = function () {};
+  page.fitGraph = function () {};
+  page.prepareExampleShare = function () {};
+  global.wx = {
+    getStorageSync: function (key) {
+      return key === 'youpu_example_display_preference_example-200'
+        ? { autoCollapseEnabled: true }
+        : true;
+    }
+  };
+  api.call = function (type) {
+    assert.equal(type, 'examples.get');
+    return Promise.resolve({ example: {
+      slug: 'example-200', title: '虚构示例', publishedVersion: 2,
+      defaultDisplayPreference: { autoCollapseEnabled: false },
+      persons: graph.persons, relations: graph.relations
+    } });
+  };
+  try {
+    await page.loadExample();
+    assert.equal(page.data.autoCollapseEnabled, false);
+    assert.deepEqual(page.data.collapsedPersonIds, []);
+    assert.equal(page.data.nodes.length, 200);
+  } finally {
+    global.wx = previousWx;
+    api.call = previousCall;
+  }
 });
 
 test('方向流光只使用 transform 和 opacity，不触发布局属性动画', function () {

@@ -53,9 +53,9 @@ function exampleValidationMessage(code) {
     EXAMPLE_RELATION_DUPLICATE: '示例关系不能重复',
     EXAMPLE_RELATION_CYCLE: '示例父母子女关系不能形成循环',
     EXAMPLE_MIN_PERSONS: '示例家谱至少需要 3 位人物',
-    EXAMPLE_MAX_PERSONS: '示例家谱最多支持 50 位人物',
+    EXAMPLE_MAX_PERSONS: '示例家谱最多支持 200 位人物',
     EXAMPLE_MIN_RELATIONS: '示例家谱至少需要 2 条关系',
-    EXAMPLE_MAX_RELATIONS: '示例家谱最多支持 100 条关系'
+    EXAMPLE_MAX_RELATIONS: '示例家谱最多支持 400 条关系'
   };
   return messages[code] || '示例家谱内容校验失败，请修改后再保存';
 }
@@ -88,7 +88,7 @@ function normalizeExampleContent(input, existingContent) {
   const peopleByName = {};
   const seenNames = new Set();
   const claimedExistingPersonIds = new Set();
-  const persons = (Array.isArray(source.persons) ? source.persons : []).slice(0, 50).map(function (item) {
+  const persons = (Array.isArray(source.persons) ? source.persons : []).map(function (item) {
     const person = item || {};
     const name = cleanText(person.name, 30);
     const submittedId = cleanText(person._id, 80);
@@ -132,7 +132,7 @@ function normalizeExampleContent(input, existingContent) {
   const usedRelationIds = new Set(Object.keys(existingRelationsById));
   const seenRelations = new Set();
   const claimedExistingRelationIds = new Set();
-  const relations = (Array.isArray(source.relations) ? source.relations : []).slice(0, 100).map(function (item) {
+  const relations = (Array.isArray(source.relations) ? source.relations : []).map(function (item) {
     const relation = item || {};
     const type = relation.type === 'spouse' ? 'spouse' : relation.type === 'parent_child' ? 'parent_child' : '';
     const fromName = cleanText(relation.fromPersonName || submittedNameById[cleanText(relation.fromPersonId, 80)], 30);
