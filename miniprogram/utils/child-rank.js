@@ -57,6 +57,11 @@ function compareFallback(first, second) {
   const firstOrder = relationNumber(first.relation, 'childOrder', Infinity);
   const secondOrder = relationNumber(second.relation, 'childOrder', Infinity);
   if (firstOrder !== secondOrder) return firstOrder - secondOrder;
+  const firstGender = first.person && first.person.gender;
+  const secondGender = second.person && second.person.gender;
+  const firstGenderOrder = firstGender === 'male' ? 0 : firstGender === 'female' ? 1 : 2;
+  const secondGenderOrder = secondGender === 'male' ? 0 : secondGender === 'female' ? 1 : 2;
+  if (firstGenderOrder !== secondGenderOrder) return firstGenderOrder - secondGenderOrder;
   const firstHasDate = Boolean(dateInterval(first.person && first.person.birthDate));
   const secondHasDate = Boolean(dateInterval(second.person && second.person.birthDate));
   if (firstHasDate !== secondHasDate) return firstHasDate ? -1 : 1;

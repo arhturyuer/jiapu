@@ -30,6 +30,36 @@ test('子女按性别分别生成长幼排行', function () {
   assert.equal(childRank.rankLabel('male', 11), '十一子');
 });
 
+test('无法区分年龄且未手动排序时长子在长女左侧', function () {
+  const cases = [
+    { name: '生日均缺失', daughterDate: '', sonDate: '', expected: ['son', 'daughter'] },
+    { name: '仅长女有生日', daughterDate: '1990-03-01', sonDate: '', expected: ['son', 'daughter'] },
+    { name: '日期精度不足', daughterDate: '1990', sonDate: '1990-03', expected: ['son', 'daughter'] },
+    { name: '出生先后明确', daughterDate: '1980-01-01', sonDate: '1990-01-01', expected: ['daughter', 'son'] },
+    { name: '已确认长女在前', daughterDate: '', sonDate: '', daughterOrder: 0, sonOrder: 1, expected: ['daughter', 'son'] }
+  ];
+  cases.forEach(function (scenario) {
+    const persons = [
+      person('parent', '家长', 'male'),
+      person('daughter', '阿女', 'female', scenario.daughterDate),
+      person('son', '志子', 'male', scenario.sonDate)
+    ];
+    const relations = [
+      relation('daughter-r', 'parent', 'daughter', { childOrder: scenario.daughterOrder }),
+      relation('son-r', 'parent', 'son', { childOrder: scenario.sonOrder })
+    ];
+    const ranked = childRank.build(persons, relations);
+    const layout = graph.layoutGraph(persons, relations, { mode: 'full' });
+    const positioned = layout.nodes.filter(function (node) { return node._id !== 'parent'; })
+      .sort(function (first, second) { return first.x - second.x; })
+      .map(function (node) { return node._id; });
+    assert.deepEqual(ranked.parentOrders.parent, scenario.expected, scenario.name + '：排行顺序');
+    assert.deepEqual(positioned, scenario.expected, scenario.name + '：家谱横坐标顺序');
+    assert.equal(layout.nodes.find(function (node) { return node._id === 'son'; }).childRankLabel, '长子');
+    assert.equal(layout.nodes.find(function (node) { return node._id === 'daughter'; }).childRankLabel, '长女');
+  });
+});
+
 test('明确出生日期优先，日期重叠或缺失时使用手动顺序', function () {
   const parent = person('parent', '家长', 'female', '1960');
   const older = person('older', '早', 'male', '1980-01-01');
@@ -78,6 +108,19 @@ test('缺失日期可人工排序，性别未知不生成排行', function () {
   assert.equal(result.byPerson.b.childRankLabel, '长女');
   assert.equal(result.byPerson.a.childRankLabel, '次女');
   assert.equal(result.byPerson.unknown, undefined);
+});
+
+test('未确认性别成员不使默认男女顺序依赖输入顺序', function () {
+  const rows = [
+    { person: person('daughter', '阿女', 'female'), relation: {} },
+    { person: person('unknown', '待确认', 'unknown', '1990'), relation: {} },
+    { person: person('son', '志子', 'male'), relation: {} }
+  ];
+  const orderedIds = function (items) {
+    return childRank.orderChildren(items).map(function (item) { return item.person._id; });
+  };
+  assert.deepEqual(orderedIds(rows), ['son', 'daughter', 'unknown']);
+  assert.deepEqual(orderedIds(rows.slice().reverse()), ['son', 'daughter', 'unknown']);
 });
 
 test('跨伴侣子女按同一家长连续排行', function () {

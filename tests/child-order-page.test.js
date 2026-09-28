@@ -76,3 +76,26 @@ test('排序面板只允许不能由日期确定的子女互换，并提交完�
     global.wx = previousWx;
   }
 });
+
+test('排行面板与家谱共用无年龄区分时的默认顺序和手动顺序', function () {
+  const page = loadPage({});
+  page.data.rawPersons = [
+    { _id: 'parent', name: '家长', gender: 'male' },
+    { _id: 'daughter', name: '阿女', gender: 'female' },
+    { _id: 'son', name: '志子', gender: 'male' }
+  ];
+  page.data.rawRelations = [
+    { _id: 'daughter-r', type: 'parent_child', fromPersonId: 'parent', toPersonId: 'daughter' },
+    { _id: 'son-r', type: 'parent_child', fromPersonId: 'parent', toPersonId: 'son' }
+  ];
+  page.openChildOrderSheet();
+  assert.deepEqual(page._childOrderIds, ['son', 'daughter']);
+  assert.deepEqual(page.data.childOrderItems.map(function (item) { return item.rankLabel; }), ['长子', '长女']);
+
+  page.closeChildOrderSheet();
+  page.data.rawRelations[0].childOrder = 0;
+  page.data.rawRelations[1].childOrder = 1;
+  page.openChildOrderSheet();
+  assert.deepEqual(page._childOrderIds, ['daughter', 'son']);
+  assert.deepEqual(page.data.childOrderItems.map(function (item) { return item.rankLabel; }), ['长女', '长子']);
+});
