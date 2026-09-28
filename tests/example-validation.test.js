@@ -20,6 +20,17 @@ function normalizeLikeOpsRequest(content, previous) {
   return context.result(content, previous);
 }
 
+function normalizeExampleMetadata(input) {
+  const source = fs.readFileSync(path.join(root, 'cloudfunctions/youpuOpsApi/index.js'), 'utf8');
+  const helpers = source.slice(source.indexOf('class OpsError extends Error'), source.indexOf('\nfunction hash('));
+  const start = source.indexOf('function normalizeExampleMetadata(');
+  const end = source.indexOf('\nasync function examplesList(', start);
+  assert.ok(start >= 0 && end > start);
+  const context = { result: null };
+  vm.runInNewContext(helpers + '\n' + source.slice(start, end) + '\nresult = normalizeExampleMetadata;', context);
+  return context.result(input);
+}
+
 test.before(async function () {
   adminValidation = await import(pathToFileURL(path.join(root, 'admin/src/example-validation.js')).href);
 });
@@ -31,6 +42,27 @@ function content(persons, relations) {
 function people(names) {
   return names.map(function (name, index) { return { _id: 'p' + index, name: name }; });
 }
+
+test('示例简介保留段落和空格，1000 字可保存，超限明确拒绝', function () {
+  const description = '  第一段\r\n  第二段 ' + '谱'.repeat(1000);
+  const normalized = description.replace(/\r\n/g, '\n');
+  const exact = normalized.slice(0, 1000);
+  const meta = normalizeExampleMetadata({ title: '虚构示例', slug: 'sample', description: exact });
+  assert.equal(meta.description, exact);
+  const value = content(people(['甲', '乙', '丙']), [
+    { type: 'spouse', fromPersonId: 'p0', toPersonId: 'p1' },
+    { type: 'parent_child', fromPersonId: 'p0', toPersonId: 'p2' }
+  ]);
+  value.family.description = exact;
+  assert.equal(normalizeLikeOpsRequest(value).family.description, exact);
+  assert.throws(function () {
+    normalizeExampleMetadata({ title: '虚构示例', slug: 'sample', description: exact + '谱' });
+  }, function (error) { return error.code === 'EXAMPLE_DESCRIPTION_TOO_LONG'; });
+  value.family.description += '谱';
+  assert.throws(function () { normalizeLikeOpsRequest(value); }, function (error) {
+    return error.code === 'EXAMPLE_DESCRIPTION_TOO_LONG';
+  });
+});
 
 function largeExample(personCount, relationCount) {
   const persons = people(Array.from({ length: personCount }, function (_, index) { return '虚构人物' + index; }));
@@ -300,14 +332,16 @@ test('200 人和 400 条关系发布、回滚后用户端仍完整读取', async
 
   const userSource = fs.readFileSync(path.join(root, 'cloudfunctions/youpuUserApi/index.js'), 'utf8');
   const publicContent = userSource.match(/function publicExampleContent\(template\) \{[\s\S]*?\n\}/);
+  const publicDescription = userSource.match(/function publicExampleDescription\(value\) \{[\s\S]*?\n\}/);
   assert.ok(publicContent);
+  assert.ok(publicDescription);
   const userContext = {
     template: template,
     result: null,
     cleanText: function (value) { return String(value || ''); },
     publicExamplePerson: function (person) { return person; }
   };
-  vm.runInNewContext(publicContent[0] + '\nresult = publicExampleContent(template);', userContext);
+  vm.runInNewContext(publicDescription[0] + '\n' + publicContent[0] + '\nresult = publicExampleContent(template);', userContext);
   assert.equal(userContext.result.personCount, 200);
   assert.equal(userContext.result.relationCount, 400);
   assert.equal(userContext.result.persons.at(-1).name, '虚构人物199');

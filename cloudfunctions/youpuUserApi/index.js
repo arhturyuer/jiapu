@@ -93,6 +93,12 @@ function cleanText(value, maxLength) {
   return domain.cleanText(value, maxLength);
 }
 
+function publicExampleDescription(value) {
+  return String(value === undefined || value === null ? '' : value)
+    .replace(/\r\n?/g, '\n')
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '');
+}
+
 // The staging notifier predates the immutable runtime limitation on the
 // production function.  Live payments therefore use the Node.js 20
 // replacement, while every non-live environment keeps its existing target.
@@ -2794,7 +2800,7 @@ function publicExampleContent(template) {
     _id: template._id,
     slug: cleanText(template.slug, 80),
     title: cleanText(template.title || family.name, 40),
-    description: cleanText(template.description || family.description, 200),
+    description: publicExampleDescription(Object.prototype.hasOwnProperty.call(family, 'description') ? family.description : template.description),
     tags: (template.tags || []).map(function (tag) { return cleanText(tag, 20); }).filter(Boolean).slice(0, 8),
     sortOrder: Number(template.sortOrder) || 0,
     shareTitle: cleanText(template.shareTitle, 60),
@@ -2818,13 +2824,16 @@ async function examplesList(event) {
   const openid = getOpenid();
   await requireActiveUser(openid);
   const tag = cleanText(event.tag, 20);
-  let templates = await listAll('example_templates', { status: 'published' }, 100);
+  const allTemplates = await listAll('example_templates', { status: 'published' }, 100);
+  let templates = allTemplates;
   templates = templates.filter(function (template) {
     return template.publishedContent && (!tag || (template.tags || []).includes(tag));
   }).sort(function (left, right) {
     return (Number(left.sortOrder) || 0) - (Number(right.sortOrder) || 0) || String(left._id).localeCompare(String(right._id));
   });
-  const tags = Array.from(new Set(templates.reduce(function (all, template) {
+  const tags = Array.from(new Set(allTemplates.filter(function (template) {
+    return !!template.publishedContent;
+  }).reduce(function (all, template) {
     return all.concat(template.tags || []);
   }, []).map(function (item) { return cleanText(item, 20); }).filter(Boolean))).sort();
   return {

@@ -1,21 +1,28 @@
-.examples-page { padding-bottom: 72rpx; }
+page { overflow-x: hidden; }
+.examples-page { max-width: 100%; padding-bottom: 72rpx; overflow-x: hidden; }
 .hero { padding: 16rpx 0 32rpx; }
 .eyebrow { display: block; color: #245C4A; font-size: 24rpx; font-weight: 650; letter-spacing: 2rpx; }
 .page-title { margin-top: 12rpx; display: block; font-size: 44rpx; font-weight: 650; line-height: 1.35; }
 .page-description { margin-top: 14rpx; display: block; color: #65706A; font-size: 27rpx; line-height: 1.65; }
-.tag-scroll { width: calc(100% + 64rpx); margin-left: -32rpx; white-space: nowrap; }
-.tag-row { padding: 4rpx 32rpx 26rpx; display: flex; gap: 14rpx; }
-.tag { padding: 14rpx 22rpx; color: #65706A; background: #FFFEFA; border: 2rpx solid #D8DED9; border-radius: 999rpx; font-size: 26rpx; }
+.tag-scroll { width: 100%; white-space: nowrap; }
+.tag-row { padding: 4rpx 0 26rpx; display: inline-flex; gap: 14rpx; }
+.tag { flex: none; padding: 14rpx 22rpx; color: #65706A; background: #FFFEFA; border: 2rpx solid #D8DED9; border-radius: 999rpx; font-size: 26rpx; }
 .tag.active { color: #FFFFFF; background: #245C4A; border-color: #245C4A; }
-.example-list { display: flex; flex-direction: column; gap: 18rpx; }
-.example-card { min-height: 192rpx; padding: 22rpx; display: flex; align-items: center; gap: 20rpx; }
-.cover { width: 128rpx; height: 128rpx; display: flex; align-items: center; justify-content: center; color: #245C4A; background: #E4EFEA; border-radius: 32rpx; font-size: 52rpx; font-weight: 650; }
-.card-copy { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.example-list { min-width: 0; display: flex; flex-direction: column; gap: 18rpx; }
+.example-card { width: 100%; min-width: 0; min-height: 192rpx; padding: 22rpx; display: flex; align-items: center; gap: 20rpx; }
+.cover { flex: none; width: 128rpx; height: 128rpx; display: flex; align-items: center; justify-content: center; color: #245C4A; background: #E4EFEA; border-radius: 32rpx; font-size: 52rpx; font-weight: 650; }
+.card-copy { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .card-title { overflow: hidden; font-size: 32rpx; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
-.card-desc { margin-top: 8rpx; color: #65706A; font-size: 25rpx; line-height: 1.45; }
+.desc-wrap { position: relative; width: 100%; }
+.card-desc { display: block; width: 100%; margin-top: 8rpx; color: #65706A; font-size: 25rpx; line-height: 36rpx; white-space: pre-wrap; overflow-wrap: break-word; word-break: break-all; }
+.card-desc.is-collapsed { max-height: 108rpx; overflow: hidden; }
+.desc-tail-reserve { visibility: hidden; color: #245C4A; font-weight: 600; white-space: nowrap; }
+.card-desc-measure { position: absolute; top: 0; left: 0; visibility: hidden; pointer-events: none; }
+.desc-toggle { position: absolute; right: 0; bottom: 0; height: 36rpx; padding-left: 24rpx; color: #245C4A; background: linear-gradient(90deg, rgba(255, 254, 250, 0), #FFFEFA 24rpx); font-size: 25rpx; font-weight: 600; line-height: 36rpx; }
+.desc-wrap.is-expanded .desc-toggle { padding-left: 0; background: #FFFEFA; }
 .meta { margin-top: 12rpx; display: flex; gap: 16rpx; color: #65706A; font-size: 23rpx; }
 .card-tags { margin-top: 10rpx; display: flex; gap: 8rpx; flex-wrap: wrap; }
 .card-tags text { padding: 4rpx 10rpx; color: #245C4A; background: #E4EFEA; border-radius: 999rpx; font-size: 20rpx; }
-.arrow { color: #8A958F; font-size: 46rpx; }
+.arrow { flex: none; color: #8A958F; font-size: 46rpx; }
 .empty-examples { padding: 48rpx 32rpx; display: flex; flex-direction: column; gap: 12rpx; color: #65706A; text-align: center; }
 .create-button { width: 100%; margin-top: 32rpx; }

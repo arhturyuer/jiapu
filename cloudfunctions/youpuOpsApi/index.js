@@ -26,6 +26,14 @@ function cleanText(value, length) {
   return String(value || '').replace(/[\u0000-\u001F]/g, '').trim().slice(0, length || 200);
 }
 
+function cleanExampleDescription(value) {
+  const description = String(value === undefined || value === null ? '' : value)
+    .replace(/\r\n?/g, '\n')
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '');
+  assert(Array.from(description).length <= 1000, 'EXAMPLE_DESCRIPTION_TOO_LONG', '示例家谱简介最多 1000 字（含空格和换行）');
+  return description;
+}
+
 function cleanExampleSlug(value) {
   return cleanText(value, 80).toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
 }
@@ -179,7 +187,7 @@ function normalizeExampleContent(input, existingContent) {
   return {
     family: {
       name: cleanText(family.name, 40),
-      description: cleanText(family.description, 200)
+      description: cleanExampleDescription(family.description)
     },
     persons: persons,
     relations: relations
@@ -1700,7 +1708,7 @@ function normalizeExampleMetadata(event, fallback) {
   return {
     title: title,
     slug: slug,
-    description: cleanText(source.description === undefined ? existing.description : source.description, 200),
+    description: cleanExampleDescription(source.description === undefined ? existing.description : source.description),
     tags: (Array.isArray(source.tags) ? source.tags : (existing.tags || [])).map(function (tag) {
       return cleanText(tag, 20);
     }).filter(function (tag, index, values) { return tag && values.indexOf(tag) === index; }).slice(0, 8),

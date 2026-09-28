@@ -25,14 +25,16 @@ function normalize(input, fallback) {
 
 function publicExample(template) {
   const source = userApi.match(/function publicExampleContent\(template\) \{[\s\S]*?\n\}/);
+  const description = userApi.match(/function publicExampleDescription\(value\) \{[\s\S]*?\n\}/);
   assert.ok(source);
+  assert.ok(description);
   const context = {
     template: template,
     result: null,
     cleanText: function (value) { return String(value || ''); },
     publicExamplePerson: function (person) { return person; }
   };
-  vm.runInNewContext(source[0] + '\nresult = publicExampleContent(template);', context);
+  vm.runInNewContext(description[0] + '\n' + source[0] + '\nresult = publicExampleContent(template);', context);
   return JSON.parse(JSON.stringify(context.result));
 }
 
