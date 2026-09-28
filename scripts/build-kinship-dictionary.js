@@ -16,10 +16,12 @@ function commonPrefix(a, b) { let i = 0; while (i < a.length && i < b.length && 
 const encoded = entries.map(row => {
   const keyPrefix = commonPrefix(previous[0], row[0]);
   const labelPrefix = commonPrefix(previous[1], row[1]);
-  const line = String.fromCharCode(65 + keyPrefix) + row[0].slice(keyPrefix) + ' ' + String.fromCharCode(65 + labelPrefix) + row[1].slice(labelPrefix);
+  if (labelPrefix > 25) throw new Error('Relationship label prefix exceeds compact format');
+  if (row[1].includes('|')) throw new Error('Dictionary separator conflicts with a relationship label');
+  const line = String.fromCharCode(65 + keyPrefix) + row[0].slice(keyPrefix) + String.fromCharCode(97 + labelPrefix) + row[1].slice(labelPrefix);
   previous = row;
   return line;
-}).join('\n');
+}).join('|');
 const output = path.resolve(__dirname, '../miniprogram/utils/kinship-data');
 fs.mkdirSync(output, { recursive: true });
 fs.copyFileSync(path.join(source, 'LICENSE'), path.join(output, 'LICENSE'));

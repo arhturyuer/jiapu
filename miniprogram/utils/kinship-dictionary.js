@@ -14,10 +14,10 @@ function initialize() {
   data.tokens.forEach(function (token, index) { tokenCodes[token] = String.fromCharCode(65 + index); });
   let key = '';
   let label = '';
-  data.encoded.split('\n').forEach(function (line) {
-    const split = line.indexOf(' ');
+  data.encoded.split('|').forEach(function (line) {
+    const split = line.search(/[a-z]/);
     key = key.slice(0, line.charCodeAt(0) - 65) + line.slice(1, split);
-    label = label.slice(0, line.charCodeAt(split + 1) - 65) + line.slice(split + 2);
+    label = label.slice(0, line.charCodeAt(split) - 97) + line.slice(split + 1);
     table.set(key, label);
     let neutral = '';
     for (let index = 0; index < key.length; index += 1) {

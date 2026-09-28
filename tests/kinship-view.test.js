@@ -97,7 +97,10 @@ test('成员卡区分真实的多个称谓与资料不足，完整保留长路�
   assert.equal(card.truncated, true);
   assert.equal(card.multiple, false);
   const wxml = fs.readFileSync(path.join(__dirname, '../miniprogram/templates/kinship-card.wxml'), 'utf8');
-  assert.ok(wxml.includes('{{item.description}}') && wxml.includes('{{item.pathText}}') && wxml.includes('{{card.truncated}}'));
+  assert.ok(wxml.includes('wx:if="{{card.entries.length === 1}}"'));
+  assert.ok(wxml.includes('从{{card.viewpointName}}看，是{{card.entries[0].label}}'));
+  assert.ok(wxml.includes('{{card.entries[0].pathText || card.entries[0].description}}'));
+  assert.ok(wxml.includes('{{item.pathText || item.description}}') && wxml.includes('{{card.truncated}}'));
   for (const name of ['tree', 'example']) {
     const template = fs.readFileSync(path.join(__dirname, '../miniprogram/pages/' + name + '/index.wxml'), 'utf8');
     const vertical = template.slice(template.indexOf('class="node-name node-name-vertical"'), template.indexOf('</block>', template.indexOf('class="node-name node-name-vertical"')));

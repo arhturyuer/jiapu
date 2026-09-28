@@ -4,6 +4,8 @@ const kinship = require('../../utils/kinship');
 const graphViewport = require('../../utils/graph-viewport');
 const shareCard = require('../../utils/share-card');
 const personGender = require('../../utils/person-gender');
+const memberActions = require('../../utils/member-actions');
+const commerceConfig = require('../../config/commerce');
 const exampleDisplayPreference = require('../../utils/example-display-preference');
 const examplePosterCode = require('../../utils/example-poster-code');
 const treePosterFlow = require('../../utils/tree-poster-flow');
@@ -24,7 +26,7 @@ Page({
     canvasWidth: 750, canvasHeight: 900, graphScale: 1, graphX: 0, graphY: 0, graphScaleMin: 0.32, graphZoomClass: 'zoom-detail',
     pageOrientation: 'portrait', isLandscape: false, orientationChanging: false,
     collapsedPersonIds: [], hiddenBranchCount: 0, canExpandAll: false, nameLayout: 'horizontal', showChildRankBadge: false, showGenderBadge: false, showGenderColors: true, autoCollapseEnabled: true, viewMode: 'full', viewpointId: '', viewpointName: '',
-    selectedPersonId: '', selectedPerson: null, showMemberSheet: false, showPerspectiveSheet: false, perspectiveKeyword: '', perspectiveResults: [],
+    selectedPersonId: '', selectedPerson: null, showMemberSheet: false, memberAdUnitId: '', memberAdVisible: false, showPerspectiveSheet: false, perspectiveKeyword: '', perspectiveResults: [],
     showTour: false, tourStep: 1, posterGenerating: false,
     shareCard: shareCard.create({ kind: 'example' })
   },
@@ -284,15 +286,20 @@ Page({
   openMemberActions: function (event) {
     const personId = event.currentTarget.dataset.id;
     const person = this.data.rawPersons.find(function (item) { return item._id === personId; });
+    const app = typeof getApp === 'function' ? getApp() : {};
+    const family = app.getCurrentFamily ? app.getCurrentFamily() : null;
+    const memberAdUnitId = commerceConfig.resolveBanner(app.globalData && app.globalData.environment, 'memberSheet');
     if (person) this.setData({ selectedKinship: this.data.viewMode === 'perspective' ? kinship.memberKinshipCard(this._lastLayout && this._lastLayout.kinshipDetails, personId, this.data.viewpointName, this.data.rawPersons) : null,
-      selectedPersonId: personId, selectedPerson: this.decorateSelectedPerson(person), showMemberSheet: true });
+      selectedPersonId: personId, selectedPerson: this.decorateSelectedPerson(person), showMemberSheet: true,
+      memberAdUnitId: memberAdUnitId, memberAdVisible: Boolean(memberAdUnitId && !(family && family.membership && family.membership.active)) });
   },
   decorateSelectedPerson: function (person) {
     const node = (this._lastLayout && this._lastLayout.nodes || []).find(function (item) { return item._id === person._id; });
-    return Object.assign({}, person, node ? { childRankLabel: node.childRankLabel || '' } : {}, {
+    return Object.assign({}, person, node ? { childRankLabel: node.childRankLabel || '' } : {}, memberActions.describe(person, this.data.rawPersons, this.data.rawRelations), {
       isCollapsed: this.data.collapsedPersonIds.indexOf(person._id) >= 0
     });
   },
+  hideMemberAd: function () { this.setData({ memberAdVisible: false }); },
   clearGraphSelection: function () { if (this.data.selectedPersonId && !this.data.showMemberSheet) this.renderGraph(this.data.viewMode, this.data.viewpointId, { preserveViewport: true, selectedPersonId: '', statePatch: { selectedPersonId: '', selectedPerson: null } }); },
   closeMemberSheet: function () { this.setData({ showMemberSheet: false, selectedKinship: null }); },
   openPerspectiveSheet: function () { this.setData({ showPerspectiveSheet: true, perspectiveKeyword: '', perspectiveResults: this.data.rawPersons }); },

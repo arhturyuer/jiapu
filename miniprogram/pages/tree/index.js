@@ -5,6 +5,8 @@ const graphViewport = require('../../utils/graph-viewport');
 const kinship = require('../../utils/kinship');
 const personGender = require('../../utils/person-gender');
 const childRank = require('../../utils/child-rank');
+const memberActions = require('../../utils/member-actions');
+const commerceConfig = require('../../config/commerce');
 const shareInvite = require('../../utils/share-invite');
 const shareCard = require('../../utils/share-card');
 const posterInvite = require('../../utils/poster-invite');
@@ -56,9 +58,10 @@ Page({
     selectedPersonId: '',
     selectedPerson: null,
     showMemberSheet: false,
+    memberAdUnitId: '',
+    memberAdVisible: false,
     showFamilySheet: false,
     showPerspectiveSheet: false,
-    showRelationSheet: false,
     showChildOrderSheet: false,
     childOrderParent: null,
     childOrderItems: [],
@@ -76,15 +79,7 @@ Page({
     shareCard: null,
     systemShareCard: shareCard.create({ kind: 'discovery' }),
     posterGenerating: false,
-    showShareReminder: false,
-    relationOptions: [
-      { key: 'father', label: '父亲' },
-      { key: 'mother', label: '母亲' },
-      { key: 'spouse', label: '伴侣' },
-      { key: 'son', label: '儿子' },
-      { key: 'daughter', label: '女儿' },
-      { key: 'sibling', label: '兄弟姐妹' }
-    ]
+    showShareReminder: false
   },
 
   onShow: function () {
@@ -687,11 +682,15 @@ Page({
     const personId = event.currentTarget.dataset.id;
     const person = this.data.rawPersons.find(function (item) { return item._id === personId; });
     if (!person) return;
+    const memberAdUnitId = commerceConfig.resolveBanner(app.globalData && app.globalData.environment, 'memberSheet');
+    const family = this.data.currentFamily;
     this.setData({
       selectedKinship: this.data.viewMode === 'perspective' ? kinship.memberKinshipCard(this._lastLayout && this._lastLayout.kinshipDetails, personId, this.data.viewpointName, this.data.rawPersons) : null,
       selectedPersonId: personId,
       selectedPerson: this.decorateSelectedPerson(person),
-      showMemberSheet: true
+      showMemberSheet: true,
+      memberAdUnitId: memberAdUnitId,
+      memberAdVisible: Boolean(memberAdUnitId && family && !(family.membership && family.membership.active))
     });
   },
 
@@ -699,16 +698,11 @@ Page({
     const node = (this._lastLayout && this._lastLayout.nodes || []).find(function (item) {
       return item._id === person._id;
     });
-    const childCount = this.data.rawRelations.filter(function (relation) {
-      return relation.type === 'parent_child' && relation.fromPersonId === person._id && relation.status !== 'deleted';
-    }).length;
     return Object.assign({}, person, node ? {
       childRankLabel: node.childRankLabel || '',
       childRankBasisText: node.childRankBasisText || '',
       childRankConflict: Boolean(node.childRankConflict)
-    } : {}, {
-      childCount: childCount,
-      hasMultipleChildren: childCount >= 2,
+    } : {}, memberActions.describe(person, this.data.rawPersons, this.data.rawRelations), {
       isCollapsed: this.data.collapsedPersonIds.indexOf(person._id) >= 0
     });
   },
@@ -915,33 +909,6 @@ Page({
     wx.navigateTo({ url: '/pages/member-detail/index?id=' + person._id });
   },
 
-  openEditMember: function () {
-    const person = this.data.selectedPerson;
-    if (!person) return;
-    this.closeMemberSheet();
-    wx.navigateTo({ url: '/pages/edit-member/index?id=' + person._id });
-  },
-
-  openRelationSheet: function () {
-    if (!this.data.canEdit) {
-      wx.showToast({ title: '当前身份只能查看家谱', icon: 'none' });
-      return;
-    }
-    const person = this.data.selectedPerson;
-    this.setData({
-      showMemberSheet: false,
-      showRelationSheet: true,
-      relationOptions: [
-        { key: 'father', label: '父亲' },
-        { key: 'mother', label: '母亲' },
-        { key: 'spouse', label: kinship.relationTypeLabel(person, 'spouse') },
-        { key: 'son', label: '儿子' },
-        { key: 'daughter', label: '女儿' },
-        { key: 'sibling', label: '兄弟姐妹' }
-      ]
-    });
-  },
-
   toggleSelectedBranch: function () {
     const person = this.data.selectedPerson;
     if (!person) return;
@@ -961,19 +928,19 @@ Page({
     });
   },
 
-  closeRelationSheet: function () {
-    this.setData({ showRelationSheet: false, selectedPerson: null });
-  },
-
   chooseRelation: function (event) {
     const person = this.data.selectedPerson;
     const relationType = event.currentTarget.dataset.type;
-    if (!person) return;
+    if (!person || !this.data.canEdit || !person.relationOptions.some(function (option) { return option.key === relationType; })) return;
     this._relationReturnFocus = { familyId: this.data.currentFamily._id, personId: person._id };
-    this.setData({ showRelationSheet: false, selectedPerson: null });
+    this.closeMemberSheet();
     wx.navigateTo({
       url: '/pages/add-member/index?familyId=' + this.data.currentFamily._id + '&anchorId=' + person._id + '&anchorName=' + encodeURIComponent(person.name) + '&relationType=' + relationType
     });
+  },
+
+  hideMemberAd: function () {
+    this.setData({ memberAdVisible: false });
   },
 
   startShare: function () {

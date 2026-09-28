@@ -1,11 +1,14 @@
 <template name="kinship-card">
   <view class="kinship-card" wx:if="{{card}}">
-    <text class="kinship-card-heading">从{{card.viewpointName}}看</text>
-    <scroll-view class="kinship-card-list" scroll-y style="height:{{card.entries.length > 1 ? 260 : 180}}rpx;">
+    <view class="kinship-card-entry" wx:if="{{card.entries.length === 1}}">
+      <text class="kinship-card-label">从{{card.viewpointName}}看，是{{card.entries[0].label}}</text>
+      <text class="kinship-card-path">{{card.entries[0].pathText || card.entries[0].description}}</text>
+      <text class="kinship-card-reason" wx:if="{{card.entries[0].reason}}">{{card.entries[0].reason}}</text>
+    </view>
+    <scroll-view class="kinship-card-list" scroll-y wx:else>
       <view class="kinship-card-entry" wx:for="{{card.entries}}" wx:key="key">
-        <text class="kinship-card-label">{{index === 0 ? '' : '同时也是：'}}{{item.label}}</text>
-        <text class="kinship-card-description">{{item.description}}</text>
-        <text class="kinship-card-path" wx:if="{{item.pathText}}">{{item.pathText}}</text>
+        <text class="kinship-card-label">从{{card.viewpointName}}看，{{index === 0 ? '是' : '也是'}}{{item.label}}</text>
+        <text class="kinship-card-path">{{item.pathText || item.description}}</text>
         <text class="kinship-card-reason" wx:if="{{item.reason}}">{{item.reason}}</text>
       </view>
     </scroll-view>

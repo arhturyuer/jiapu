@@ -3,6 +3,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const memberActions = require('../miniprogram/utils/member-actions');
+const commerceConfig = require('../miniprogram/config/commerce');
 const shareCard = require('../miniprogram/utils/share-card');
 const api = require('../miniprogram/utils/api');
 
@@ -20,8 +22,8 @@ function loadTreePage(app) {
   return definition;
 }
 
-function createPage() {
-  const definition = loadTreePage();
+function createPage(app) {
+  const definition = loadTreePage(app);
   const page = Object.assign({}, definition);
   const setDataCalls = [];
   page.data = Object.assign({}, definition.data, {
@@ -97,7 +99,8 @@ test('补录亲属返回后定位原操作人物，人物失效时恢复默认�
   const visits = [];
   global.wx = { navigateTo: function (options) { visits.push(options.url); } };
   page.data.currentFamily = { _id: 'family' };
-  page.data.selectedPerson = page.data.rawPersons[0];
+  page.data.canEdit = true;
+  page.data.selectedPerson = page.decorateSelectedPerson(page.data.rawPersons[0]);
   try {
     page.chooseRelation({ currentTarget: { dataset: { type: 'father' } } });
     assert.deepEqual(page._relationReturnFocus, { familyId: 'family', personId: 'parent' });
@@ -108,6 +111,114 @@ test('补录亲属返回后定位原操作人物，人物失效时恢复默认�
     assert.deepEqual(fits.pop(), ['parent', false]);
     page.renderGraph('full', '', { focusPersonId: 'deleted' });
     assert.deepEqual(fits.pop(), ['', true]);
+  } finally {
+    global.wx = previousWx;
+  }
+});
+
+test('成员弹框根据有效亲子关系展示后代操作与可添加方向', function () {
+  const people = [
+    { _id: 'father', gender: 'male' }, { _id: 'mother', gender: 'female' },
+    { _id: 'unknown', gender: 'unknown' }, { _id: 'member', gender: 'female' },
+    { _id: 'child', gender: 'male' }
+  ];
+  const relations = [
+    { type: 'parent_child', fromPersonId: 'father', toPersonId: 'member', status: 'active' },
+    { type: 'parent_child', fromPersonId: 'unknown', toPersonId: 'member', status: 'active' },
+    { type: 'parent_child', fromPersonId: 'member', toPersonId: 'child', status: 'active' },
+    { type: 'parent_child', fromPersonId: 'mother', toPersonId: 'member', status: 'deleted' }
+  ];
+  const state = memberActions.describe(people[3], people, relations);
+  assert.equal(state.hasChildren, true);
+  assert.equal(state.childCount, 1);
+  assert.deepEqual(state.relationOptions.map(function (item) { return item.label; }), ['母亲', '丈夫', '儿子', '女儿', '兄弟姐妹']);
+  const withoutChildren = memberActions.describe(people[4], people, relations);
+  assert.equal(withoutChildren.hasChildren, false);
+  assert.deepEqual(withoutChildren.relationOptions.map(function (item) { return item.label; }), ['父亲', '妻子', '儿子', '女儿', '兄弟姐妹']);
+  const unknown = memberActions.describe({ _id: 'unknown-gender', gender: 'unknown' }, people, []);
+  assert.equal(unknown.relationOptions.length, 6);
+  assert.equal(unknown.relationOptions[2].label, '配偶');
+  const unknownParent = memberActions.describe(people[3], people, [relations[1]]);
+  assert.deepEqual(unknownParent.relationOptions.slice(0, 2).map(function (item) { return item.label; }), ['父亲', '母亲']);
+  const bothParents = memberActions.describe(people[3], people, [relations[0], Object.assign({}, relations[3], { status: 'active' })]);
+  assert.deepEqual(bothParents.relationOptions.map(function (item) { return item.key; }), ['spouse', 'son', 'daughter', 'sibling']);
+});
+
+test('真实与示例成员弹框直接展示亲属方向，资料只保留查看入口', function () {
+  const tree = fs.readFileSync(path.join(__dirname, '../miniprogram/pages/tree/index.wxml'), 'utf8');
+  const example = fs.readFileSync(path.join(__dirname, '../miniprogram/pages/example/index.wxml'), 'utf8');
+  for (const template of [tree, example]) {
+    assert.match(template, /bindtap="toggleSelectedBranch" wx:if="\{\{selectedPerson\.hasChildren\}\}"/);
+    assert.match(template, /wx:for="\{\{selectedPerson\.relationOptions\}\}"/);
+    assert.match(template, /bindtap="openMemberDetail"/);
+    assert.doesNotMatch(template, /bindtap="openEditMember"/);
+    assert.match(template, /<ad class="member-sheet-ad" wx:if="\{\{memberAdVisible\}\}"/);
+  }
+  assert.doesNotMatch(tree, /showRelationSheet/);
+  assert.match(example, /data-type="\{\{item\.key\}\}" bindtap="explainCreate"/);
+});
+
+test('真实成员方向点击进入已有添加页，已隐藏方向不可触发', function () {
+  const instance = createPage(), page = instance.page;
+  const previousWx = global.wx;
+  const visits = [];
+  global.wx = { navigateTo: function (options) { visits.push(options.url); } };
+  page.data.currentFamily = { _id: 'family' };
+  page.data.canEdit = true;
+  page.data.selectedPerson = page.decorateSelectedPerson(page.data.rawPersons[1]);
+  try {
+    page.chooseRelation({ currentTarget: { dataset: { type: 'father' } } });
+    assert.equal(visits.length, 0);
+    page.chooseRelation({ currentTarget: { dataset: { type: 'mother' } } });
+    assert.match(visits[0], /anchorId=child.*relationType=mother/);
+  } finally {
+    global.wx = previousWx;
+  }
+});
+
+test('成员弹框广告仅在已配置且未享有去广告权益时显示，错误后移除', function () {
+  const previousUnit = commerceConfig.bannerAdUnits.staging.memberSheet;
+  const previousGetApp = global.getApp;
+  commerceConfig.bannerAdUnits.staging.memberSheet = 'adunit-test';
+  const app = { globalData: { environment: 'staging' } };
+  const page = createPage(app).page;
+  page.data.currentFamily = { _id: 'family' };
+  const example = createExamplePage({ rawPersons: page.data.rawPersons, rawRelations: page.data.rawRelations });
+  global.getApp = function () { return app; };
+  try {
+    page.openMemberActions({ currentTarget: { dataset: { id: 'parent' } } });
+    assert.equal(page.data.memberAdVisible, true);
+    page.hideMemberAd();
+    assert.equal(page.data.memberAdVisible, false);
+    page.data.currentFamily.membership = { active: true };
+    page.openMemberActions({ currentTarget: { dataset: { id: 'parent' } } });
+    assert.equal(page.data.memberAdVisible, false);
+    example.openMemberActions({ currentTarget: { dataset: { id: 'child' } } });
+    assert.equal(example.data.memberAdVisible, true);
+    assert.equal(example.data.selectedPerson.hasChildren, false);
+    example.hideMemberAd();
+    assert.equal(example.data.memberAdVisible, false);
+    app.getCurrentFamily = function () { return { membership: { active: true } }; };
+    example.openMemberActions({ currentTarget: { dataset: { id: 'child' } } });
+    assert.equal(example.data.memberAdVisible, false);
+    commerceConfig.bannerAdUnits.staging.memberSheet = '';
+    example.openMemberActions({ currentTarget: { dataset: { id: 'child' } } });
+    assert.equal(example.data.memberAdVisible, false);
+  } finally {
+    commerceConfig.bannerAdUnits.staging.memberSheet = previousUnit;
+    global.getApp = previousGetApp;
+  }
+});
+
+test('示例亲属方向只提示创建家谱', function () {
+  const page = createExamplePage();
+  const previousWx = global.wx;
+  let prompt = null;
+  global.wx = { showModal: function (options) { prompt = options; } };
+  try {
+    page.explainCreate();
+    assert.equal(prompt.title, '在自己的家谱中继续');
+    assert.equal(prompt.confirmText, '去创建');
   } finally {
     global.wx = previousWx;
   }

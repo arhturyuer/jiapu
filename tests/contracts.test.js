@@ -131,6 +131,10 @@ test('关于页使用正式版实际版本并按最新在前展示受控更新�
   const verifier = fs.readFileSync(path.join(root, 'deployment/verify-release-note.mjs'), 'utf8');
   assert.deepEqual(releaseInfo.validateReleaseNotes(releaseNotes), [
     {
+      version: '1.4.3',
+      summary: '优化家谱成员操作弹框，直接选择亲属方向并按关系显示操作。'
+    },
+    {
       version: '1.4.2',
       summary: '优化示例家谱分类滑动与简介展示，支持千字分段介绍及展开收起。'
     },

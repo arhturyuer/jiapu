@@ -204,15 +204,20 @@ test('个人订单记录按付款人和家谱分页，会员页可恢复待确�
   assert.match(template, /刷新状态/);
 });
 
-test('广告只在家庭和我的页预留且无 ID 或会员状态下隐藏', function () {
+test('广告在家庭、我的和成员弹框按配置显示，无 ID 或会员状态下隐藏', function () {
   const config = require('../miniprogram/config/commerce');
   assert.equal(config.resolveBanner('staging', 'family'), '');
   assert.equal(config.resolveBanner('staging', 'profile'), '');
+  assert.equal(config.resolveBanner('staging', 'memberSheet'), '');
   const members = fs.readFileSync(path.join(root, 'miniprogram/pages/members/index.wxml'), 'utf8');
   const profile = fs.readFileSync(path.join(root, 'miniprogram/pages/profile/index.wxml'), 'utf8');
   assert.match(members, /wx:if="\{\{adVisible\}\}"/);
   assert.match(profile, /wx:if="\{\{adVisible\}\}"/);
-  ['tree', 'invite', 'edit-member', 'privacy', 'membership', 'legal'].forEach(function (name) {
+  ['tree', 'example'].forEach(function (name) {
+    const source = fs.readFileSync(path.join(root, 'miniprogram/pages', name, 'index.wxml'), 'utf8');
+    assert.match(source, /<ad class="member-sheet-ad" wx:if="\{\{memberAdVisible\}\}"/);
+  });
+  ['invite', 'edit-member', 'privacy', 'membership', 'legal'].forEach(function (name) {
     const source = fs.readFileSync(path.join(root, 'miniprogram/pages', name, 'index.wxml'), 'utf8');
     assert.doesNotMatch(source, /<ad\b/);
   });

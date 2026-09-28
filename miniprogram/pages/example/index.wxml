@@ -8,8 +8,34 @@
   <view class="graph-controls"><view class="graph-control" bindtap="zoomGraphIn">＋</view><view class="graph-control" bindtap="zoomGraphOut">－</view><view class="graph-control graph-control-text" bindtap="fitWholeGraph">全谱</view><view class="graph-control graph-control-text orientation-control {{orientationChanging ? 'is-disabled' : ''}}" bindtap="togglePageOrientation">{{orientationChanging ? '切换中' : isLandscape ? '竖屏' : '横屏'}}</view><view class="graph-control graph-control-text" bindtap="openDisplaySettings">设置</view><view class="graph-control graph-control-text {{posterGenerating ? 'is-disabled' : ''}}" bindtap="generatePoster">图片</view></view>
   <view class="graph-help"><text wx:if="{{selectedPersonId && !showMemberSheet}}">关系已高亮，再次点击成员或点“•••”进行操作</text><text wx:elif="{{hiddenBranchCount > 0}}">已收起 {{hiddenBranchCount}} 人，点击 +人数 可展开分支</text><text wx:else>{{viewMode === 'full' ? '拖动查看全谱，点击成员进行操作' : '当前从' + viewpointName + '查看关系'}}</text></view>
   <button class="primary-button create" bindtap="createFamily">用这个示例开始创建我的家谱</button>
-  <view class="sheet-mask" wx:if="{{showMemberSheet}}" bindtap="closeMemberSheet"><view class="bottom-sheet person-sheet" catchtap=""><view class="sheet-handle"></view><view class="person-sheet-head"><view class="person-sheet-avatar person-sheet-placeholder gender-avatar {{showGenderColors && selectedPerson.gender !== 'unknown' ? selectedPerson.genderClass : 'gender-neutral'}} {{selectedPerson.lifeStatus === 'deceased' ? 'is-deceased-avatar' : ''}}">{{selectedPerson.initial}}</view><view class="person-sheet-copy"><view class="person-sheet-name-row"><text class="person-sheet-name">{{selectedPerson.name}}</text><text class="gender-badge {{showGenderColors && selectedPerson.gender !== 'unknown' ? selectedPerson.genderClass : 'gender-neutral'}}" wx:if="{{showGenderBadge}}">{{selectedPerson.genderText}}</text><text class="person-sheet-life-status" wx:if="{{selectedPerson.lifeStatus === 'deceased'}}">故</text></view><text class="person-rank-basis" wx:if="{{showChildRankBadge && selectedPerson.childRankLabel}}">{{selectedPerson.childRankLabel}}</text><text class="muted-text">官方示例人物 · 只读</text></view></view><template is="kinship-card" data="{{card: selectedKinship}}" />
-      <view class="action-grid"><view class="action-cell" bindtap="useSelectedPerspective"><text class="action-title">从他/她看</text><text class="action-desc">切换成员视角</text></view><view class="action-cell" bindtap="openMemberDetail"><text class="action-title">查看资料</text><text class="action-desc">关系与人物信息</text></view><view class="action-cell" bindtap="toggleSelectedBranch"><text class="action-title">{{selectedPerson.isCollapsed ? '展开后代' : '折叠后代'}}</text><text class="action-desc">调整示例图谱分支</text></view><view class="action-cell" bindtap="explainCreate"><text class="action-title">添加亲属</text><text class="action-desc">创建后即可使用</text></view><view class="action-cell action-cell-wide" bindtap="explainCreate"><text class="action-title">编辑资料</text><text class="action-desc">在自己的家谱中补充或纠正资料</text></view></view></view></view>
+  <view class="sheet-mask" wx:if="{{showMemberSheet}}" bindtap="closeMemberSheet">
+    <view class="bottom-sheet person-sheet" catchtap="">
+      <view class="person-sheet-content">
+        <view class="sheet-handle"></view>
+        <view class="person-sheet-head">
+          <view class="person-sheet-avatar person-sheet-placeholder gender-avatar {{showGenderColors && selectedPerson.gender !== 'unknown' ? selectedPerson.genderClass : 'gender-neutral'}} {{selectedPerson.lifeStatus === 'deceased' ? 'is-deceased-avatar' : ''}}">{{selectedPerson.initial}}</view>
+          <view class="person-sheet-copy">
+            <view class="person-sheet-name-row"><text class="person-sheet-name">{{selectedPerson.name}}</text><text class="gender-badge {{showGenderColors && selectedPerson.gender !== 'unknown' ? selectedPerson.genderClass : 'gender-neutral'}}" wx:if="{{showGenderBadge}}">{{selectedPerson.genderText}}</text><text class="person-sheet-life-status" wx:if="{{selectedPerson.lifeStatus === 'deceased'}}">故</text></view>
+            <text class="person-rank-basis" wx:if="{{showChildRankBadge && selectedPerson.childRankLabel}}">{{selectedPerson.childRankLabel}}</text>
+            <text class="muted-text">官方示例人物 · 只读</text>
+          </view>
+        </view>
+        <template is="kinship-card" data="{{card: selectedKinship}}" />
+        <view class="action-grid">
+          <view class="action-cell" bindtap="useSelectedPerspective"><text class="action-title">从他/她看</text><text class="action-desc">切换成员视角</text></view>
+          <view class="action-cell" bindtap="openMemberDetail"><text class="action-title">查看资料</text><text class="action-desc">关系与人物信息</text></view>
+          <view class="action-cell" bindtap="toggleSelectedBranch" wx:if="{{selectedPerson.hasChildren}}"><text class="action-title">{{selectedPerson.isCollapsed ? '展开后代' : '折叠后代'}}</text><text class="action-desc">调整示例图谱分支</text></view>
+        </view>
+        <view class="member-relation-section">
+          <text class="member-relation-title">添加亲属</text>
+          <view class="member-relation-grid">
+            <view class="member-relation-option" wx:for="{{selectedPerson.relationOptions}}" wx:key="key" data-type="{{item.key}}" bindtap="explainCreate">{{item.label}}</view>
+          </view>
+        </view>
+      </view>
+      <ad class="member-sheet-ad" wx:if="{{memberAdVisible}}" unit-id="{{memberAdUnitId}}" binderror="hideMemberAd"></ad>
+    </view>
+  </view>
   <view class="sheet-mask" wx:if="{{showPerspectiveSheet}}" bindtap="closePerspectiveSheet"><view class="bottom-sheet perspective-sheet" catchtap=""><view class="sheet-handle"></view><view class="sheet-title">以某位成员看家谱</view><input class="person-search" placeholder="输入姓名查找" value="{{perspectiveKeyword}}" bindinput="filterPerspectives"/><scroll-view class="perspective-list" scroll-y><view class="perspective-option" wx:for="{{perspectiveResults}}" wx:key="_id" data-id="{{item._id}}" bindtap="selectPerspective"><view class="small-avatar gender-avatar {{item.genderClass}}">{{item.initial}}</view><text class="perspective-name">{{item.name}}</text><text class="gender-badge {{item.genderClass}}">{{item.genderText}}</text></view></scroll-view></view></view>
   <view class="tour-mask" wx:if="{{showTour}}"><view class="tour-card"><text class="tour-count">{{tourStep}} / 3</text><text class="tour-title">{{tourStep === 1 ? '这是一张完整家谱图' : tourStep === 2 ? '点一位家人看看资料' : '切换视角，理解不同关系'}}</text><text class="tour-copy">{{tourStep === 1 ? '用双指缩放、拖动画布查看全家关系。' : tourStep === 2 ? '先选中，再次点击人物查看资料和操作。' : '选择任意成员，关系称谓会围绕他/她变化。'}}</text><view class="tour-actions"><button class="secondary-button" bindtap="dismissTour">跳过</button><button class="primary-button" bindtap="nextTour">{{tourStep === 3 ? '开始体验' : '下一步'}}</button></view></view></view>
 </view>

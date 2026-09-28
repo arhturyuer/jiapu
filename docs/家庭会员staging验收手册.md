@@ -13,7 +13,7 @@
 3. 确认 `payment_orders`、`payment_events`、`membership_grants` 与扩展后的 `export_tasks` 已创建；`commerce_metrics_daily` 已退出活动运行路径，不作为新环境必需集合。
 4. 在云开发控制台的“设置 → 其他设置 → 消息推送”中，把 `event/xpay_goods_deliver_notify` 和 `event/xpay_refund_notify` 逐条绑定到 staging 的 `youpuPaymentNotify`，并留存页面截图和函数日志。绑定若会替换 production 目标，必须先获得当前请求的生产授权；不能因 staging 验收而中断生产通知。平台直接向云函数传入 JSON，不配置 HTTP 通知 URL、GET 校验、消息 Token 或 AESKey。每个事件组合同一时间只能绑定一个环境；切换 production 前必须确认 staging 无待确认订单。
 5. `youpuJobs` 只保留每日保留期触发器。家庭备份由管理员申请后异步派发；沙箱待确认订单只在用户打开订单并显式重试时以 `env=1` 调用 `query_order`。运营商业指标按打开页面时即时读取，不再周期写入日报集合。
-6. 广告开通状态属于待核验的平台事实。未配置有效广告位 ID 时，页面不应留下广告空白；广告配置以 `miniprogram/config/commerce.js` 和本次平台验收结果为准。
+6. 广告开通状态属于待核验的平台事实。家庭、我的及真实与示例家谱人物弹框分别使用 `family`、`profile`、`memberSheet` 广告位；未配置有效广告位 ID 时不应留下广告空白。广告配置以 `miniprogram/config/commerce.js` 和本次平台验收结果为准。
 
 ## 端到端验收
 
@@ -25,6 +25,7 @@
 6. 以家谱 A 管理员生成完整备份。确认请求后立即异步启动，检查退避轮询、进度、分卷不超过 100MB、`manifest.json`、CSV 和审核通过图片；离开页面后不得继续查询。通过“下载并转发”调用 `wx.downloadFile` 与 `wx.shareFileMessage`。非管理员必须被拒绝，7 天内再次申请必须被拒绝。
 7. 在沙箱后台触发退款通知并确认订单变为 `refunded`；会员期限按其余未退款 grant 重算。若无有效 grant，完整历史分页、备份和去广告权益立即降级。
 8. 打开运营后台“商业化”：核对 GMV、退款、SKU、转化、有效会员家庭和月额度；待确认订单只显示“查单重试”，后台不得出现改价、手工改会员或直接退款入口。
+9. 有有效 staging 广告位时，分别在非会员与会员身份打开真实家谱人物弹框，并在示例家谱打开弹框；核对横幅展示、会员去广告、广告加载失败后不留空白。无广告位 ID 时仅检查弹框不预留空白，不把广告展示记为通过。
 
 ## 生产接入交接（需另行明确授权）
 

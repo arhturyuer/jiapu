@@ -1,7 +1,17 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const kinship = require('../miniprogram/utils/kinship');
 const cases = require('./fixtures/kinship-cases');
+
+test('称谓词表单字符分隔保持全部条目并控制主包体积', () => {
+  const dictionaryPath = path.join(__dirname, '../miniprogram/utils/kinship-data/dictionary.js');
+  const dictionary = require(dictionaryPath);
+  assert.equal(dictionary.encoded.split('|').length, dictionary.count);
+  assert.equal(dictionary.count, 76186);
+  assert.ok(fs.statSync(dictionaryPath).size < 1000000);
+});
 function fixture(steps, genders, dates) {
   const persons = [...genders].map((gender, index) => ({ _id: 'p' + index, name: '成员' + index, gender: { M: 'male', F: 'female', '?': 'unknown' }[gender], birthDate: (dates || {})[index] || '', status: 'active' }));
   const relations = [...steps].map((step, index) => ({ _id: 'r' + index, type: step === 'S' ? 'spouse' : 'parent_child', fromPersonId: 'p' + (step === 'U' ? index + 1 : index), toPersonId: 'p' + (step === 'U' ? index : index + 1), status: 'active' }));
