@@ -90,11 +90,11 @@ test('图谱缓存命中、并发请求去重，强制刷新和写入失效会�
   api.call = originalCall;
 });
 
-test('缓存超过 60 秒后不再视为新鲜数据', function () {
+test('业务缓存一小时内有效，过期后重新读取', function () {
   const app = createApp();
   const entry = app.getCacheEntry('dashboard', 'family-1');
   entry.data = { stats: {} };
-  entry.updatedAt = Date.now() - 60001;
+  entry.updatedAt = Date.now() - 60 * 60 * 1000 - 1;
   assert.equal(app.isCacheFresh('dashboard', 'family-1'), false);
   entry.updatedAt = Date.now();
   assert.equal(app.isCacheFresh('dashboard', 'family-1'), true);
@@ -148,6 +148,112 @@ test('强制刷新会隔离已在途读取并只保留刷新结果', async funct
   api.call = originalCall;
 });
 
+test('同一轮强制刷新合并请求，缓存按用户和查询参数隔离', async function () {
+  const api = require('../miniprogram/utils/api');
+  const originalCall = api.call;
+  const requests = [];
+  api.call = function (type, payload) {
+    requests.push({ type: type, payload: payload });
+    return Promise.resolve({ items: [], tags: [] });
+  };
+  try {
+    const app = createApp();
+    app.globalData.user = { _id: 'u1' };
+    await Promise.all([app.getExamplesList('人物'), app.getExamplesList('人物')]);
+    await app.getExamplesList('故事');
+    await Promise.all([app.getExamplesList('人物', { force: true }), app.getExamplesList('人物', { force: true })]);
+    assert.equal(requests.length, 3);
+    app.globalData.user = { _id: 'u2' };
+    await app.getExamplesList('人物');
+    assert.equal(requests.length, 4);
+    assert.deepEqual(requests.map(function (request) { return request.payload.tag; }), ['人物', '故事', '人物', '人物']);
+  } finally { api.call = originalCall; }
+});
+
+test('人物完整更新定向更新图谱和详情，待审核不会提前写入', function () {
+  const app = createApp();
+  app.globalData.user = { _id: 'u1' };
+  const graph = app.getCacheEntry('graph', 'f1');
+  const detail = app.getCacheEntry('personDetail', 'p1');
+  app.updateEntry(graph, { family: { _id: 'f1' }, persons: [{ _id: 'p1', name: '旧名' }], relations: [] });
+  app.updateEntry(detail, { person: { _id: 'p1', familyId: 'f1', name: '旧名' }, relatives: [], currentRole: 'admin' });
+  // 待审核只返回 pending，不触发 applyPersonUpdate。
+  assert.equal(graph.data.persons[0].name, '旧名');
+  app.applyPersonUpdate('f1', { _id: 'p1', familyId: 'f1', name: '新名' });
+  assert.equal(graph.data.persons[0].name, '新名');
+  assert.equal(detail.data.person.name, '新名');
+  assert.equal(app.isCacheFresh('graph', 'f1'), true);
+  assert.equal(app.isCacheFresh('dashboard', 'f1'), false);
+});
+
+test('只拿到偏好结果时不伪造缺少家谱信息的设置缓存', function () {
+  const app = createApp();
+  app.updatePreference('f1', { nameLayout: 'vertical' });
+  assert.equal(app.isCacheFresh('preference', 'f1'), false);
+  const entry = app.getCacheEntry('preference', 'f1');
+  app.updateEntry(entry, { family: { _id: 'f1', name: '测试家谱' }, preference: { nameLayout: 'horizontal' } });
+  app.updatePreference('f1', { nameLayout: 'vertical' });
+  assert.equal(entry.data.family.name, '测试家谱');
+  assert.equal(entry.data.preference.nameLayout, 'vertical');
+});
+
+test('业务缓存只保存在小程序进程内', function () {
+  const first = createApp();
+  first.updateEntry(first.getCacheEntry('graph', 'f1'), { persons: [] });
+  assert.equal(first.isCacheFresh('graph', 'f1'), true);
+  const restarted = createApp();
+  assert.equal(restarted.isCacheFresh('graph', 'f1'), false);
+});
+
+test('登录校验仍按 60 秒刷新，不继承一小时业务缓存', async function () {
+  const api = require('../miniprogram/utils/api');
+  const originalCall = api.call;
+  const previousWx = global.wx;
+  let calls = 0;
+  api.call = function (type) {
+    assert.equal(type, 'auth.login');
+    calls += 1;
+    return Promise.resolve({ user: { _id: 'u1' }, accountState: 'active' });
+  };
+  global.wx = { setStorageSync: function () {} };
+  try {
+    const app = createApp();
+    app.globalData.user = { _id: 'u1' };
+    app.loginUpdatedAt = Date.now();
+    await app.ensureLogin();
+    assert.equal(calls, 0);
+    app.loginUpdatedAt = Date.now() - 61 * 1000;
+    await app.ensureLogin();
+    assert.equal(calls, 1);
+  } finally {
+    api.call = originalCall;
+    global.wx = previousWx;
+  }
+});
+
+test('快速切换人物视角只保存最后一次偏好', async function () {
+  const api = require('../miniprogram/utils/api');
+  const originalCall = api.call;
+  const calls = [];
+  api.call = function (type, payload) {
+    calls.push({ type: type, payload: payload });
+    return Promise.resolve({ preference: payload });
+  };
+  const app = { updatePreference: function () {} };
+  const tree = createPage(loadPage('../miniprogram/pages/tree/index', app));
+  try {
+    tree.saveGraphPreference({ _id: 'f1' }, 'horizontal', 'perspective', 'p1');
+    tree.saveGraphPreference({ _id: 'f1' }, 'horizontal', 'perspective', 'p2');
+    assert.equal(calls.length, 0);
+    await tree.flushGraphPreference();
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].type, 'family.setPreference');
+    assert.equal(calls[0].payload.personId, 'p2');
+    await tree.flushGraphPreference();
+    assert.equal(calls.length, 1);
+  } finally { api.call = originalCall; }
+});
+
 test('没有家谱的账号结束加载并展示空状态，重复切 Tab 不重复请求', async function () {
   const app = {
     globalData: { accountState: 'active' },
@@ -177,7 +283,7 @@ test('没有家谱的账号结束加载并展示空状态，重复切 Tab 不重
   global.wx = previousWx;
 });
 
-test('家庭页切换家谱后留在当前页并强制刷新看板', async function () {
+test('家庭页切换家谱后留在当前页并复用看板缓存', async function () {
   const first = { _id: 'family-1', name: '第一份家谱' };
   const second = { _id: 'family-2', name: '第二份家谱' };
   const invalidations = [];
@@ -202,8 +308,8 @@ test('家庭页切换家谱后留在当前页并强制刷新看板', async funct
   assert.equal(app.currentFamily._id, second._id);
   assert.equal(members.data.currentFamily._id, second._id);
   assert.equal(members.data.showFamilySheet, false);
-  assert.deepEqual(refreshOptions, { force: true });
-  assert.deepEqual(invalidations, [{ profile: true }]);
+  assert.equal(refreshOptions, undefined);
+  assert.deepEqual(invalidations, []);
   assert.deepEqual(stored, [['youpu_pending_view', { mode: 'full', personId: '' }]]);
   global.wx = previousWx;
 });

@@ -25,7 +25,7 @@ function loadPage(app) {
 
 test('显示设置加载新用户默认偏好', async function () {
   const previousCall = api.call;
-  const app = { getCurrentFamily: function () { return { _id: 'family-default' }; } };
+  const app = { getCurrentFamily: function () { return { _id: 'family-default' }; }, getPreference: function (familyId) { return api.call('family.getPreference', { familyId: familyId }); } };
   const page = loadPage(app);
   let request = null;
   api.call = function (type, payload) {
@@ -47,12 +47,14 @@ test('显示设置加载新用户默认偏好', async function () {
   }
 });
 
-test('开关即时保存、保存期间锁定并使当前家谱缓存失效', async function () {
+test('连续开关合并保存并更新家谱偏好缓存', async function () {
+  const template = fs.readFileSync(path.join(__dirname, '../miniprogram/pages/display-settings/index.wxml'), 'utf8');
+  assert.doesNotMatch(template, /disabled="\{\{saving\}\}"/);
   const previousCall = api.call;
-  const invalidations = [];
+  const updates = [];
   const app = {
     getCurrentFamily: function () { return { _id: 'family-1' }; },
-    invalidateCache: function (value) { invalidations.push(value); }
+    updatePreference: function (familyId, preference) { updates.push({ familyId, preference }); }
   };
   const page = loadPage(app);
   page.data.familyId = 'family-1';
@@ -63,16 +65,18 @@ test('开关即时保存、保存期间锁定并使当前家谱缓存失效', as
     return new Promise(function (resolve) { resolveSave = resolve; });
   };
   try {
-    const saving = page.savePreference('showGenderBadge', false);
+    await page.savePreference('showGenderBadge', false);
     assert.equal(page.data.showGenderBadge, false);
     assert.equal(page.data.saving, true);
     page.togglePreference({ currentTarget: { dataset: { field: 'showGenderColors' } }, detail: { value: false } });
+    assert.equal(calls.length, 0);
+    const saving = page.flushPreference();
     assert.equal(calls.length, 1);
-    resolveSave({ preference: { nameLayout: 'horizontal', showChildRankBadge: true, showGenderBadge: false, showGenderColors: true } });
+    resolveSave({ preference: { nameLayout: 'horizontal', showChildRankBadge: true, showGenderBadge: false, showGenderColors: false } });
     await saving;
     assert.equal(page.data.saving, false);
-    assert.deepEqual(calls[0], { type: 'family.setPreference', payload: { familyId: 'family-1', showGenderBadge: false } });
-    assert.deepEqual(invalidations, [{ graph: 'family-1' }]);
+    assert.deepEqual(calls[0], { type: 'family.setPreference', payload: { familyId: 'family-1', showGenderBadge: false, showGenderColors: false } });
+    assert.equal(updates.length, 1);
   } finally {
     api.call = previousCall;
   }
@@ -82,13 +86,14 @@ test('显示设置保存失败时恢复原值并提示', async function () {
   const previousCall = api.call;
   const previousWx = global.wx;
   const toasts = [];
-  const app = { getCurrentFamily: function () { return { _id: 'family-1' }; }, invalidateCache: function () {} };
+  const app = { getCurrentFamily: function () { return { _id: 'family-1' }; }, updatePreference: function () {} };
   const page = loadPage(app);
   page.data.familyId = 'family-1';
   global.wx = { showToast: function (value) { toasts.push(value); } };
   api.call = function () { return Promise.reject(new Error('网络不可用')); };
   try {
     await page.savePreference('nameLayout', 'vertical');
+    await page.flushPreference();
     assert.equal(page.data.nameLayout, 'horizontal');
     assert.equal(page.data.saving, false);
     assert.equal(toasts[0].title, '设置保存失败，请重试');
@@ -283,12 +288,12 @@ test('示例设置页显示当前示例的发布默认值', async function () {
   }
 });
 
-test('智能收起开关保存 false 并按家谱使缓存失效', async function () {
+test('智能收起开关保存 false 并更新家谱偏好缓存', async function () {
   const previousCall = api.call;
-  const invalidations = [];
+  const updates = [];
   const app = {
     getCurrentFamily: function () { return { _id: 'family-1' }; },
-    invalidateCache: function (value) { invalidations.push(value); }
+    updatePreference: function (familyId, preference) { updates.push({ familyId, preference }); }
   };
   const page = loadPage(app);
   page.data.familyId = 'family-1';
@@ -299,8 +304,9 @@ test('智能收起开关保存 false 并按家谱使缓存失效', async functio
   };
   try {
     await page.savePreference('autoCollapseEnabled', false);
+    await page.flushPreference();
     assert.equal(page.data.autoCollapseEnabled, false);
-    assert.deepEqual(invalidations, [{ graph: 'family-1' }]);
+    assert.equal(updates.length, 1);
   } finally {
     api.call = previousCall;
   }

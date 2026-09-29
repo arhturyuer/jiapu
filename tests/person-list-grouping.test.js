@@ -102,7 +102,7 @@ test('graph.get 返回资料缺失项摘要且成员页提供三种视图', func
   assert.match(template, /bindtap="switchView"/);
 });
 
-test('成员页切换视图、搜索和资料完整空状态保持一致', function () {
+test('成员页切换视图、搜索和资料完整空状态保持一致', async function () {
   const originalGetApp = global.getApp;
   const originalPage = global.Page;
   let definition;
@@ -133,6 +133,7 @@ test('成员页切换视图、搜索和资料完整空状态保持一致', funct
   assert.deepEqual(page.data.displayedPersons.map(function (item) { return item._id; }), ['p2']);
   page.switchView({ currentTarget: { dataset: { mode: 'name' } } });
   page.inputKeyword({ detail: { value: '孩子' } });
+  await new Promise(function (resolve) { setTimeout(resolve, 140); });
   assert.equal(page.data.searching, true);
   assert.deepEqual(page.data.displayedPersons.map(function (item) { return item._id; }), ['p2']);
 

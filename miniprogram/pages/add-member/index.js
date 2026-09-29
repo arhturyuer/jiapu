@@ -41,7 +41,7 @@ Page({
     }
     this.loadRelationContext();
   },
-  onUnload: function () { formState.clearLeaveAlert(this); },
+  onUnload: function () { formState.clearLeaveAlert(this); if (this._existingTimer) clearTimeout(this._existingTimer); if (this._duplicateTimer) clearTimeout(this._duplicateTimer); },
   markDirty: function () { if (!this.data.hasUnsavedChanges) this.setData({ hasUnsavedChanges: true }); formState.syncLeaveAlert(this, true, '新增成员信息尚未保存，确定离开吗？'); },
   clearDirty: function () { this.setData({ hasUnsavedChanges: false }); formState.clearLeaveAlert(this); },
   relationExists: function (type, firstId, secondId) {
@@ -66,7 +66,7 @@ Page({
   },
   loadRelationContext: function () {
     const self = this; this._contextRequested = true; this.setData({ loadingContext: true, contextError: '' });
-    return api.call('graph.get', { familyId: this.data.familyId }).then(function (data) {
+    return app.getGraph(this.data.familyId).then(function (data) {
       self._graphPersons = data.persons || []; self._graphRelations = data.relations || [];
       const anchor = self._graphPersons.find(function (p) { return p._id === self.data.anchorId; });
       if (anchor) {
@@ -120,10 +120,10 @@ Page({
   },
   saveDraft: function (mode) { this._drafts[mode] = mode === 'new' ? { name: this.data.name, gender: this.data.gender, birthDate: this.data.birthDate, birthPlace: this.data.birthPlace, bio: this.data.bio, showMoreFields: this.data.showMoreFields } : { existingKeyword: this.data.existingKeyword, selectedExistingId: this.data.selectedExistingId, selectedExistingPerson: this.data.selectedExistingPerson }; },
   chooseEntryMode: function (event) { const mode = event.currentTarget.dataset.mode; if (mode === this.data.entryMode) return; this.saveDraft(this.data.entryMode); this.setData(Object.assign({ entryMode: mode }, this._drafts[mode] || {})); this.refreshRelationChoices(false); },
-  filterExisting: function (event) { const keyword = event.detail.value.trim(); this.setData({ existingKeyword: keyword, existingResults: this.filterCandidates(this._existingCandidates, keyword) }); },
+  filterExisting: function (event) { const keyword = event.detail.value.trim(); this.setData({ existingKeyword: keyword }); if (this._existingTimer) clearTimeout(this._existingTimer); const self = this; this._existingTimer = setTimeout(function () { self._existingTimer = null; self.setData({ existingResults: self.filterCandidates(self._existingCandidates, keyword) }); }, 120); },
   selectExisting: function (event) { const id = event.currentTarget.dataset.id, person = (this._existingCandidates || []).find(function (p) { return p._id === id; }); if (!person) return; if (person.selectable === false) { wx.showToast({ title: person.relationStateText, icon: 'none' }); return; } this.setData({ selectedExistingId: id, selectedExistingPerson: person }); this.refreshRelationChoices(false); this.markDirty(); },
   useExistingSuggestion: function (event) { const id = event.currentTarget.dataset.id, selected = (this._existingCandidates || []).find(function (p) { return p._id === id; }); if (!selected || selected.selectable === false) { wx.showToast({ title: selected ? selected.relationStateText : '这位成员不适合当前关系', icon: 'none' }); return; } this.saveDraft('new'); this.setData({ entryMode: 'existing', selectedExistingId: id, existingKeyword: this.data.name, selectedExistingPerson: selected }); this.refreshRelationChoices(false); this.markDirty(); },
-  inputField: function (event) { const patch = {}; patch[event.currentTarget.dataset.field] = event.detail.value; this.setData(patch); if (event.currentTarget.dataset.field === 'name') this.updateDuplicateSuggestions(); this.markDirty(); },
+  inputField: function (event) { const patch = {}; patch[event.currentTarget.dataset.field] = event.detail.value; this.setData(patch); if (event.currentTarget.dataset.field === 'name') { if (this._duplicateTimer) clearTimeout(this._duplicateTimer); const self = this; this._duplicateTimer = setTimeout(function () { self._duplicateTimer = null; self.updateDuplicateSuggestions(); }, 120); } this.markDirty(); },
   updateDuplicateSuggestions: function () { const name = this.data.name.trim(); this.setData({ duplicateSuggestions: name ? (this._graphPersons || []).filter(function (p) { return p.name.indexOf(name) >= 0; }).slice(0, 3).map(this.personItem.bind(this)) : [] }); },
   chooseGender: function (event) { const gender = event.currentTarget.dataset.gender; if (fixedGender(this.data.relationType) || !personGender.isKnown(gender)) return; this._genderTouched = true; this.setData({ gender: gender }); this.markDirty(); },
   chooseDate: function (event) { this.setData({ birthDate: event.detail.value }); this.markDirty(); },
@@ -154,7 +154,7 @@ Page({
       }
       request = mediaPromise.then(function (media) { return self.createNewPerson(media ? media.assetId : ''); });
     }
-    return request.then(function (data) { self._submitRequestId = ''; if (app.invalidateFamilyData) app.invalidateFamilyData(self.data.familyId); self.clearDirty(); wx.showToast({ title: data.pending ? '已提交管理员审核' : '关系已保存', icon: data.pending ? 'none' : 'success', duration: 1600 }); if (continueAdding) return self.resetForNext(); setTimeout(function () { wx.navigateBack(); }, 600); return data; }).catch(function (error) { if (error.code !== 'CLOUD_FUNCTION_TIMEOUT' && error.code !== 'CLOUD_CALL_FAILED') self._submitRequestId = ''; if (self.data.entryMode === 'new' && self._pendingAvatarMedia) self.setData({ avatarState: 'uploaded', avatarStateText: '头像已上传，再次保存时将直接重试绑定' }); wx.showToast({ title: api.userMessage(error, '添加失败'), icon: 'none' }); }).then(function (data) { self.setData({ submitting: false, uploading: false, submitStage: '' }); return data; });
+    return request.then(function (data) { self._submitRequestId = ''; if (!data.pending && app.invalidateFamilyData) app.invalidateFamilyData(self.data.familyId); self.clearDirty(); wx.showToast({ title: data.pending ? '已提交管理员审核' : '关系已保存', icon: data.pending ? 'none' : 'success', duration: 1600 }); if (continueAdding) return self.resetForNext(); setTimeout(function () { wx.navigateBack(); }, 600); return data; }).catch(function (error) { if (error.code !== 'CLOUD_FUNCTION_TIMEOUT' && error.code !== 'CLOUD_CALL_FAILED') self._submitRequestId = ''; if (self.data.entryMode === 'new' && self._pendingAvatarMedia) self.setData({ avatarState: 'uploaded', avatarStateText: '头像已上传，再次保存时将直接重试绑定' }); wx.showToast({ title: api.userMessage(error, '添加失败'), icon: 'none' }); }).then(function (data) { self.setData({ submitting: false, uploading: false, submitStage: '' }); return data; });
   },
   resetForNext: function () { this._pendingAvatarMedia = null; this._selectedAvatarSize = 0; this._drafts = { new: {}, existing: {} }; this._genderTouched = false; this.setData({ entryMode: 'new', name: '', gender: defaultGender(this.data.relationType, this.data.anchorGender), birthDate: '', birthPlace: '', bio: '', avatar: '', selectedAvatarPath: '', avatarAssetId: '', avatarState: '', avatarStateText: '', selectedExistingId: '', selectedExistingPerson: null, existingKeyword: '', duplicateSuggestions: [], showMoreFields: false }); return this.loadRelationContext(); }
 });

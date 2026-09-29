@@ -1614,15 +1614,33 @@ async function personGet(event) {
   const person = await mustGet(db, 'persons', event.personId, 'PERSON_NOT_FOUND', '成员不存在');
   const access = await requireMembership(person.familyId, ACTIVE_ROLES, db, openid);
   assert(person.status === 'active', 'PERSON_NOT_FOUND', '成员已删除');
-  const relations = await listAll('relations', { familyId: person.familyId, status: 'active' }, GRAPH_RELATION_LIMIT);
-  const direct = relations.filter(function (relation) {
-    return relation.fromPersonId === person._id || relation.toPersonId === person._id;
+  const relationPages = await Promise.all([
+    listAll('relations', { familyId: person.familyId, status: 'active', fromPersonId: person._id }, GRAPH_RELATION_LIMIT),
+    listAll('relations', { familyId: person.familyId, status: 'active', toPersonId: person._id }, GRAPH_RELATION_LIMIT)
+  ]);
+  const directById = new Map();
+  relationPages[0].concat(relationPages[1]).forEach(function (relation) { directById.set(relation._id, relation); });
+  const direct = Array.from(directById.values()).sort(function (first, second) {
+    return String(first._id).localeCompare(String(second._id));
+  });
+  const relatedIds = Array.from(new Set(direct.map(function (relation) {
+    return relation.fromPersonId === person._id ? relation.toPersonId : relation.fromPersonId;
+  })));
+  const personBatches = [];
+  for (let index = 0; index < relatedIds.length; index += 50) {
+    personBatches.push(db.collection('persons').where({
+      _id: _.in(relatedIds.slice(index, index + 50)), familyId: person.familyId, status: 'active'
+    }).limit(50).get());
+  }
+  const relatedById = new Map();
+  (await Promise.all(personBatches)).forEach(function (page) {
+    (page.data || []).forEach(function (related) { relatedById.set(related._id, related); });
   });
   const relatives = [];
   for (const relation of direct) {
     const relatedId = relation.fromPersonId === person._id ? relation.toPersonId : relation.fromPersonId;
-    const related = await maybeGet(db, 'persons', relatedId);
-    if (!related || related.status !== 'active') continue;
+    const related = relatedById.get(relatedId);
+    if (!related) continue;
     let role = 'spouse';
     if (relation.type === 'parent_child') role = relation.toPersonId === person._id ? 'parent' : 'child';
     relatives.push({ relationId: relation._id, role: role, person: publicPerson(related) });

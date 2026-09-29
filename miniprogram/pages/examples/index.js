@@ -1,3 +1,4 @@
+const app = getApp();
 const api = require('../../utils/api');
 
 Page({
@@ -13,16 +14,19 @@ Page({
 
   onLoad: function () { this.loadExamples(); },
 
+  onUnload: function () { if (this._tagTimer) clearTimeout(this._tagTimer); },
+
   onPullDownRefresh: function () {
-    this.loadExamples().then(function () { wx.stopPullDownRefresh(); });
+    if (this._tagTimer) clearTimeout(this._tagTimer);
+    this.loadExamples({ force: true }).then(function () { wx.stopPullDownRefresh(); });
   },
 
-  loadExamples: function () {
+  loadExamples: function (options) {
     const self = this;
     this.loadRequestId = (this.loadRequestId || 0) + 1;
     const requestId = this.loadRequestId;
     this.setData({ loading: true, error: '' });
-    return api.call('examples.list', { tag: this.data.activeTag }).then(function (data) {
+    return app.getExamplesList(this.data.activeTag, options).then(function (data) {
       if (requestId !== self.loadRequestId) return;
       self.setData({
         loading: false,
@@ -70,7 +74,11 @@ Page({
   chooseTag: function (event) {
     const tag = event.currentTarget.dataset.tag || '';
     if (tag === this.data.activeTag) return;
-    this.setData({ activeTag: tag }, this.loadExamples);
+    this.setData({ activeTag: tag });
+    this.loadRequestId = (this.loadRequestId || 0) + 1;
+    if (this._tagTimer) clearTimeout(this._tagTimer);
+    const self = this;
+    this._tagTimer = setTimeout(function () { self._tagTimer = null; self.loadExamples(); }, 200);
   },
 
   openExample: function (event) {

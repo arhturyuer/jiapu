@@ -1,3 +1,4 @@
+const app = getApp();
 const api = require('../../utils/api');
 const kinship = require('../../utils/kinship');
 const personGender = require('../../utils/person-gender');
@@ -18,10 +19,11 @@ Page({
     if (!options.slug || !options.id) this.setData({ loading: false, error: '缺少示例人物信息，请返回家谱重新选择。' });
   },
   onShow: function () { if (this.data.slug && this.data.personId) this.loadPerson(); },
-  loadPerson: function () {
+  onPullDownRefresh: function () { this.loadPerson({ force: true }).then(function () { wx.stopPullDownRefresh(); }); },
+  loadPerson: function (options) {
     const self = this;
     this.setData({ loading: true, error: '', openRelationId: '' });
-    return api.call('examples.get', { slug: this.data.slug }).then(function (data) {
+    return app.getExample(this.data.slug, options).then(function (data) {
       const example = data.example || {};
       const person = (example.persons || []).find(function (item) { return item._id === self.data.personId; });
       if (!person) throw new Error('该示例人物已不存在');

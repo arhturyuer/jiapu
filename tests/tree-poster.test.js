@@ -14,11 +14,14 @@ const treePosterFlow = require(path.join(root, 'miniprogram/utils/tree-poster-fl
 function loadPage(relativePath) {
   let definition = null;
   const previousPage = global.Page;
+  const previousGetApp = global.getApp;
+  if (typeof global.getApp !== 'function') global.getApp = function () { return {}; };
   global.Page = function (value) { definition = value; };
   const modulePath = require.resolve(relativePath);
   delete require.cache[modulePath];
   require(modulePath);
   global.Page = previousPage;
+  global.getApp = previousGetApp;
   return definition;
 }
 

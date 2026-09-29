@@ -44,6 +44,9 @@ Page({
     this.loadPreference();
   },
 
+  onHide: function () { this.flushPreference(); },
+  onUnload: function () { this.flushPreference(); },
+
   loadPreference: function () {
     const self = this;
     if (this.data.isExample) {
@@ -66,7 +69,8 @@ Page({
       return Promise.resolve();
     }
     this.setData({ loading: true, error: '' });
-    return api.call('family.getPreference', { familyId: this.data.familyId }).then(function (data) {
+    return app.getPreference(this.data.familyId).then(function (data) {
+      self._confirmedPreference = normalizedPreference(data.preference);
       self.setData(Object.assign({
         loading: false,
         family: data.family || null
@@ -78,41 +82,57 @@ Page({
 
   chooseNameLayout: function (event) {
     const value = event.currentTarget.dataset.layout;
-    if (this.data.saving || (value !== 'horizontal' && value !== 'vertical') || value === this.data.nameLayout) return;
+    if ((value !== 'horizontal' && value !== 'vertical') || value === this.data.nameLayout) return;
     this.savePreference('nameLayout', value);
   },
 
   togglePreference: function (event) {
     const field = event.currentTarget.dataset.field;
-    if (this.data.saving || ['showChildRankBadge', 'showGenderBadge', 'showGenderColors', 'autoCollapseEnabled'].indexOf(field) < 0) return;
+    if (['showChildRankBadge', 'showGenderBadge', 'showGenderColors', 'autoCollapseEnabled'].indexOf(field) < 0) return;
     this.savePreference(field, Boolean(event.detail.value));
   },
 
   savePreference: function (field, value) {
-    const self = this;
-    const previous = this.data[field];
     if (this.data.isExample) {
       const examplePreference = exampleDisplayPreference.saveField(this.data.exampleSlug, field, value, this._exampleDefaults, this._exampleVersion);
       this.setData(Object.assign({ saving: false, savingField: '' }, examplePreference));
       this.refreshExamplePreview(examplePreference);
       return Promise.resolve(examplePreference);
     }
+    if (!this._confirmedPreference) this._confirmedPreference = normalizedPreference(this.data);
     const patch = { saving: true, savingField: field };
     patch[field] = value;
     this.setData(patch);
-    const payload = { familyId: this.data.familyId };
-    payload[field] = value;
-    return api.call('family.setPreference', payload).then(function (data) {
+    this._pendingPreference = Object.assign(this._pendingPreference || {}, { [field]: value });
+    if (this._preferenceTimer) clearTimeout(this._preferenceTimer);
+    const self = this;
+    this._preferenceTimer = setTimeout(function () {
+      self._preferenceTimer = null;
+      self.flushPreference();
+    }, 350);
+    return Promise.resolve();
+  },
+
+  flushPreference: function () {
+    if (this._preferenceTimer) clearTimeout(this._preferenceTimer);
+    this._preferenceTimer = null;
+    if (this._preferenceInFlight || !this._pendingPreference) return this._preferenceInFlight || Promise.resolve();
+    const payload = Object.assign({ familyId: this.data.familyId }, this._pendingPreference);
+    this._pendingPreference = null;
+    const self = this;
+    this._preferenceInFlight = api.call('family.setPreference', payload).then(function (data) {
       const saved = normalizedPreference(data.preference);
-      self.setData(Object.assign({ saving: false, savingField: '' }, saved));
-      app.invalidateCache({ graph: self.data.familyId });
-      return data;
+      self._confirmedPreference = saved;
+      app.updatePreference(self.data.familyId, data.preference);
+      if (!self._pendingPreference) self.setData(Object.assign({ saving: false, savingField: '' }, saved));
     }).catch(function (error) {
-      const rollback = { saving: false, savingField: '' };
-      rollback[field] = previous;
-      self.setData(rollback);
+      if (!self._pendingPreference) self.setData(Object.assign({ saving: false, savingField: '' }, self._confirmedPreference || {}));
       wx.showToast({ title: api.userMessage(error, '设置保存失败，请重试'), icon: 'none' });
+    }).then(function () {
+      self._preferenceInFlight = null;
+      if (self._pendingPreference) return self.flushPreference();
     });
+    return this._preferenceInFlight;
   },
 
   refreshExamplePreview: function (preference) {

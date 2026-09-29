@@ -65,6 +65,7 @@ Page({
   loadDashboard: function (options) {
     const self = this;
     const config = options || {};
+    const requestId = this._loadRequestId = (this._loadRequestId || 0) + 1;
     const hasContent = this._hasLoaded && !this.data.loading;
     const currentFamily = app.getCurrentFamily();
     const displayedFamilyId = this.data.currentFamily && this.data.currentFamily._id;
@@ -74,10 +75,12 @@ Page({
       return Promise.resolve();
     }
     if (!hasContent) this.setData({ loading: true });
-    return app.ensureLogin(config).then(function () {
+    return app.ensureLogin().then(function () {
       if (app.globalData.accountState === 'pending_delete') return { families: [] };
       return app.loadFamilyPages(true, config);
     }).then(function (listData) {
+      if (requestId !== self._loadRequestId) return null;
+      if (!listData) return null;
       const grouped = splitFamilies(listData.families || []);
       const family = reconcileCurrentFamily(grouped.active);
       self.setData({
@@ -104,6 +107,7 @@ Page({
       }
       return app.getDashboard(family._id, config);
     }).then(function (data) {
+      if (requestId !== self._loadRequestId) return;
       if (!data) return;
       const membershipPresentation = membershipDisplay.fromFamily(data.family);
       self.setData({
@@ -126,6 +130,7 @@ Page({
       app.setCurrentFamily(data.family);
       self._hasLoaded = true;
     }).catch(function (error) {
+      if (requestId !== self._loadRequestId) return;
       if (!hasContent) {
         self.setData({ loading: false });
         wx.showToast({ title: api.userMessage(error, '家庭信息加载失败'), icon: 'none' });
@@ -157,10 +162,9 @@ Page({
     const family = this.data.familyList.find(function (item) { return item._id === familyId; });
     if (!family) return;
     app.setCurrentFamily(family);
-    app.invalidateCache({ profile: true });
     wx.setStorageSync('youpu_pending_view', { mode: 'full', personId: '' });
     this.setData({ currentFamily: family, showFamilySheet: false });
-    this.loadDashboard({ force: true });
+    this.loadDashboard();
   },
 
   openArchivedFamily: function (event) {
@@ -276,6 +280,7 @@ Page({
       role: this.data.shareRole,
       viewMode: 'full'
     }).then(function (data) {
+      app.invalidateInvites(family._id);
       if (sequence !== self._sharePreparationSequence || !self.data.showShareSheet) return;
       return shareCard.createAndRender(self, 'members-share-card', {
         kind: 'family_full', familyName: data.familyName,

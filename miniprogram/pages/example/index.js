@@ -1,3 +1,4 @@
+const app = getApp();
 const api = require('../../utils/api');
 const graphLayout = require('../../utils/graph-layout');
 const kinship = require('../../utils/kinship');
@@ -57,14 +58,14 @@ Page({
     this.syncPageOrientationSoon();
   },
   onHide: function () { treePosterFlow.cancel(this); this.resetPageOrientation(); },
-  onPullDownRefresh: function () { this.loadExample().then(function () { wx.stopPullDownRefresh(); }); },
-  onUnload: function () { treePosterFlow.cancel(this); if (this._graphSettleTimer) clearTimeout(this._graphSettleTimer); if (this._orientationTimer) clearTimeout(this._orientationTimer); this.syncPageChrome(false); },
+  onPullDownRefresh: function () { this.loadExample({ force: true }).then(function () { wx.stopPullDownRefresh(); }); },
+  onUnload: function () { treePosterFlow.cancel(this); if (this._graphSettleTimer) clearTimeout(this._graphSettleTimer); if (this._orientationTimer) clearTimeout(this._orientationTimer); if (this._perspectiveFilterTimer) clearTimeout(this._perspectiveFilterTimer); this.syncPageChrome(false); },
 
-  loadExample: function () {
+  loadExample: function (options) {
     const self = this;
     if (!this.data.slug) return Promise.resolve();
     this.setData({ loading: true, error: '' });
-    return api.call('examples.get', { slug: this.data.slug }).then(function (data) {
+    return app.getExample(this.data.slug, options).then(function (data) {
       const example = data.example;
       const persons = (example.persons || []).map(function (person) {
         return personGender.decorate(Object.assign({}, person, { initial: (person.name || '家').slice(0, 1), metaText: person.birthDate ? person.birthDate.slice(0, 4) + '年' : '' }));
@@ -304,7 +305,7 @@ Page({
   closeMemberSheet: function () { this.setData({ showMemberSheet: false, selectedKinship: null }); },
   openPerspectiveSheet: function () { this.setData({ showPerspectiveSheet: true, perspectiveKeyword: '', perspectiveResults: this.data.rawPersons }); },
   closePerspectiveSheet: function () { this.setData({ showPerspectiveSheet: false }); },
-  filterPerspectives: function (event) { const keyword = (event.detail.value || '').trim(); this.setData({ perspectiveKeyword: keyword, perspectiveResults: this.data.rawPersons.filter(function (person) { return !keyword || person.name.indexOf(keyword) >= 0; }) }); },
+  filterPerspectives: function (event) { const keyword = (event.detail.value || '').trim(); this.setData({ perspectiveKeyword: keyword }); if (this._perspectiveFilterTimer) clearTimeout(this._perspectiveFilterTimer); const self = this; this._perspectiveFilterTimer = setTimeout(function () { self._perspectiveFilterTimer = null; self.setData({ perspectiveResults: self.data.rawPersons.filter(function (person) { return !keyword || person.name.indexOf(keyword) >= 0; }) }); }, 120); },
   selectPerspective: function (event) { this.setPerspective(event.currentTarget.dataset.id); this.closePerspectiveSheet(); },
   setPerspective: function (personId) {
     const collapsed = graphLayout.expandCollapsedIds(this.data.rawPersons, this.data.rawRelations, this.data.collapsedPersonIds, personId);

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 8,
+  "schemaVersion": 9,
   "indexes": {
     "users": [
       { "name": "openid_unique", "unique": true, "sparse": true, "fields": [{ "field": "openid", "order": "asc" }] },
@@ -37,7 +37,9 @@
     "relations": [
       { "name": "relation_unique", "unique": true, "fields": [{ "field": "familyId", "order": "asc" }, { "field": "type", "order": "asc" }, { "field": "fromPersonId", "order": "asc" }, { "field": "toPersonId", "order": "asc" }] },
       { "name": "family_status", "fields": [{ "field": "familyId", "order": "asc" }, { "field": "status", "order": "asc" }] },
-      { "name": "family_status_id", "fields": [{ "field": "familyId", "order": "asc" }, { "field": "status", "order": "asc" }, { "field": "_id", "order": "asc" }] }
+      { "name": "family_status_id", "fields": [{ "field": "familyId", "order": "asc" }, { "field": "status", "order": "asc" }, { "field": "_id", "order": "asc" }] },
+      { "name": "family_status_from_person", "fields": [{ "field": "familyId", "order": "asc" }, { "field": "status", "order": "asc" }, { "field": "fromPersonId", "order": "asc" }] },
+      { "name": "family_status_to_person", "fields": [{ "field": "familyId", "order": "asc" }, { "field": "status", "order": "asc" }, { "field": "toPersonId", "order": "asc" }] }
     ],
     "invitations": [
       { "name": "token_hash_unique", "unique": true, "fields": [{ "field": "tokenHash", "order": "asc" }] },

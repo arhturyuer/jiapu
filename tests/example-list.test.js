@@ -11,11 +11,14 @@ function read(file) { return fs.readFileSync(path.join(root, file), 'utf8'); }
 
 function loadPage() {
   const previousPage = global.Page;
+  const previousGetApp = global.getApp;
   let definition;
+  global.getApp = function () { return { getExamplesList: function (tag, options) { return api.call('examples.list', { tag: tag }); } }; };
   global.Page = function (value) { definition = value; };
   const modulePath = require.resolve('../miniprogram/pages/examples/index');
   delete require.cache[modulePath];
   require(modulePath);
+  global.getApp = previousGetApp;
   global.Page = previousPage;
   const page = Object.assign({}, definition);
   page.data = JSON.parse(JSON.stringify(definition.data));
@@ -74,6 +77,23 @@ test('分类切换保留全部标签，简介按渲染高度展开且重新加�
   } finally {
     api.call = previousCall;
     global.wx = previousWx;
+  }
+});
+
+test('快速切换示例分类只读取最终分类', async function () {
+  const previousCall = api.call;
+  const calls = [];
+  api.call = function (type, payload) { calls.push(payload.tag); return Promise.resolve({ tags: [], items: [] }); };
+  const page = loadPage();
+  try {
+    page.chooseTag({ currentTarget: { dataset: { tag: '人物' } } });
+    page.chooseTag({ currentTarget: { dataset: { tag: '故事' } } });
+    assert.deepEqual(calls, []);
+    await new Promise(function (resolve) { setTimeout(resolve, 230); });
+    assert.deepEqual(calls, ['故事']);
+  } finally {
+    if (page._tagTimer) clearTimeout(page._tagTimer);
+    api.call = previousCall;
   }
 });
 

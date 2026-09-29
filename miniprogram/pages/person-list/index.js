@@ -70,13 +70,15 @@ Page({
   },
 
   onPullDownRefresh: function () {
-    this.loadPage().then(function () { wx.stopPullDownRefresh(); });
+    this.loadPage({ force: true }).then(function () { wx.stopPullDownRefresh(); });
   },
 
-  loadPage: function () {
+  onUnload: function () { if (this._keywordTimer) clearTimeout(this._keywordTimer); },
+
+  loadPage: function (options) {
     const self = this;
     this.setData({ loading: true, error: '' });
-    return api.call('graph.get', { familyId: this.data.familyId }).then(function (data) {
+    return app.getGraph(this.data.familyId, options).then(function (data) {
       const persons = decoratePersons(data.persons);
       const relations = data.relations || [];
       app.setCurrentFamily(data.family);
@@ -99,10 +101,13 @@ Page({
 
   inputKeyword: function (event) {
     this.setData({ keyword: event.detail.value });
-    this.applyFilter();
+    if (this._keywordTimer) clearTimeout(this._keywordTimer);
+    const self = this;
+    this._keywordTimer = setTimeout(function () { self._keywordTimer = null; self.applyFilter(); }, 120);
   },
 
   clearKeyword: function () {
+    if (this._keywordTimer) clearTimeout(this._keywordTimer);
     this.setData({ keyword: '' });
     this.applyFilter();
   },

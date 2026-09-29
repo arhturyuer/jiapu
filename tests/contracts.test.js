@@ -131,6 +131,10 @@ test('关于页使用正式版实际版本并按最新在前展示受控更新�
   const verifier = fs.readFileSync(path.join(root, 'deployment/verify-release-note.mjs'), 'utf8');
   assert.deepEqual(releaseInfo.validateReleaseNotes(releaseNotes), [
     {
+      version: '1.5.1',
+      summary: '减少家谱重复读取，优化人物详情、分类切换与搜索响应。'
+    },
+    {
       version: '1.4.3',
       summary: '优化家谱成员操作弹框，直接选择亲属方向并按关系显示操作。'
     },
@@ -629,7 +633,7 @@ test('家谱显示偏好集中设置，新用户采用默认节点且性别开�
   assert.match(treeTemplate, /class="graph-control graph-control-text" bindtap="openDisplaySettings">设置<\/view>/);
   assert.match(exampleTemplate, /class="graph-control graph-control-text" bindtap="openDisplaySettings">设置<\/view>/);
   assert.match(members, /bindtap="openDisplaySettings"[\s\S]{0,180}家谱显示设置/);
-  assert.match(settings, /api\.call\('family\.getPreference'/);
+  assert.match(settings, /app\.getPreference\(this\.data\.familyId\)/);
   assert.match(settings, /api\.call\('family\.setPreference'/);
   assert.match(settingsTemplate, /data-field="showChildRankBadge"/);
   assert.match(settingsTemplate, /data-field="showGenderBadge"/);

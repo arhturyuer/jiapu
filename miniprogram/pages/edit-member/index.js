@@ -69,7 +69,7 @@ Page({
     const self = this;
     formState.clearLeaveAlert(this);
     this.setData({ loading: true, error: '' });
-    return api.call('person.get', { personId: this.data.personId }).then(function (data) {
+    return app.getPersonDetail(this.data.personId).then(function (data) {
       const person = data.person;
       const avatarAssetId = person.avatarAssetId || '';
       self.setData({
@@ -202,7 +202,7 @@ Page({
       personId: this.data.personId,
       data: { avatarAssetId: media.assetId }
     }).then(function (data) {
-      if (app.invalidateFamilyData) app.invalidateFamilyData(self.data.familyId);
+      if (!data.pending && data.person && app.applyPersonUpdate) app.applyPersonUpdate(self.data.familyId, data.person);
       self._pendingAvatarMedia = null;
       let presentation;
       if (data.pending) {
@@ -260,7 +260,7 @@ Page({
       personId: this.data.personId,
       data: changes
     }).then(function (data) {
-      if (app.invalidateFamilyData) app.invalidateFamilyData(self.data.familyId);
+      if (!data.pending && data.person && app.applyPersonUpdate) app.applyPersonUpdate(self.data.familyId, data.person);
       self._initialForm = current;
       self.setData({ submitting: false, hasFormChanges: false, canKeepUnknownGender: !personGender.isKnown(current.gender) }, function () { self.refreshFormState(); });
       wx.showToast({

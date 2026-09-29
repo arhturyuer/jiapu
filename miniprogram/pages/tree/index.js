@@ -85,16 +85,19 @@ Page({
   onShow: function () {
     this.resetPageOrientation();
     const pendingView = app.consumePendingView();
-    this.loadPage(pendingView, { force: Boolean(pendingView) });
+    this.loadPage(pendingView);
     this.syncPageOrientationSoon();
   },
 
   onHide: function () {
+    this.flushGraphPreference();
     treePosterFlow.cancel(this);
     this.resetPageOrientation();
   },
 
   onUnload: function () {
+    this.flushGraphPreference();
+    if (this._perspectiveFilterTimer) clearTimeout(this._perspectiveFilterTimer);
     treePosterFlow.cancel(this);
     if (this._graphSettleTimer) clearTimeout(this._graphSettleTimer);
     if (this._orientationTimer) clearTimeout(this._orientationTimer);
@@ -110,6 +113,7 @@ Page({
   loadPage: function (pendingView, options) {
     const self = this;
     const config = options || {};
+    const requestId = this._loadRequestId = (this._loadRequestId || 0) + 1;
     const returnFocus = this._relationReturnFocus;
     this._relationReturnFocus = null;
     const hasContent = this._hasLoaded && !this.data.loading;
@@ -122,6 +126,7 @@ Page({
     if (!hasContent) this.setData({ loading: true, loadError: '' });
     else this.setData({ loadError: '' });
     return app.loadFamilies(config).then(function (families) {
+      if (requestId !== self._loadRequestId) return null;
       const currentFamily = app.getCurrentFamily();
       self.setData({
         familyList: families,
@@ -135,6 +140,7 @@ Page({
         return null;
       }
       return app.getGraph(currentFamily._id, config).then(function (data) {
+        if (requestId !== self._loadRequestId) return null;
         const persons = (data.persons || []).map(function (person) {
           return personGender.decorate(Object.assign({}, person, {
             avatar: '',
@@ -204,6 +210,7 @@ Page({
         }
         const familyId = data.family._id;
         return api.getMediaUrls(persons.map(function (person) { return person.avatarAssetId; })).then(function (urls) {
+          if (requestId !== self._loadRequestId) return data;
           if (!self.data.currentFamily || self.data.currentFamily._id !== familyId) return data;
           const resolvedPersons = persons.map(function (person) {
             return Object.assign({}, person, { avatar: urls[person.avatarAssetId] || '' });
@@ -218,6 +225,7 @@ Page({
         });
       });
     }).catch(function (error) {
+      if (requestId !== self._loadRequestId) return;
       console.error('加载家谱失败', error);
       if (!hasContent) self.setData({ loading: false, loadError: api.userMessage(error, '家谱加载失败') });
       else console.warn('后台刷新家谱失败，保留当前内容', error);
@@ -553,12 +561,38 @@ Page({
 
   saveGraphPreference: function (family, nameLayout, viewMode, personId) {
     if (!family) return;
-    api.call('family.setPreference', {
+    this._pendingGraphPreference = {
       familyId: family._id,
       viewMode: viewMode || this.data.viewMode,
       personId: personId === undefined ? this.data.viewpointId : personId,
       nameLayout: nameLayout || this.data.nameLayout
-    }).catch(function () {});
+    };
+    if (this._graphPreferenceTimer) clearTimeout(this._graphPreferenceTimer);
+    const self = this;
+    this._graphPreferenceTimer = setTimeout(function () {
+      self._graphPreferenceTimer = null;
+      self.flushGraphPreference();
+    }, 500);
+  },
+
+  flushGraphPreference: function () {
+    if (this._graphPreferenceTimer) clearTimeout(this._graphPreferenceTimer);
+    this._graphPreferenceTimer = null;
+    if (this._graphPreferenceInFlight || !this._pendingGraphPreference) return this._graphPreferenceInFlight || Promise.resolve();
+    const payload = this._pendingGraphPreference;
+    this._pendingGraphPreference = null;
+    if (JSON.stringify(payload) === this._lastSavedGraphPreference) return Promise.resolve();
+    const self = this;
+    this._graphPreferenceInFlight = api.call('family.setPreference', payload).then(function (data) {
+      self._lastSavedGraphPreference = JSON.stringify(payload);
+      if (data.preference) app.updatePreference(payload.familyId, data.preference);
+    }).catch(function () {
+      // A failed preference write leaves the last confirmed cache untouched.
+    }).then(function () {
+      self._graphPreferenceInFlight = null;
+      if (self._pendingGraphPreference) return self.flushGraphPreference();
+    });
+    return this._graphPreferenceInFlight;
   },
 
   onGraphScale: function (event) {
@@ -645,6 +679,7 @@ Page({
     const familyId = event.currentTarget.dataset.id;
     const family = this.data.familyList.find(function (item) { return item._id === familyId; });
     if (!family) return;
+    this.flushGraphPreference();
     app.setCurrentFamily(family);
     this.setData({
       showFamilySheet: false,
@@ -655,8 +690,7 @@ Page({
       selectedPersonId: ''
     });
     this._autoCollapseFamilyId = '';
-    app.invalidateFamilyData(familyId);
-    this.loadPage({ mode: 'full', personId: '' }, { force: true });
+    this.loadPage({ mode: 'full', personId: '' });
   },
 
   showPerson: function (event) {
@@ -853,10 +887,15 @@ Page({
 
   filterPerspectives: function (event) {
     const keyword = event.detail.value.trim();
-    const results = this.data.rawPersons.filter(function (person) {
-      return !keyword || person.name.indexOf(keyword) >= 0;
-    });
-    this.setData({ perspectiveKeyword: keyword, perspectiveResults: results });
+    this.setData({ perspectiveKeyword: keyword });
+    if (this._perspectiveFilterTimer) clearTimeout(this._perspectiveFilterTimer);
+    const self = this;
+    this._perspectiveFilterTimer = setTimeout(function () {
+      self._perspectiveFilterTimer = null;
+      self.setData({ perspectiveResults: self.data.rawPersons.filter(function (person) {
+        return !keyword || person.name.indexOf(keyword) >= 0;
+      }) });
+    }, 120);
   },
 
   selectPerspective: function (event) {
@@ -1028,6 +1067,7 @@ Page({
       viewMode: this.data.shareMode,
       viewPersonId: this.data.sharePersonId
     }).then(function (data) {
+      app.invalidateInvites(family._id);
       if (sequence !== self._sharePreparationSequence || !self.data.showShareSheet) return;
       return shareCard.createAndRender(self, 'tree-share-card', {
         kind: data.viewMode === 'perspective' ? 'family_perspective' : 'family_full',

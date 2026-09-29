@@ -89,7 +89,7 @@ test('首次引导与家谱邀请卡使用紧凑分享按钮', function () {
 test('成员列表可搜索并进入人物资料', function () {
   const source = read('miniprogram/pages/person-list/index.js');
   const template = read('miniprogram/pages/person-list/index.wxml');
-  assert.match(source, /api\.call\('graph\.get'/);
+  assert.match(source, /app\.getGraph\(this\.data\.familyId, options\)/);
   assert.match(source, /pages\/member-detail\/index\?id=/);
   assert.match(template, /输入姓名查找成员/);
   assert.match(template, /bindtap="openMember"/);

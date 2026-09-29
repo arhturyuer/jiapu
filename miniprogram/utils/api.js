@@ -1,6 +1,22 @@
 const environmentConfig = require('../config/env');
 const userMessage = require('./user-message');
 const CLOUD_CALL_TIMEOUT = 8000;
+const MEDIA_URL_TTL = 10 * 60 * 1000;
+let mediaUrlCache = {};
+let mediaUrlRequests = {};
+let mediaCacheVersion = 0;
+
+function mediaActorKey() {
+  if (typeof getApp !== 'function') return '';
+  const app = getApp();
+  return app && app.globalData && app.globalData.user ? app.globalData.user._id || '' : '';
+}
+
+function clearMediaUrlCache() {
+  mediaCacheVersion += 1;
+  mediaUrlCache = {};
+  mediaUrlRequests = {};
+}
 
 function currentEnvironment() {
   return environmentConfig.resolveRuntimeEnvironment(typeof wx === 'undefined' ? null : wx).environment;
@@ -89,6 +105,19 @@ function call(type, data) {
           return invoke(retriesLeft - 1);
         });
       }
+      if (['NO_FAMILY_ACCESS', 'NO_PERMISSION', 'UNAUTHENTICATED', 'ACCOUNT_FROZEN', 'ACCOUNT_UNAVAILABLE'].indexOf(error.code) >= 0 && typeof getApp === 'function') {
+        const app = getApp();
+        if (app && typeof app.clearCachedAccess === 'function') {
+          if (error.code === 'NO_FAMILY_ACCESS') app.clearCachedAccess(payload.familyId || '');
+          else if (error.code === 'NO_PERMISSION' && typeof app.invalidateFamilyData === 'function') {
+            clearMediaUrlCache();
+            const family = app.globalData && app.globalData.currentFamily;
+            if (payload.personId && typeof app.invalidateCache === 'function') app.invalidateCache({ personDetail: payload.personId });
+            if (payload.familyId || family) app.invalidateFamilyData(payload.familyId || family._id);
+          }
+          else if (error.code !== 'NO_PERMISSION') app.clearCachedAccess('');
+        }
+      }
       throw error;
     });
   }
@@ -144,14 +173,46 @@ function uploadImage(tempFilePath, folder, options) {
 function getMediaUrls(assetIds) {
   const ids = Array.from(new Set((assetIds || []).filter(Boolean)));
   if (!ids.length) return Promise.resolve({});
+  const actor = mediaActorKey();
+  const requestVersion = mediaCacheVersion;
+  const urls = {};
+  const missing = [];
+  const waiting = [];
+  ids.forEach(function (id) {
+    const key = actor + ':' + id;
+    const cached = mediaUrlCache[key];
+    if (cached && Date.now() - cached.updatedAt < MEDIA_URL_TTL) urls[id] = cached.url;
+    else if (mediaUrlRequests[key]) waiting.push(mediaUrlRequests[key]);
+    else missing.push(id);
+  });
   const batches = [];
-  for (let index = 0; index < ids.length; index += 50) batches.push(ids.slice(index, index + 50));
-  return Promise.all(batches.map(function (batch) {
-    return call('media.getUrls', { assetIds: batch });
-  })).then(function (results) {
-    return results.reduce(function (urls, data) {
-      return Object.assign(urls, data.urls || {});
-    }, {});
+  for (let index = 0; index < missing.length; index += 50) batches.push(missing.slice(index, index + 50));
+  batches.forEach(function (batch) {
+    const version = mediaCacheVersion;
+    const request = call('media.getUrls', { assetIds: batch }).then(function (data) {
+      if (version === mediaCacheVersion) {
+        Object.keys(data.urls || {}).forEach(function (id) {
+          mediaUrlCache[actor + ':' + id] = { url: data.urls[id], updatedAt: Date.now() };
+        });
+      }
+      return data.urls || {};
+    });
+    batch.forEach(function (id) {
+      const key = actor + ':' + id;
+      mediaUrlRequests[key] = request;
+    });
+    waiting.push(request.then(function (result) {
+      batch.forEach(function (id) { if (mediaUrlRequests[actor + ':' + id] === request) delete mediaUrlRequests[actor + ':' + id]; });
+      return result;
+    }, function (error) {
+      batch.forEach(function (id) { if (mediaUrlRequests[actor + ':' + id] === request) delete mediaUrlRequests[actor + ':' + id]; });
+      throw error;
+    }));
+  });
+  return Promise.all(waiting).then(function (results) {
+    if (requestVersion !== mediaCacheVersion) return {};
+    results.forEach(function (result) { Object.assign(urls, result); });
+    return urls;
   });
 }
 
@@ -177,6 +238,7 @@ module.exports = {
   getMediaUrls: getMediaUrls,
   getMediaStates: getMediaStates,
   getMediaPresentation: getMediaPresentation,
+  clearMediaUrlCache: clearMediaUrlCache,
   requestId: requestId,
   userError: userMessage.fromError,
   userMessage: userMessage.message,

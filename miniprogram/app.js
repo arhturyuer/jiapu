@@ -1,24 +1,28 @@
 const api = require('./utils/api');
 const environmentConfig = require('./config/env');
-const CACHE_TTL = 60 * 1000;
+const LOGIN_CACHE_TTL = 60 * 1000;
+const BUSINESS_CACHE_TTL = 60 * 60 * 1000;
+
+function emptyDataCache() {
+  return {
+    familyPages: { active: cacheEntry(), all: cacheEntry() },
+    graph: {}, dashboard: {}, personDetail: {}, examplesList: {}, example: {}, invites: {},
+    preference: {}, profile: cacheEntry()
+  };
+}
 
 function cacheEntry() {
-  return { data: null, updatedAt: 0, invalidated: false, promise: null, version: 0, promiseVersion: -1 };
+  return { data: null, updatedAt: 0, invalidated: false, promise: null, version: 0, promiseVersion: -1, forcedVersion: -1 };
 }
 
 function isFresh(entry) {
-  return Boolean(entry && entry.data && !entry.invalidated && Date.now() - entry.updatedAt < CACHE_TTL);
+  return Boolean(entry && entry.data && !entry.invalidated && Date.now() - entry.updatedAt < BUSINESS_CACHE_TTL);
 }
 
 App({
   loginPromise: null,
   loginUpdatedAt: 0,
-  dataCache: {
-    familyPages: { active: cacheEntry(), all: cacheEntry() },
-    graph: {},
-    dashboard: {},
-    profile: cacheEntry()
-  },
+  dataCache: emptyDataCache(),
 
   globalData: {
     environment: environmentConfig.active,
@@ -72,7 +76,7 @@ App({
     const self = this;
     const force = Boolean(options && options.force);
     if (this.loginPromise) return this.loginPromise;
-    if (!force && this.globalData.user && Date.now() - this.loginUpdatedAt < CACHE_TTL) {
+    if (!force && this.globalData.user && Date.now() - this.loginUpdatedAt < LOGIN_CACHE_TTL) {
       return Promise.resolve({
         user: this.globalData.user,
         accountState: this.globalData.accountState || 'active',
@@ -81,10 +85,22 @@ App({
     }
 
     this.loginPromise = api.call('auth.login').then(function (data) {
+      if (self.globalData.user && data.user && self.globalData.user._id !== data.user._id) {
+        self.dataCache = emptyDataCache();
+        api.clearMediaUrlCache();
+        self.globalData.familyList = [];
+        self.setCurrentFamily(null);
+      }
       self.globalData.user = data.user;
       self.globalData.loggedIn = data.accountState === 'active';
       self.globalData.accountState = data.accountState || 'active';
       self.globalData.deletion = data.deletion || null;
+      if (self.globalData.accountState !== 'active') {
+        self.dataCache = emptyDataCache();
+        api.clearMediaUrlCache();
+        self.globalData.familyList = [];
+        self.setCurrentFamily(null);
+      }
       self.loginUpdatedAt = Date.now();
       wx.setStorageSync('youpu_user', data.user);
       return data;
@@ -104,7 +120,7 @@ App({
 
   loadFamilies: function (options) {
     const self = this;
-    return this.ensureLogin(options).then(function () {
+    return this.ensureLogin().then(function () {
       if (self.globalData.accountState === 'pending_delete') {
         self.globalData.familyList = [];
         self.setCurrentFamily(null);
@@ -136,10 +152,14 @@ App({
     const self = this;
     const force = Boolean(options && options.force);
     if (!force && isFresh(entry)) return Promise.resolve(entry.data);
+    if (force && entry.promise && entry.promiseVersion === (Number(entry.version) || 0) && entry.forcedVersion === entry.promiseVersion) {
+      return entry.promise;
+    }
     if (force && entry.promise && entry.promiseVersion === (Number(entry.version) || 0)) {
       this.invalidateEntry(entry);
     }
     const version = Number(entry.version) || 0;
+    if (force) entry.forcedVersion = version;
     if (entry.promise && entry.promiseVersion === version) return entry.promise;
     const request = Promise.resolve().then(loader).then(function (data) {
       // A write can invalidate a cache while an earlier read is still in flight.
@@ -171,8 +191,11 @@ App({
 
   getCacheEntry: function (type, key) {
     if (type === 'familyPages') return this.dataCache.familyPages[key ? 'all' : 'active'];
-    if (!this.dataCache[type][key]) this.dataCache[type][key] = cacheEntry();
-    return this.dataCache[type][key];
+    if (!this.dataCache[type]) this.dataCache[type] = {};
+    const actor = this.globalData.user && this.globalData.user._id;
+    const scopedKey = (actor ? actor + ':' : '') + String(key || '');
+    if (!this.dataCache[type][scopedKey]) this.dataCache[type][scopedKey] = cacheEntry();
+    return this.dataCache[type][scopedKey];
   },
 
   isCacheFresh: function (type, key) {
@@ -213,6 +236,136 @@ App({
     }, options);
   },
 
+  getPersonDetail: function (personId, options) {
+    return this.loadCached(this.getCacheEntry('personDetail', personId), function () {
+      return api.call('person.get', { personId: personId });
+    }, options);
+  },
+
+  getExamplesList: function (tag, options) {
+    const selectedTag = tag || '';
+    return this.loadCached(this.getCacheEntry('examplesList', selectedTag), function () {
+      return api.call('examples.list', { tag: selectedTag });
+    }, options);
+  },
+
+  getExample: function (slug, options) {
+    return this.loadCached(this.getCacheEntry('example', slug), function () {
+      return api.call('examples.get', { slug: slug });
+    }, options);
+  },
+
+  getPreference: function (familyId, options) {
+    return this.loadCached(this.getCacheEntry('preference', familyId), function () {
+      return api.call('family.getPreference', { familyId: familyId });
+    }, options);
+  },
+
+  getInvites: function (familyId, cursor, options) {
+    const pageCursor = cursor || '';
+    const entry = this.getCacheEntry('invites', familyId + '|' + pageCursor);
+    entry.familyId = familyId;
+    return this.loadCached(entry, function () {
+      return api.call('invite.list', { familyId: familyId, pageSize: 50, cursor: pageCursor });
+    }, options);
+  },
+
+  updateEntry: function (entry, data) {
+    this.invalidateEntry(entry);
+    entry.data = data;
+    entry.updatedAt = Date.now();
+    entry.invalidated = false;
+  },
+
+  updatePreference: function (familyId, preference) {
+    const preferenceEntry = this.getCacheEntry('preference', familyId);
+    if (preferenceEntry.data && preferenceEntry.data.family && !preferenceEntry.invalidated) {
+      this.updateEntry(preferenceEntry, Object.assign({}, preferenceEntry.data, { preference: preference }));
+    } else if (preferenceEntry.promise) {
+      this.invalidateEntry(preferenceEntry);
+    }
+    const graphEntry = this.getCacheEntry('graph', familyId);
+    if (graphEntry.data && !graphEntry.invalidated) {
+      this.updateEntry(graphEntry, Object.assign({}, graphEntry.data, { preference: preference }));
+    }
+  },
+
+  updatePersonDetail: function (personId, result) {
+    if (result && result.person) this.updateEntry(this.getCacheEntry('personDetail', personId), result);
+  },
+
+  applyPersonUpdate: function (familyId, person) {
+    if (!person || !person._id) return;
+    const graphEntry = this.getCacheEntry('graph', familyId);
+    if (graphEntry.data && !graphEntry.invalidated) {
+      this.updateEntry(graphEntry, Object.assign({}, graphEntry.data, {
+        persons: (graphEntry.data.persons || []).map(function (item) {
+          return item._id === person._id ? person : item;
+        })
+      }));
+    } else if (graphEntry.promise) {
+      this.invalidateEntry(graphEntry);
+    }
+    Object.keys(this.dataCache.personDetail || {}).forEach(function (key) {
+      const entry = this.dataCache.personDetail[key];
+      if (!entry.data || entry.invalidated) {
+        if (entry.promise) this.invalidateEntry(entry);
+        return;
+      }
+      const isCurrent = entry.data.person && entry.data.person._id === person._id;
+      const relatives = (entry.data.relatives || []).map(function (item) {
+        return item.person && item.person._id === person._id ? Object.assign({}, item, { person: person }) : item;
+      });
+      if (isCurrent || relatives.some(function (item, index) { return item !== entry.data.relatives[index]; })) {
+        this.updateEntry(entry, Object.assign({}, entry.data, { person: isCurrent ? person : entry.data.person, relatives: relatives }));
+      }
+    }, this);
+    this.invalidateCache({ dashboard: familyId });
+  },
+
+  applyFamilyUpdate: function (family) {
+    if (!family || !family._id) return;
+    ['active', 'all'].forEach(function (name) {
+      const entry = this.dataCache.familyPages[name];
+      if (entry.data && !entry.invalidated) {
+        this.updateEntry(entry, Object.assign({}, entry.data, {
+          families: (entry.data.families || []).map(function (item) { return item._id === family._id ? family : item; })
+        }));
+      } else if (entry.promise) this.invalidateEntry(entry);
+    }, this);
+    ['graph', 'dashboard'].forEach(function (type) {
+      const entry = this.getCacheEntry(type, family._id);
+      if (entry.data && !entry.invalidated) this.updateEntry(entry, Object.assign({}, entry.data, { family: family }));
+      else if (entry.promise) this.invalidateEntry(entry);
+    }, this);
+    this.globalData.familyList = this.globalData.familyList.map(function (item) { return item._id === family._id ? family : item; });
+    if (this.getCurrentFamily() && this.getCurrentFamily()._id === family._id) this.setCurrentFamily(family);
+    this.invalidateCache({ profile: true });
+  },
+
+  invalidateInvites: function (familyId) {
+    Object.keys(this.dataCache.invites || {}).forEach(function (key) {
+      const entry = this.dataCache.invites[key];
+      if (entry.familyId === familyId) this.invalidateEntry(entry);
+    }, this);
+  },
+
+  clearCachedAccess: function (familyId) {
+    if (!familyId) {
+      this.dataCache = emptyDataCache();
+      api.clearMediaUrlCache();
+      this.loginUpdatedAt = 0;
+      this.globalData.familyList = [];
+      this.globalData.loggedIn = false;
+      this.setCurrentFamily(null);
+      return;
+    }
+    api.clearMediaUrlCache();
+    this.invalidateFamilyData(familyId);
+    this.globalData.familyList = this.globalData.familyList.filter(function (family) { return family._id !== familyId; });
+    if (this.getCurrentFamily() && this.getCurrentFamily()._id === familyId) this.setCurrentFamily(null);
+  },
+
   getProfileData: function (loader, options) {
     return this.loadCached(this.dataCache.profile, loader, options);
   },
@@ -226,6 +379,8 @@ App({
     if (config.profile) this.invalidateEntry(this.dataCache.profile);
     if (config.graph) this.invalidateEntry(this.getCacheEntry('graph', config.graph));
     if (config.dashboard) this.invalidateEntry(this.getCacheEntry('dashboard', config.dashboard));
+    if (config.personDetail) this.invalidateEntry(this.getCacheEntry('personDetail', config.personDetail));
+    if (config.preference) this.invalidateEntry(this.getCacheEntry('preference', config.preference));
   },
 
   invalidateEntry: function (entry) {
@@ -240,6 +395,11 @@ App({
       graph: familyId,
       dashboard: familyId
     });
+    Object.keys(this.dataCache.personDetail || {}).forEach(function (key) {
+      const entry = this.dataCache.personDetail[key];
+      if (entry.data && entry.data.person && entry.data.person.familyId === familyId) this.invalidateEntry(entry);
+    }, this);
+    this.invalidateInvites(familyId);
   },
 
   setCurrentFamily: function (family) {
@@ -287,6 +447,7 @@ App({
   },
 
   clearLocalData: function () {
+    api.clearMediaUrlCache();
     wx.removeStorageSync('youpu_user');
     wx.removeStorageSync('youpu_openid');
     wx.removeStorageSync('youpu_current_family');
@@ -297,11 +458,6 @@ App({
     this.globalData.currentFamily = null;
     this.globalData.loggedIn = false;
     this.loginUpdatedAt = 0;
-    this.dataCache = {
-      familyPages: { active: cacheEntry(), all: cacheEntry() },
-      graph: {},
-      dashboard: {},
-      profile: cacheEntry()
-    };
+    this.dataCache = emptyDataCache();
   }
 });

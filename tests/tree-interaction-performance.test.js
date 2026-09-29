@@ -54,11 +54,14 @@ function createPage(app) {
 function loadExamplePage() {
   let definition = null;
   const previousPage = global.Page;
+  const previousGetApp = global.getApp;
+  global.getApp = function () { return { getExample: function (slug) { return api.call('examples.get', { slug: slug }); } }; };
   global.Page = function (value) { definition = value; };
   const modulePath = require.resolve('../miniprogram/pages/example/index');
   delete require.cache[modulePath];
   require(modulePath);
   global.Page = previousPage;
+  global.getApp = previousGetApp;
   return definition;
 }
 

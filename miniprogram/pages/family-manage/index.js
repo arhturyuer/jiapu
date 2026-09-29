@@ -65,8 +65,8 @@ Page({
         isAdmin: family.currentRole === 'admin'
       });
       if (family.status === 'archived') return { family: family, collaborators: [], invitations: [] };
-      const tasks = [api.call('family.dashboard', { familyId: family._id })];
-      if (family.currentRole === 'admin') tasks.push(api.call('invite.list', { familyId: family._id, pageSize: 50 }));
+      const tasks = [app.getDashboard(family._id)];
+      if (family.currentRole === 'admin') tasks.push(app.getInvites(family._id, ''));
       return Promise.all(tasks).then(function (results) {
         return {
           family: results[0].family,
@@ -128,8 +128,7 @@ Page({
       name: this.data.name.trim(),
       description: this.data.description.trim()
     }).then(function (data) {
-      app.setCurrentFamily(data.family);
-      app.invalidateFamilyData(self.data.familyId);
+      app.applyFamilyUpdate(data.family);
       self.setData({ family: data.family });
       wx.showToast({ title: '家谱资料已保存', icon: 'success' });
     }).catch(function (error) {
@@ -218,11 +217,7 @@ Page({
     const self = this;
     if (!this.data.hasMoreInvites || this.data.loadingMoreInvites) return;
     this.setData({ loadingMoreInvites: true });
-    api.call('invite.list', {
-      familyId: this.data.familyId,
-      pageSize: 50,
-      cursor: this.data.inviteCursor
-    }).then(function (data) {
+    app.getInvites(this.data.familyId, this.data.inviteCursor).then(function (data) {
       self.setData({
         invitations: self.data.invitations.concat(decorateInvitations(data.items)),
         inviteCursor: data.nextCursor || '',
@@ -244,6 +239,7 @@ Page({
     }).then(function (data) {
       if (!data) return;
       app.invalidateCache({ dashboard: self.data.familyId });
+      app.invalidateInvites(self.data.familyId);
       wx.showToast({ title: '邀请已撤销', icon: 'success' });
       self.loadPage();
     }).catch(function (error) {
