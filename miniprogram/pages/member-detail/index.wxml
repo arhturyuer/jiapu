@@ -15,7 +15,8 @@
   <view class="detail-section">
     <view class="section-heading"><text class="section-title">基本资料</text></view>
     <view class="info-card surface-card">
-      <view class="info-row"><text class="info-label">出生日期</text><text class="info-value">{{person.birthDate || '暂未填写'}}</text></view>
+      <view class="info-row"><text class="info-label">出生时间</text><text class="info-value">{{person.birthDateText || '暂未填写'}}</text></view>
+      <view class="info-row" wx:if="{{person.lifeStatus === 'deceased'}}"><text class="info-label">离世时间</text><text class="info-value">{{person.deathDateText || '暂未填写'}}</text></view>
       <view class="info-row"><text class="info-label">籍贯</text><text class="info-value">{{person.birthPlace || '暂未填写'}}</text></view>
       <view class="info-row info-row-last"><text class="info-label">人物简介</text><text class="info-value bio-value">{{person.bio || '暂未填写'}}</text></view>
     </view>

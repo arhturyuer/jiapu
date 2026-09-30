@@ -1,4 +1,5 @@
 const dictionary = require('./kinship-dictionary');
+const personDate = require('./person-date');
 const MAX_PATH_CANDIDATES = 64;
 const MAX_SEARCH_STATES = 100000;
 
@@ -21,10 +22,10 @@ function birthInterval(value) {
 }
 
 function ageOrder(reference, target) {
-  const first = birthInterval(reference && reference.birthDate);
-  const second = birthInterval(target && target.birthDate);
+  const first = personDate.range(reference, 'birth');
+  const second = personDate.range(target, 'birth');
   if (!first || !second) return '';
-  return second[1] < first[0] ? 'older' : second[0] > first[1] ? 'younger' : '';
+  return second.end < first.start ? 'older' : second.start > first.end ? 'younger' : '';
 }
 
 function spouseLabel(reference, target) {
@@ -293,7 +294,7 @@ function createKinshipCache() {
   let previousKey;
   let previous;
   return function (persons, relations, viewpointId) {
-    const key = JSON.stringify([viewpointId, (persons || []).map(function (p) { return p && [p._id, p.gender, p.birthDate, p.status]; }),
+    const key = JSON.stringify([viewpointId, (persons || []).map(function (p) { return p && [p._id, p.gender, p.birthDate, p.birthDateInfo, p.birthDateRange, p.status]; }),
       (relations || []).map(function (r) { return r && [r._id, r.type, r.fromPersonId, r.toPersonId, r.status]; })]);
     if (key !== previousKey) { previous = calculateKinshipDetails(persons, relations, viewpointId); previousKey = key; }
     return previous;

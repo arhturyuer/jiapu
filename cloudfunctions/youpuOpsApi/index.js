@@ -704,6 +704,8 @@ function publicOpsPerson(person, options) {
     lifeStatus: person.lifeStatus || 'unknown',
     birthDate: person.birthDate || '',
     deathDate: person.deathDate || '',
+    birthDateInfo: person.birthDateInfo || null,
+    deathDateInfo: person.deathDateInfo || null,
     birthPlace: person.birthPlace ? person.birthPlace.slice(0, 2) + '…' : '',
     hasBio: Boolean(person.bio),
     hasAvatar: Boolean(person.avatarAssetId),

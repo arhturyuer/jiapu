@@ -26,8 +26,8 @@
       <view class="choice-item {{lifeStatus === 'deceased' ? 'selected' : ''}}" data-status="deceased" bindtap="chooseLifeStatus">已故</view>
       <view class="choice-item {{lifeStatus === 'unknown' ? 'selected' : ''}}" data-status="unknown" bindtap="chooseLifeStatus">未填写</view>
     </view>
-    <text class="field-label second-label">出生日期</text>
-    <picker mode="date" value="{{birthDate}}" bindchange="chooseDate"><view class="field-input picker-value {{birthDate ? '' : 'placeholder'}}">{{birthDate || '稍后补充'}}</view></picker>
+    <person-date-picker label="出生时间" value="{{birthDraft}}" bindchange="onBirthDateChange" />
+    <person-date-picker wx:if="{{lifeStatus === 'deceased'}}" label="离世时间" value="{{deathDraft}}" bindchange="onDeathDateChange" />
     <text class="field-label second-label">籍贯</text>
     <input class="field-input" placeholder="可选" value="{{birthPlace}}" data-field="birthPlace" bindinput="inputField" maxlength="80" />
     <text class="field-label second-label">人物简介</text>

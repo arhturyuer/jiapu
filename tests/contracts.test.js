@@ -131,6 +131,10 @@ test('关于页使用正式版实际版本并按最新在前展示受控更新�
   const verifier = fs.readFileSync(path.join(root, 'deployment/verify-release-note.mjs'), 'utf8');
   assert.deepEqual(releaseInfo.validateReleaseNotes(releaseNotes), [
     {
+      version: '1.6.0',
+      summary: '成员生卒时间可按公历或农历分精度填写，并区分健在与已故资料。'
+    },
+    {
       version: '1.5.1',
       summary: '减少家谱重复读取，优化人物详情、分类切换与搜索响应。'
     },
@@ -221,8 +225,10 @@ test('添加亲属支持关联已有成员并由用户确认伴侣的共同子�
   assert.match(template, /保存并继续添加/);
   assert.match(template, /兄弟姐妹/);
   assert.match(template, /照片和补充资料（可选）/);
-  assert.equal((template.match(/（可选）/g) || []).length, 1);
-  assert.ok(template.indexOf('出生日期') < template.indexOf('wx:if="{{showMoreFields}}"'));
+  assert.match(template, /出生时间/);
+  assert.match(template, /离世时间/);
+  assert.match(template, /lifeStatus === 'deceased'/);
+  assert.ok(template.indexOf('person-date-picker') < template.indexOf('wx:if="{{showMoreFields}}"'));
   assert.match(template, /未勾选不会自动推断/);
   assert.match(userApi, /type:\s*'link_existing_relation'/);
   assert.match(userApi, /relationCount:\s*_\.inc\(linked\.relationCount\)/);
@@ -369,7 +375,8 @@ test('用户反馈群二维码由运营后台受控替换并在小程序双入�
   const jobs = fs.readFileSync(path.join(root, 'cloudfunctions/youpuJobs/index.js'), 'utf8');
   assert.ok(app.pages.includes('pages/feedback-group/index'));
   [profile, privacy].forEach(function (template) { assert.match(template, /showFeedbackGroup[\s\S]*用户反馈群/); });
-  assert.match(feedbackPage, /长按识别二维码加入微信群/);
+  assert.match(feedbackPage, /长按识别二维码/);
+  assert.match(feedbackPage, /show-menu-by-longpress="{{true}}"/);
   assert.match(feedbackPage, /反馈群暂未开放/);
   assert.match(feedbackSource, /api\.call\('feedbackGroup\.get'/);
   assert.match(feedbackSource, /wx\.previewImage/);

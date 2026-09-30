@@ -23,7 +23,7 @@
       <view class="duplicate-box" wx:if="{{duplicateSuggestions.length}}">
         <text class="duplicate-title">家谱中有相似姓名，确认是否为同一人</text>
         <view class="duplicate-person" wx:for="{{duplicateSuggestions}}" wx:key="_id" data-id="{{item._id}}" bindtap="useExistingSuggestion">
-          <view class="duplicate-person-main"><text>{{item.name}}{{item.birthDate ? ' · ' + item.birthDate : ''}}</text><text class="gender-badge {{item.genderClass}}">{{item.genderText}}</text></view><text class="link-text">改为关联</text>
+          <view class="duplicate-person-main"><text>{{item.name}}{{item.birthDateText ? ' · ' + item.birthDateText : ''}}</text><text class="gender-badge {{item.genderClass}}">{{item.genderText}}</text></view><text class="link-text">改为关联</text>
         </view>
         <text class="duplicate-note">不是同一人可继续新建。</text>
       </view>
@@ -34,6 +34,8 @@
         <view class="choice-item {{gender === 'male' ? 'selected' : ''}}" data-gender="male" bindtap="chooseGender">男</view>
         <view class="choice-item {{gender === 'female' ? 'selected' : ''}}" data-gender="female" bindtap="chooseGender">女</view>
       </view>
+      <text class="field-label second-label">成员状态</text>
+      <view class="choice-row"><view class="choice-item {{lifeStatus === 'living' ? 'selected' : ''}}" data-status="living" bindtap="chooseLifeStatus">健在</view><view class="choice-item {{lifeStatus === 'deceased' ? 'selected' : ''}}" data-status="deceased" bindtap="chooseLifeStatus">已故</view></view>
     </view>
 
     <view class="optional-card surface-card">
@@ -44,8 +46,8 @@
         <text class="upload-state upload-state-{{avatarState}}" wx:if="{{avatarStateText}}">{{avatarStateText}}</text>
       </view>
 
-      <text class="field-label">出生日期</text>
-      <picker mode="date" value="{{birthDate}}" bindchange="chooseDate"><view class="field-input picker-value {{birthDate ? '' : 'placeholder'}}">{{birthDate || '稍后补充'}}</view></picker>
+      <person-date-picker label="出生时间" value="{{birthDraft}}" bindchange="onBirthDateChange" />
+      <person-date-picker wx:if="{{lifeStatus === 'deceased'}}" label="离世时间" value="{{deathDraft}}" bindchange="onDeathDateChange" />
 
       <view class="more-toggle" bindtap="toggleMoreFields"><text>更多资料</text><text>{{showMoreFields ? '收起' : '展开'}}</text></view>
       <view class="more-fields" wx:if="{{showMoreFields}}">
@@ -62,7 +64,7 @@
     <scroll-view class="existing-list" scroll-y wx:if="{{existingResults.length}}">
       <view class="existing-person {{item._id === selectedExistingId ? 'selected' : ''}} {{item.selectable === false ? 'disabled' : ''}}" wx:for="{{existingResults}}" wx:key="_id" data-id="{{item._id}}" bindtap="selectExisting">
         <view class="existing-avatar gender-avatar {{item.genderClass}}">{{item.initial}}</view>
-        <view class="existing-copy"><text class="existing-name">{{item.name}}</text><text class="existing-meta">{{item.genderText}}{{item.birthDate ? ' · ' + item.birthDate : ''}} · {{item.relationStateText}}</text></view>
+        <view class="existing-copy"><text class="existing-name">{{item.name}}</text><text class="existing-meta">{{item.genderText}}{{item.birthDateText ? ' · ' + item.birthDateText : ''}} · {{item.relationStateText}}</text></view>
         <text class="existing-check">{{item.selectable === false ? '不可关联' : item._id === selectedExistingId ? '已选择' : '选择'}}</text>
       </view>
     </scroll-view>

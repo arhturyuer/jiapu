@@ -1,0 +1,22 @@
+<view class="date-row" bindtap="open">
+  <text class="date-label">{{label}}</text>
+  <view class="date-value"><text class="{{summary ? '' : 'date-placeholder'}}">{{summary || '未填写'}}</text><text class="date-arrow">›</text></view>
+</view>
+<view class="date-overlay" wx:if="{{shown}}">
+  <view class="date-mask" bindtap="close" catchtouchmove="noop"></view>
+  <view class="date-panel" catchtap="noop">
+    <view class="date-toolbar">
+      <view class="calendar-switch"><text class="calendar-item {{working.calendar === 'solar' ? 'selected' : ''}}" data-calendar="solar" bindtap="chooseCalendar">公历</text><text class="calendar-item {{working.calendar === 'lunar' ? 'selected' : ''}}" data-calendar="lunar" bindtap="chooseCalendar">农历</text></view>
+      <text class="date-title">{{label}}</text>
+      <text class="date-cancel" bindtap="close">取消</text>
+    </view>
+    <view class="date-column-labels"><text>年</text><text>月</text><text>日</text></view>
+    <picker-view class="date-wheels" indicator-style="height: 88rpx;" value="{{pickerValue}}" bindchange="chooseDate">
+      <picker-view-column><view class="date-option" wx:for="{{yearOptions}}" wx:key="value">{{item.label}}</view></picker-view-column>
+      <picker-view-column><view class="date-option" wx:for="{{monthOptions}}" wx:key="value">{{item.label}}</view></picker-view-column>
+      <picker-view-column><view class="date-option" wx:for="{{dayOptions}}" wx:key="value">{{item.label}}</view></picker-view-column>
+    </picker-view>
+    <view class="date-extra"><view class="leap-option {{working.isLeapMonth ? 'selected' : ''}}" wx:if="{{working.calendar === 'lunar' && working.month}}" bindtap="toggleLeapMonth">{{working.isLeapMonth ? '✓ 闰月' : '选择闰月'}}</view><text class="date-hint">选“无”可只记录已知的部分</text></view>
+    <view class="date-actions"><text bindtap="clear">清空</text><button bindtap="confirm">确定</button></view>
+  </view>
+</view>

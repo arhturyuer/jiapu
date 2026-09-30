@@ -2,6 +2,7 @@ const app = getApp();
 const api = require('../../utils/api');
 const kinship = require('../../utils/kinship');
 const personGender = require('../../utils/person-gender');
+const personDate = require('../../utils/person-date');
 
 Page({
   data: {
@@ -40,7 +41,9 @@ Page({
     return app.getPersonDetail(this.data.personId, options).then(function (data) {
       const person = personGender.decorate(Object.assign({}, data.person, {
         initial: (data.person.name || '家').slice(0, 1),
-        lifeText: data.person.lifeStatus === 'living' ? '健在' : data.person.lifeStatus === 'deceased' ? '已故' : '未填写'
+        lifeText: data.person.lifeStatus === 'living' ? '健在' : data.person.lifeStatus === 'deceased' ? '已故' : '未填写',
+        birthDateText: personDate.display(data.person, 'birth'),
+        deathDateText: personDate.display(data.person, 'death')
       }));
       const relatives = (data.relatives || []).map(function (item) {
         return Object.assign({}, item, {

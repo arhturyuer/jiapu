@@ -1,3 +1,6 @@
 {
-  "navigationBarTitleText": "编辑成员"
+  "navigationBarTitleText": "编辑成员",
+  "usingComponents": {
+    "person-date-picker": "../../components/person-date-picker/index"
+  }
 }

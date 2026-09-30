@@ -236,12 +236,19 @@ function operationLabel(value: string): string {
   return labels[value] || value || '运营操作';
 }
 
+function personDateText(person: Row, prefix: 'birth' | 'death'): string {
+  const info = person?.[prefix + 'DateInfo'];
+  if (info?.year) return `${info.calendar === 'lunar' ? '农历' : '公历'} ${info.year} 年${info.precision === 'year' ? '' : `${info.isLeapMonth ? '闰' : ''}${info.month} 月`}${info.precision === 'day' ? `${info.day} 日` : ''}`;
+  const legacy = person?.[prefix + 'Date'];
+  return legacy ? `公历 ${legacy}` : '';
+}
+
 function lifeYears(person: Row): string {
-  const birth = person.birthDate ? String(person.birthDate).slice(0, 4) : '';
-  const death = person.deathDate ? String(person.deathDate).slice(0, 4) : '';
+  const birth = personDateText(person, 'birth');
+  const death = personDateText(person, 'death');
   if (birth && death) return `${birth}—${death}`;
-  if (birth) return `${birth} 年生`;
-  if (death) return `${death} 年卒`;
+  if (birth) return `${birth}出生`;
+  if (death) return `${death}离世`;
   return '生卒年未填写';
 }
 
@@ -884,8 +891,8 @@ onMounted(bootstrap);
           <div class="wide"><dt>人物 ID</dt><dd>{{ personDetail.person?._id || '—' }}</dd></div>
           <div><dt>性别</dt><dd>{{ genderLabel(personDetail.person?.gender) }}</dd></div>
           <div><dt>生存状态</dt><dd>{{ lifeStatusLabel(personDetail.person?.lifeStatus) }}</dd></div>
-          <div><dt>出生日期</dt><dd>{{ personDetail.person?.birthDate || '—' }}</dd></div>
-          <div><dt>去世日期</dt><dd>{{ personDetail.person?.deathDate || '—' }}</dd></div>
+          <div><dt>出生时间</dt><dd>{{ personDateText(personDetail.person || {}, 'birth') || '—' }}</dd></div>
+          <div><dt>离世时间</dt><dd>{{ personDateText(personDetail.person || {}, 'death') || '—' }}</dd></div>
           <div><dt>出生地</dt><dd>{{ personDetail.person?.birthPlace || '—' }}</dd></div>
           <div><dt>头像状态</dt><dd>{{ avatarStatusLabel(personDetail.person?.avatarStatus) }}</dd></div>
           <div><dt>资料情况</dt><dd>{{ personDetail.person?.hasBio ? '已填写人物简介' : '未填写人物简介' }}</dd></div>

@@ -8,6 +8,7 @@
     "node": ">=20.19.0"
   },
   "dependencies": {
+    "lunar-javascript": "1.7.7",
     "tencentcloud-sdk-nodejs-scf": "4.0.389",
     "ws": "8.18.3",
     "wx-server-sdk": "4.0.2"

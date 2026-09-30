@@ -4,6 +4,8 @@ const privacy = require('../../utils/privacy');
 const formState = require('../../utils/form-state');
 const kinship = require('../../utils/kinship');
 const personGender = require('../../utils/person-gender');
+const personDate = require('../../utils/person-date');
+const memberLifeStatus = require('../../utils/member-life-status');
 
 const RELATION_OPTIONS = [
   { key: 'father', label: '父亲' }, { key: 'mother', label: '母亲' },
@@ -26,7 +28,7 @@ Page({
     selectedExistingId: '', selectedExistingPerson: null, duplicateSuggestions: [],
     coParentCandidates: [], coParentId: '', parentPartnerCandidates: [], parentPartnerId: '',
     sharedParents: [], selectedSharedParentIds: [], sharedChildren: [], selectedSharedChildIds: [],
-    name: '', gender: '', birthDate: '', birthPlace: '', avatar: '', selectedAvatarPath: '',
+    name: '', gender: '', lifeStatus: 'living', birthDraft: personDate.emptyDraft(), deathDraft: personDate.emptyDraft(), birthPlace: '', avatar: '', selectedAvatarPath: '',
     avatarAssetId: '', moderationStatus: '', avatarState: '', avatarStateText: '', bio: '', showMoreFields: false,
     uploading: false, submitting: false, submitStage: '', hasUnsavedChanges: false, relationSummary: [], siblingBlocked: false
   },
@@ -34,6 +36,7 @@ Page({
     const type = RELATION_OPTIONS.some(function (item) { return item.key === options.relationType; }) ? options.relationType : 'son';
     this._drafts = { new: {}, existing: {} };
     this._genderTouched = false;
+    this._lifeStatusTouched = false;
     this.setData({ familyId: options.familyId || '', anchorId: options.anchorId || '', anchorName: decodeURIComponent(options.anchorName || ''), relationType: type, relationLabel: RELATION_OPTIONS.find(function (item) { return item.key === type; }).label, gender: defaultGender(type, 'unknown') });
     if (!options.familyId || !options.anchorId) {
       wx.showModal({ title: '无法添加成员', content: '缺少家谱或成员信息，请返回后重新选择。', showCancel: false }).then(function () { wx.navigateBack(); });
@@ -62,7 +65,7 @@ Page({
     return false;
   },
   personItem: function (person) {
-    return personGender.decorate(Object.assign({}, person, { initial: (person.name || '家').slice(0, 1) }));
+    return personGender.decorate(Object.assign({}, person, { initial: (person.name || '家').slice(0, 1), birthDateText: personDate.display(person, 'birth') }));
   },
   loadRelationContext: function () {
     const self = this; this._contextRequested = true; this.setData({ loadingContext: true, contextError: '' });
@@ -75,6 +78,7 @@ Page({
         if (!self._genderTouched) patch.gender = defaultGender(self.data.relationType, anchorGender);
         self.setData(patch);
       }
+      self.refreshDefaultLifeStatus();
       self.setData({ loadingContext: false }); self.refreshRelationChoices(true);
     }).catch(function (error) { self.setData({ loadingContext: false, contextError: api.userMessage(error, '家谱成员加载失败') }); });
   },
@@ -112,13 +116,18 @@ Page({
     this.updateSummary(); this.updateDuplicateSuggestions();
   },
   filterCandidates: function (list, keyword) { return (list || []).filter(function (p) { return !keyword || p.name.indexOf(keyword) >= 0; }); },
+  refreshDefaultLifeStatus: function () {
+    if (this._lifeStatusTouched || !this._graphPersons) return;
+    this.setData({ lifeStatus: memberLifeStatus.defaultStatus(this._graphPersons, this._graphRelations, this.data.anchorId, this.data.relationType) });
+  },
   chooseRelation: function (event) {
     const type = event.currentTarget.dataset.type; if (type === this.data.relationType) return; this._coParentTouched = false;
     this._genderTouched = false;
     this.setData({ relationType: type, relationLabel: RELATION_OPTIONS.find(function (i) { return i.key === type; }).label, gender: defaultGender(type, this.data.anchorGender), coParentId: '', parentPartnerId: '', selectedSharedParentIds: [], selectedSharedChildIds: [], selectedExistingId: '', selectedExistingPerson: null });
+    this.refreshDefaultLifeStatus();
     this.refreshRelationChoices(true); this.markDirty();
   },
-  saveDraft: function (mode) { this._drafts[mode] = mode === 'new' ? { name: this.data.name, gender: this.data.gender, birthDate: this.data.birthDate, birthPlace: this.data.birthPlace, bio: this.data.bio, showMoreFields: this.data.showMoreFields } : { existingKeyword: this.data.existingKeyword, selectedExistingId: this.data.selectedExistingId, selectedExistingPerson: this.data.selectedExistingPerson }; },
+  saveDraft: function (mode) { this._drafts[mode] = mode === 'new' ? { name: this.data.name, gender: this.data.gender, lifeStatus: this.data.lifeStatus, birthDraft: this.data.birthDraft, deathDraft: this.data.deathDraft, birthPlace: this.data.birthPlace, bio: this.data.bio, showMoreFields: this.data.showMoreFields } : { existingKeyword: this.data.existingKeyword, selectedExistingId: this.data.selectedExistingId, selectedExistingPerson: this.data.selectedExistingPerson }; },
   chooseEntryMode: function (event) { const mode = event.currentTarget.dataset.mode; if (mode === this.data.entryMode) return; this.saveDraft(this.data.entryMode); this.setData(Object.assign({ entryMode: mode }, this._drafts[mode] || {})); this.refreshRelationChoices(false); },
   filterExisting: function (event) { const keyword = event.detail.value.trim(); this.setData({ existingKeyword: keyword }); if (this._existingTimer) clearTimeout(this._existingTimer); const self = this; this._existingTimer = setTimeout(function () { self._existingTimer = null; self.setData({ existingResults: self.filterCandidates(self._existingCandidates, keyword) }); }, 120); },
   selectExisting: function (event) { const id = event.currentTarget.dataset.id, person = (this._existingCandidates || []).find(function (p) { return p._id === id; }); if (!person) return; if (person.selectable === false) { wx.showToast({ title: person.relationStateText, icon: 'none' }); return; } this.setData({ selectedExistingId: id, selectedExistingPerson: person }); this.refreshRelationChoices(false); this.markDirty(); },
@@ -126,7 +135,10 @@ Page({
   inputField: function (event) { const patch = {}; patch[event.currentTarget.dataset.field] = event.detail.value; this.setData(patch); if (event.currentTarget.dataset.field === 'name') { if (this._duplicateTimer) clearTimeout(this._duplicateTimer); const self = this; this._duplicateTimer = setTimeout(function () { self._duplicateTimer = null; self.updateDuplicateSuggestions(); }, 120); } this.markDirty(); },
   updateDuplicateSuggestions: function () { const name = this.data.name.trim(); this.setData({ duplicateSuggestions: name ? (this._graphPersons || []).filter(function (p) { return p.name.indexOf(name) >= 0; }).slice(0, 3).map(this.personItem.bind(this)) : [] }); },
   chooseGender: function (event) { const gender = event.currentTarget.dataset.gender; if (fixedGender(this.data.relationType) || !personGender.isKnown(gender)) return; this._genderTouched = true; this.setData({ gender: gender }); this.markDirty(); },
-  chooseDate: function (event) { this.setData({ birthDate: event.detail.value }); this.markDirty(); },
+  chooseLifeStatus: function (event) { const lifeStatus = event.currentTarget.dataset.status; this._lifeStatusTouched = true; this.setData({ lifeStatus: lifeStatus, deathDraft: lifeStatus === 'living' ? personDate.emptyDraft() : this.data.deathDraft }); this.markDirty(); },
+  onBirthDateChange: function (event) { this.setData({ birthDraft: event.detail.value }); this.markDirty(); },
+  onDeathDateChange: function (event) { this.setData({ deathDraft: event.detail.value }); this.markDirty(); },
+  dateInputs: function () { const birth = personDate.toInfo(this.data.birthDraft), death = personDate.toInfo(this.data.deathDraft); return { birth: birth, death: death, error: birth.error ? '出生时间：' + birth.error : death.error ? '离世时间：' + death.error : '' }; },
   toggleMoreFields: function () { this.setData({ showMoreFields: !this.data.showMoreFields }); },
   chooseExclusive: function (event) { const field = event.currentTarget.dataset.field, id = event.currentTarget.dataset.id, patch = {}; patch[field] = this.data[field] === id ? '' : id; if (field === 'coParentId') this._coParentTouched = true; this.setData(patch); this.updateSummary(); this.markDirty(); },
   toggleMulti: function (event) { const field = event.currentTarget.dataset.field, id = event.currentTarget.dataset.id, selected = this.data[field].slice(), index = selected.indexOf(id); if (index >= 0) selected.splice(index, 1); else selected.push(id); const patch = {}; patch[field] = selected; this.setData(patch); if (field === 'selectedSharedChildIds') this.setData({ sharedChildren: this.data.sharedChildren.map(function (p) { return Object.assign({}, p, { selected: selected.indexOf(p._id) >= 0 }); }) }); if (field === 'selectedSharedParentIds') this.setData({ sharedParents: this.data.sharedParents.map(function (p) { return Object.assign({}, p, { selected: selected.indexOf(p._id) >= 0 }); }) }); this.updateSummary(); this.markDirty(); },
@@ -136,11 +148,12 @@ Page({
     return privacy.ensurePrivacyAuthorized().then(function () { return wx.chooseMedia({ count: 1, mediaType: ['image'], sourceType: ['album', 'camera'] }); }).then(function (result) { const file = result.tempFiles[0]; self._selectedAvatarSize = file.size || 0; self._pendingAvatarMedia = null; self.setData({ avatar: file.tempFilePath, selectedAvatarPath: file.tempFilePath, avatarAssetId: '', moderationStatus: '', avatarState: 'selected', avatarStateText: '已选择，添加成员时一并上传' }); self.markDirty(); }).catch(function (error) { if (error && error.errMsg && error.errMsg.indexOf('cancel') >= 0) return; wx.showToast({ title: api.userMessage(error, '照片选择失败'), icon: 'none' }); });
   },
   requestPayload: function () { return { familyId: this.data.familyId, anchorPersonId: this.data.anchorId, relationType: this.data.relationType, coParentId: this.data.coParentId, parentPartnerId: this.data.parentPartnerId, sharedParentIds: this.data.selectedSharedParentIds, sharedChildIds: this.data.selectedSharedChildIds }; },
-  createNewPerson: function (avatarAssetId) { return api.call('person.createRelated', Object.assign(this.requestPayload(), { idempotencyKey: this._submitRequestId, person: { name: this.data.name.trim(), gender: this.data.gender, birthDate: this.data.birthDate, birthPlace: this.data.birthPlace.trim(), avatarAssetId: avatarAssetId || '', bio: this.data.bio.trim() } })); },
-  canSubmit: function () { if ((this._contextRequested && this.data.loadingContext) || this.data.contextError || this.data.siblingBlocked) return false; if (this.data.relationType === 'sibling' && !this.data.selectedSharedParentIds.length) return false; return this.data.entryMode === 'new' ? Boolean(this.data.name.trim() && personGender.isKnown(this.data.gender)) : Boolean(this.data.selectedExistingId); },
+  createNewPerson: function (avatarAssetId) { const dates = this.dateInputs(); return api.call('person.createRelated', Object.assign(this.requestPayload(), { idempotencyKey: this._submitRequestId, person: { name: this.data.name.trim(), gender: this.data.gender, lifeStatus: this.data.lifeStatus, birthDateInfo: dates.birth.info, deathDateInfo: this.data.lifeStatus === 'deceased' ? dates.death.info : null, birthPlace: this.data.birthPlace.trim(), avatarAssetId: avatarAssetId || '', bio: this.data.bio.trim() } })); },
+  canSubmit: function () { if ((this._contextRequested && this.data.loadingContext) || this.data.contextError || this.data.siblingBlocked) return false; if (this.data.relationType === 'sibling' && !this.data.selectedSharedParentIds.length) return false; return this.data.entryMode === 'new' ? Boolean(this.data.name.trim() && personGender.isKnown(this.data.gender) && ['living', 'deceased'].includes(this.data.lifeStatus)) : Boolean(this.data.selectedExistingId); },
   submit: function (event) {
     const self = this, continueAdding = Boolean(event && event.currentTarget && event.currentTarget.dataset.continue);
     if (!this.canSubmit()) { wx.showToast({ title: this.data.siblingBlocked ? '请先添加父亲或母亲' : this.data.entryMode === 'new' && !personGender.isKnown(this.data.gender) ? '请选择成员性别' : '请完整选择成员和关系', icon: 'none' }); return; }
+    if (this.data.entryMode === 'new' && this.dateInputs().error) { wx.showToast({ title: this.dateInputs().error, icon: 'none' }); return; }
     if (this.data.submitting || this.data.uploading) return;
     if (!this._submitRequestId) this._submitRequestId = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12);
     this.setData({ submitting: true, submitStage: this.data.entryMode === 'new' ? '正在添加成员…' : '正在关联…' });
@@ -156,5 +169,5 @@ Page({
     }
     return request.then(function (data) { self._submitRequestId = ''; if (!data.pending && app.invalidateFamilyData) app.invalidateFamilyData(self.data.familyId); self.clearDirty(); wx.showToast({ title: data.pending ? '已提交管理员审核' : '关系已保存', icon: data.pending ? 'none' : 'success', duration: 1600 }); if (continueAdding) return self.resetForNext(); setTimeout(function () { wx.navigateBack(); }, 600); return data; }).catch(function (error) { if (error.code !== 'CLOUD_FUNCTION_TIMEOUT' && error.code !== 'CLOUD_CALL_FAILED') self._submitRequestId = ''; if (self.data.entryMode === 'new' && self._pendingAvatarMedia) self.setData({ avatarState: 'uploaded', avatarStateText: '头像已上传，再次保存时将直接重试绑定' }); wx.showToast({ title: api.userMessage(error, '添加失败'), icon: 'none' }); }).then(function (data) { self.setData({ submitting: false, uploading: false, submitStage: '' }); return data; });
   },
-  resetForNext: function () { this._pendingAvatarMedia = null; this._selectedAvatarSize = 0; this._drafts = { new: {}, existing: {} }; this._genderTouched = false; this.setData({ entryMode: 'new', name: '', gender: defaultGender(this.data.relationType, this.data.anchorGender), birthDate: '', birthPlace: '', bio: '', avatar: '', selectedAvatarPath: '', avatarAssetId: '', avatarState: '', avatarStateText: '', selectedExistingId: '', selectedExistingPerson: null, existingKeyword: '', duplicateSuggestions: [], showMoreFields: false }); return this.loadRelationContext(); }
+  resetForNext: function () { this._pendingAvatarMedia = null; this._selectedAvatarSize = 0; this._drafts = { new: {}, existing: {} }; this._genderTouched = false; this._lifeStatusTouched = false; this.setData({ entryMode: 'new', name: '', gender: defaultGender(this.data.relationType, this.data.anchorGender), lifeStatus: 'living', birthDraft: personDate.emptyDraft(), deathDraft: personDate.emptyDraft(), birthPlace: '', bio: '', avatar: '', selectedAvatarPath: '', avatarAssetId: '', avatarState: '', avatarStateText: '', selectedExistingId: '', selectedExistingPerson: null, existingKeyword: '', duplicateSuggestions: [], showMoreFields: false }); return this.loadRelationContext(); }
 });

@@ -210,7 +210,7 @@
           <view class="small-avatar gender-avatar {{item.genderClass}}">{{item.initial}}</view>
           <view class="child-order-copy">
             <view class="child-order-name-row"><text class="child-order-name">{{item.name}}</text><text class="child-order-rank">{{item.rankLabel}}</text></view>
-            <text class="child-order-date">{{item.birthDate || '出生日期待补充'}}</text>
+            <text class="child-order-date">{{item.birthDateText || '出生时间待补充'}}</text>
           </view>
           <view class="child-order-actions">
             <view class="child-order-button {{(!item.canMoveUp || childOrderSaving) ? 'is-disabled' : ''}}" data-id="{{item._id}}" data-direction="up" catchtap="moveChildOrder">上移</view>

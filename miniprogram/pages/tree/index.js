@@ -5,6 +5,7 @@ const graphViewport = require('../../utils/graph-viewport');
 const kinship = require('../../utils/kinship');
 const personGender = require('../../utils/person-gender');
 const childRank = require('../../utils/child-rank');
+const personDate = require('../../utils/person-date');
 const memberActions = require('../../utils/member-actions');
 const commerceConfig = require('../../config/commerce');
 const shareInvite = require('../../utils/share-invite');
@@ -145,7 +146,7 @@ Page({
           return personGender.decorate(Object.assign({}, person, {
             avatar: '',
             initial: (person.name || '家').slice(0, 1),
-            metaText: person.birthDate ? person.birthDate.slice(0, 4) + '年' : ''
+            metaText: personDate.fromPerson(person, 'birth').year ? personDate.fromPerson(person, 'birth').year + '年' : ''
           }));
         });
         let mode = self.data.viewMode;
@@ -776,6 +777,7 @@ Page({
       }
       return Object.assign({}, personGender.decorate(row.person), {
         initial: (row.person.name || '家').slice(0, 1),
+        birthDateText: personDate.display(row.person, 'birth'),
         rankLabel: label,
         canMoveUp: index > 0 && childRank.canSwap(row, rows[index - 1]),
         canMoveDown: index < rows.length - 1 && childRank.canSwap(row, rows[index + 1])

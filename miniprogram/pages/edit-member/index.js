@@ -3,14 +3,22 @@ const api = require('../../utils/api');
 const privacy = require('../../utils/privacy');
 const formState = require('../../utils/form-state');
 const personGender = require('../../utils/person-gender');
+const personDate = require('../../utils/person-date');
 
-const FORM_FIELDS = ['name', 'gender', 'birthDate', 'birthPlace', 'bio', 'lifeStatus'];
+const FORM_FIELDS = ['name', 'gender', 'birthDateInfo', 'deathDateInfo', 'birthPlace', 'bio', 'lifeStatus'];
+
+function dateFormValue(draft) {
+  if (!draft || (!draft.year && !draft.month && !draft.day)) return '';
+  const normalized = personDate.toInfo(draft);
+  return normalized.error ? 'invalid:' + JSON.stringify(draft) : JSON.stringify(normalized.info);
+}
 
 function normalizedForm(data) {
   return {
     name: String(data.name || '').trim(),
     gender: data.gender || 'unknown',
-    birthDate: data.birthDate || '',
+    birthDateInfo: dateFormValue(data.birthDraft),
+    deathDateInfo: dateFormValue(data.deathDraft),
     birthPlace: String(data.birthPlace || '').trim(),
     bio: String(data.bio || '').trim(),
     lifeStatus: data.lifeStatus || 'unknown'
@@ -34,6 +42,8 @@ Page({
     gender: 'unknown',
     canKeepUnknownGender: false,
     birthDate: '',
+    birthDraft: personDate.emptyDraft(),
+    deathDraft: personDate.emptyDraft(),
     birthPlace: '',
     avatar: '',
     avatarAssetId: '',
@@ -79,6 +89,8 @@ Page({
         gender: person.gender || 'unknown',
         canKeepUnknownGender: !personGender.isKnown(person.gender),
         birthDate: person.birthDate || '',
+        birthDraft: personDate.fromPerson(person, 'birth'),
+        deathDraft: personDate.fromPerson(person, 'death'),
         birthPlace: person.birthPlace || '',
         avatar: '',
         avatarAssetId: avatarAssetId,
@@ -141,12 +153,12 @@ Page({
   },
 
   chooseLifeStatus: function (event) {
-    this.setFormData({ lifeStatus: event.currentTarget.dataset.status });
+    const lifeStatus = event.currentTarget.dataset.status;
+    this.setFormData({ lifeStatus: lifeStatus, deathDraft: lifeStatus === 'living' ? personDate.emptyDraft() : this.data.deathDraft });
   },
 
-  chooseDate: function (event) {
-    this.setFormData({ birthDate: event.detail.value });
-  },
+  onBirthDateChange: function (event) { this.setFormData({ birthDraft: event.detail.value }); },
+  onDeathDateChange: function (event) { this.setFormData({ deathDraft: event.detail.value }); },
 
   chooseAvatar: function () {
     const self = this;
@@ -250,10 +262,16 @@ Page({
       wx.showToast({ title: '姓名不能为空', icon: 'none' });
       return Promise.resolve();
     }
+    const birth = personDate.toInfo(this.data.birthDraft);
+    const death = personDate.toInfo(this.data.deathDraft);
+    if (birth.error || (this.data.lifeStatus === 'deceased' && death.error)) {
+      wx.showToast({ title: (birth.error ? '出生时间：' + birth.error : '离世时间：' + death.error), icon: 'none' });
+      return Promise.resolve();
+    }
     if (!this.data.hasFormChanges || this.data.submitting || this.data.uploading || this.data.savingAvatar) return Promise.resolve();
     const changes = {};
     FORM_FIELDS.forEach(function (field) {
-      if (current[field] !== self._initialForm[field]) changes[field] = current[field];
+      if ((current[field] || '') !== (self._initialForm[field] || '')) changes[field] = field === 'birthDateInfo' ? birth.info : field === 'deathDateInfo' ? (current.lifeStatus === 'living' ? null : death.info) : current[field];
     });
     this.setData({ submitting: true });
     return api.call('person.update', {

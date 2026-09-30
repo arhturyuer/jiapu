@@ -2,6 +2,7 @@ const app = getApp();
 const api = require('../../utils/api');
 const graphLayout = require('../../utils/graph-layout');
 const personGender = require('../../utils/person-gender');
+const personDate = require('../../utils/person-date');
 
 const MISSING_FIELD_LABELS = {
   gender: '性别',
@@ -13,7 +14,8 @@ const MISSING_FIELD_LABELS = {
 function personMeta(person) {
   const parts = [];
   if (person.lifeStatus === 'deceased') parts.push('已故');
-  if (person.birthDate) parts.push(person.birthDate.slice(0, 4) + ' 年出生');
+  const birth = personDate.display(person, 'birth');
+  if (birth) parts.push(birth + '出生');
   return parts.join(' · ') || '资料待补充';
 }
 
@@ -23,7 +25,7 @@ function decoratePersons(persons) {
       ? person.profileMissingFields
       : [
         (!person.gender || person.gender === 'unknown') ? 'gender' : '',
-        person.birthDate ? '' : 'birthDate',
+        person.birthDate || person.birthDateInfo ? '' : 'birthDate',
         person.avatarAssetId ? '' : 'avatar'
       ].filter(Boolean);
     return personGender.decorate(Object.assign({}, person, {

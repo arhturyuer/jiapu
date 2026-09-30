@@ -29,6 +29,7 @@ const CROSSING_RADIUS = 7;
 const kinship = require('./kinship');
 const personGenderDisplay = require('./person-gender');
 const childRank = require('./child-rank');
+const personDate = require('./person-date');
 
 function metricsForNameLayout(nameLayout) {
   return nameLayout === 'vertical' ? VERTICAL_METRICS : HORIZONTAL_METRICS;
@@ -45,8 +46,8 @@ function personGender(person) {
 }
 
 function comparePeople(a, b) {
-  const dateA = a.birthDate || '9999-99-99';
-  const dateB = b.birthDate || '9999-99-99';
+  const dateA = (personDate.range(a, 'birth') || {}).start || '9999-99-99';
+  const dateB = (personDate.range(b, 'birth') || {}).start || '9999-99-99';
   if (dateA !== dateB) return dateA.localeCompare(dateB);
   const nameOrder = (a.name || '').localeCompare(b.name || '', 'zh-CN');
   if (nameOrder) return nameOrder;

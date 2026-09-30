@@ -1,3 +1,5 @@
+const personDate = require('./person-date');
+
 function textOrder(first, second) {
   return String(first || '').localeCompare(String(second || ''), 'zh-CN');
 }
@@ -28,12 +30,7 @@ function dateInterval(value) {
 }
 
 function comparableDateOrder(first, second) {
-  const firstInterval = dateInterval(first && first.birthDate);
-  const secondInterval = dateInterval(second && second.birthDate);
-  if (!firstInterval || !secondInterval) return 0;
-  if (firstInterval.end < secondInterval.start) return -1;
-  if (secondInterval.end < firstInterval.start) return 1;
-  return 0;
+  return personDate.comparableOrder(first, second);
 }
 
 function relationNumber(relation, field, fallback) {
@@ -62,8 +59,8 @@ function compareFallback(first, second) {
   const firstGenderOrder = firstGender === 'male' ? 0 : firstGender === 'female' ? 1 : 2;
   const secondGenderOrder = secondGender === 'male' ? 0 : secondGender === 'female' ? 1 : 2;
   if (firstGenderOrder !== secondGenderOrder) return firstGenderOrder - secondGenderOrder;
-  const firstHasDate = Boolean(dateInterval(first.person && first.person.birthDate));
-  const secondHasDate = Boolean(dateInterval(second.person && second.person.birthDate));
+  const firstHasDate = Boolean(personDate.range(first.person, 'birth'));
+  const secondHasDate = Boolean(personDate.range(second.person, 'birth'));
   if (firstHasDate !== secondHasDate) return firstHasDate ? -1 : 1;
   return textOrder(first.person && first.person.name, second.person && second.person.name)
     || textOrder(first.person && first.person._id, second.person && second.person._id);

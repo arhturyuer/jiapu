@@ -1,6 +1,7 @@
 const cloud = require('wx-server-sdk');
 const crypto = require('crypto');
 const domain = require('./domain');
+const personDate = require('./person-date');
 const commerce = require('./commerce');
 const jobDispatcher = require('./job-dispatcher');
 
@@ -269,6 +270,10 @@ function publicPerson(person) {
     lifeStatus: person.lifeStatus || 'unknown',
     birthDate: person.birthDate || '',
     deathDate: person.deathDate || '',
+    birthDateInfo: person.birthDateInfo || null,
+    deathDateInfo: person.deathDateInfo || null,
+    birthDateRange: personDate.effectiveRange(person, 'birth'),
+    deathDateRange: personDate.effectiveRange(person, 'death'),
     birthPlace: person.birthPlace || '',
     bio: person.bio || '',
     avatarAssetId: person.avatarAssetId || '',
@@ -280,7 +285,7 @@ function publicPerson(person) {
 function profileMissingFields(person) {
   const fields = [];
   if (!person.gender || person.gender === 'unknown') fields.push('gender');
-  if (!person.birthDate) fields.push('birthDate');
+  if (!person.birthDate && !person.birthDateInfo) fields.push('birthDate');
   if (!person.avatarAssetId) fields.push('avatar');
   if (!person.bio && !person.birthPlace) fields.push('story');
   return fields;
@@ -489,19 +494,62 @@ async function requireMembership(familyId, roles, scope, openidOverride, options
   return { openid: openid, membership: membership, family: family };
 }
 
+function normalizePersonDateFields(source, result) {
+  ['birth', 'death'].forEach(function (prefix) {
+    const legacyKey = prefix + 'Date';
+    const infoKey = prefix + 'DateInfo';
+    const rangeKey = prefix + 'DateRange';
+    if (source[infoKey] !== undefined && source[infoKey] !== null) {
+      const normalized = personDate.normalizeInfo(source[infoKey]);
+      assert(!normalized.error, 'INVALID_PERSON_DATE', normalized.error || '日期不正确');
+      result[legacyKey] = normalized.legacy;
+      result[infoKey] = normalized.info;
+      result[rangeKey] = normalized.range;
+    } else if (source[legacyKey] !== undefined && (source[infoKey] === undefined || source[legacyKey])) {
+      result[legacyKey] = cleanDate(source[legacyKey]);
+      result[infoKey] = null;
+      result[rangeKey] = personDate.legacyRange(result[legacyKey]);
+    } else if (source[infoKey] !== undefined) {
+      result[legacyKey] = '';
+      result[infoKey] = null;
+      result[rangeKey] = null;
+    }
+  });
+}
+
+function clearDeathDate(person) {
+  person.deathDate = '';
+  person.deathDateInfo = null;
+  person.deathDateRange = null;
+}
+
+function assertPersonDates(person) {
+  assert(!personDate.definitelyDeathBeforeBirth(person), 'PERSON_DEATH_BEFORE_BIRTH', '离世时间不能早于出生时间');
+  assert(person.lifeStatus !== 'living' || (!person.deathDate && !person.deathDateInfo), 'LIVING_PERSON_DEATH_DATE', '健在成员不能填写离世时间');
+}
+
+function changesAffectPersonDates(changes) {
+  return ['birthDate', 'birthDateInfo', 'deathDate', 'deathDateInfo', 'lifeStatus'].some(function (field) { return changes[field] !== undefined; });
+}
+
 function normalizePerson(input) {
   const source = input || {};
   const name = cleanText(source.name, 30);
   assert(name, 'PERSON_NAME_REQUIRED', '请填写成员姓名');
-  return {
+  const result = {
     name: name,
     gender: cleanGender(source.gender),
-    birthDate: cleanDate(source.birthDate),
     birthPlace: cleanText(source.birthPlace, 80),
     avatarAssetId: cleanText(source.avatarAssetId || source.avatar, 80),
     bio: cleanText(source.bio, 500),
     lifeStatus: cleanLifeStatus(source.lifeStatus)
   };
+  normalizePersonDateFields(source, result);
+  if (result.birthDate === undefined) result.birthDate = '';
+  if (result.deathDate === undefined) result.deathDate = '';
+  if (result.lifeStatus === 'living') clearDeathDate(result);
+  assertPersonDates(result);
+  return result;
 }
 
 function normalizePersonChanges(input) {
@@ -512,13 +560,14 @@ function normalizePersonChanges(input) {
     assert(result.name, 'PERSON_NAME_REQUIRED', '成员姓名不能为空');
   }
   if (source.gender !== undefined) result.gender = cleanGender(source.gender);
-  if (source.birthDate !== undefined) result.birthDate = cleanDate(source.birthDate);
+  normalizePersonDateFields(source, result);
   if (source.birthPlace !== undefined) result.birthPlace = cleanText(source.birthPlace, 80);
   if (source.avatarAssetId !== undefined || source.avatar !== undefined) {
     result.avatarAssetId = cleanText(source.avatarAssetId || source.avatar, 80);
   }
   if (source.bio !== undefined) result.bio = cleanText(source.bio, 500);
   if (source.lifeStatus !== undefined) result.lifeStatus = cleanLifeStatus(source.lifeStatus);
+  if (result.lifeStatus === 'living') clearDeathDate(result);
   return result;
 }
 
@@ -1360,6 +1409,8 @@ async function graphGet(event) {
       gender: person.gender,
       lifeStatus: person.lifeStatus,
       birthDate: person.birthDate || '',
+      birthDateInfo: person.birthDateInfo || null,
+      birthDateRange: personDate.effectiveRange(person, 'birth'),
       avatarAssetId: person.avatarAssetId || '',
       profileMissingFields: profileMissingFields(person)
     };
@@ -1396,7 +1447,7 @@ async function familyDashboard(event) {
     return total
       + (person.name ? 1 : 0)
       + (person.gender && person.gender !== 'unknown' ? 1 : 0)
-      + (person.birthDate ? 1 : 0)
+      + (person.birthDate || person.birthDateInfo ? 1 : 0)
       + (person.avatarAssetId ? 1 : 0)
       + (person.bio || person.birthPlace ? 1 : 0);
   }, 0);
@@ -1948,6 +1999,7 @@ async function personUpdate(event) {
   assert(Object.keys(changes).length, 'NO_CHANGES', '没有需要保存的修改');
   const snapshot = await mustGet(db, 'persons', event.personId, 'PERSON_NOT_FOUND', '成员不存在');
   if (changes.gender !== undefined) assertGenderChangeAllowed(snapshot.gender, changes.gender);
+  if (changesAffectPersonDates(changes)) assertPersonDates(Object.assign({}, snapshot, changes));
   await requireMembership(snapshot.familyId, ['admin', 'member'], db, openid);
   if (changes.avatarAssetId) {
     await requireOwnedMedia(changes.avatarAssetId, openid, snapshot.familyId, 'person_avatar');
@@ -1956,6 +2008,7 @@ async function personUpdate(event) {
   return mutate('person.update', event, openid, async function (transaction) {
     const person = await mustGet(transaction, 'persons', event.personId, 'PERSON_NOT_FOUND', '成员不存在');
     if (changes.gender !== undefined) assertGenderChangeAllowed(person.gender, changes.gender);
+    if (changesAffectPersonDates(changes)) assertPersonDates(Object.assign({}, person, changes));
     const access = await requireMembership(person.familyId, ['admin', 'member'], transaction, openid);
     if (access.membership.role === 'member') {
       const result = await transaction.collection('change_requests').add({
@@ -2114,6 +2167,7 @@ async function changeReview(event) {
       const person = await mustGet(transaction, 'persons', request.payload.personId, 'PERSON_NOT_FOUND', '成员不存在');
       assert(person.familyId === request.familyId, 'CROSS_FAMILY_RELATION', '申请数据异常');
       if (request.payload.changes.gender !== undefined) assertGenderChangeAllowed(person.gender, request.payload.changes.gender);
+      if (changesAffectPersonDates(request.payload.changes)) assertPersonDates(Object.assign({}, person, request.payload.changes));
       await transaction.collection('persons').doc(person._id).update({
         data: Object.assign({}, request.payload.changes, { updatedAt: db.serverDate() })
       });
