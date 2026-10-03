@@ -12,8 +12,9 @@ const examplePosterCode = require('../../utils/example-poster-code');
 const treePosterFlow = require('../../utils/tree-poster-flow');
 const MAX_INTERACTIVE_NODES = 80;
 
-function exampleDetailUrl(slug, personId) {
-  return '/pages/example-person-detail/index?slug=' + encodeURIComponent(slug) + '&id=' + encodeURIComponent(personId);
+function exampleDetailUrl(slug, personId, source) {
+  return '/pages/example-person-detail/index?slug=' + encodeURIComponent(slug) + '&id=' + encodeURIComponent(personId)
+    + (source === 'share_menu' ? '&source=share_menu' : '');
 }
 
 function decodedScene(value) {
@@ -316,9 +317,13 @@ Page({
   expandAllBranches: function () { if (this.data.autoCollapseEnabled && this.data.rawPersons.length > MAX_INTERACTIVE_NODES) return wx.showToast({ title: '家谱较大，请按分支展开', icon: 'none' }); this.renderGraph(this.data.viewMode, this.data.viewpointId, { collapsedPersonIds: [], statePatch: { collapsedPersonIds: [] } }); },
   expandBranch: function (event) { const id = event.currentTarget.dataset.id; let collapsed = this.data.collapsedPersonIds.filter(function (item) { return item !== id; }); if (this.data.autoCollapseEnabled && this.data.rawPersons.length > MAX_INTERACTIVE_NODES) collapsed = graphLayout.suggestCollapsedIds(this.data.rawPersons, this.data.rawRelations, { limit: MAX_INTERACTIVE_NODES, focusId: id }); this.renderGraph(this.data.viewMode, this.data.viewpointId, { collapsedPersonIds: collapsed, statePatch: { collapsedPersonIds: collapsed } }); },
   toggleSelectedBranch: function () { const person = this.data.selectedPerson; if (!person) return; const collapsed = this.data.collapsedPersonIds.slice(); const index = collapsed.indexOf(person._id); if (index >= 0) collapsed.splice(index, 1); else collapsed.push(person._id); this.renderGraph(this.data.viewMode, this.data.viewpointId, { collapsedPersonIds: collapsed, selectedPersonId: '', statePatch: { collapsedPersonIds: collapsed, selectedPersonId: '', selectedPerson: null, showMemberSheet: false } }); },
-  openMemberDetail: function () { if (this.data.selectedPerson) wx.navigateTo({ url: exampleDetailUrl(this.data.slug, this.data.selectedPerson._id) }); },
+  openMemberDetail: function () { if (this.data.selectedPerson) wx.navigateTo({ url: exampleDetailUrl(this.data.slug, this.data.selectedPerson._id, this._shareSource) }); },
   explainCreate: function () { const self = this; wx.showModal({ title: '在自己的家谱中继续', content: '创建自己的家谱后，你可以添加亲属、编辑资料、管理关系并邀请家人共同维护。', confirmText: '去创建', success: function (result) { if (result.confirm) self.createFamily(); } }); },
-  createFamily: function () { wx.navigateTo({ url: '/pages/create-family/index?source=example&example=' + encodeURIComponent(this.data.slug) }); },
+  createFamily: function () {
+    wx.navigateTo({ url: this._shareSource === 'share_menu'
+      ? '/pages/create-family/index?source=share_menu&opened=1&example=' + encodeURIComponent(this.data.slug)
+      : '/pages/create-family/index?source=example&example=' + encodeURIComponent(this.data.slug) });
+  },
   prepareExampleShare: function () {
     const example = this.data.example || {};
     const self = this;

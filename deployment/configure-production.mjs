@@ -5,6 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { chmodSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { assertDeploymentTarget, PRODUCTION_ENV_ID } from './target-guard.mjs';
+import { productionNotificationConfig } from './production-notification-config.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const destination = resolve(root, 'deployment/cloudbaserc.production.local.json');
@@ -78,10 +79,12 @@ Object.assign(userDefinition.envVariables, {
   JOB_DISPATCH_SECRET: dispatchSecret,
   JOB_FUNCTION_NAMESPACE: PRODUCTION_ENV_ID
 });
-jobsDefinition.envVariables = {
+const notificationVariables = productionNotificationConfig(userVariables, jobsVariables, process.env);
+Object.assign(userDefinition.envVariables, notificationVariables);
+jobsDefinition.envVariables = Object.assign({}, notificationVariables, {
   BOOTSTRAP_SECRET: bootstrapSecret,
   JOB_DISPATCH_SECRET: dispatchSecret
-};
+});
 
 const manifest = {
   envId: PRODUCTION_ENV_ID,
@@ -93,4 +96,4 @@ chmodSync(destination, 0o600);
 
 console.log('已生成受控生产部署清单：' + destination);
 console.log('已保留 youpuUserApi 现有生产支付变量；密钥值未输出。');
-console.log('youpuJobs 仅保留 bootstrap、任务派发变量和每日保留触发器。');
+console.log('youpuJobs 保留 bootstrap、任务派发及订阅变量，触发器仍仅每日保留任务。');

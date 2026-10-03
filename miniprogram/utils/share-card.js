@@ -1,4 +1,6 @@
 const FALLBACK_IMAGE = '/images/share/brand-fallback.jpg';
+const INTRO_IMAGE = '/images/share/youpu-intro.jpg';
+const INTRO_PATH = '/pages/share-intro/index?source=share_menu';
 const CANVAS_WIDTH = 750;
 const CANVAS_HEIGHT = 600;
 const CARD_RENDER_VERSION = 'share-card-v3';
@@ -61,6 +63,14 @@ function detailsFor(options) {
 
 function create(options) {
   const input = Object.assign({ kind: 'discovery' }, options || {});
+  if (input.kind === 'discovery' && input.variant === 'intro') {
+    return {
+      kind: 'discovery',
+      title: '我发现有谱做家谱很好用，推荐给你',
+      path: INTRO_PATH,
+      imageUrl: INTRO_IMAGE
+    };
+  }
   const card = {
     kind: input.kind,
     title: titleFor(input),

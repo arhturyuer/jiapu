@@ -36,7 +36,7 @@ function prune(cache) {
   const now = Date.now();
   const validEntries = Object.keys(cache || {}).filter(function (key) {
     const entry = cache[key];
-    return entry && entry.card && entry.card.path && expirationTime(entry.expiresAt) > now;
+    return entry && entry.card && entry.card.path && (entry.expiresAt === null || expirationTime(entry.expiresAt) > now);
   }).sort(function (left, right) {
     return Number(cache[right].savedAt || 0) - Number(cache[left].savedAt || 0);
   }).slice(0, MAX_CACHE_ENTRIES);
@@ -64,4 +64,13 @@ function set(options, card, expiresAt) {
   return card;
 }
 
-module.exports = { get: get, set: set };
+function removeInvitation(invitationId) {
+  if (!invitationId) return;
+  const cache = prune(readCache());
+  Object.keys(cache).forEach(function (key) {
+    if (cache[key].card.invitationId === invitationId) delete cache[key];
+  });
+  writeCache(cache);
+}
+
+module.exports = { get: get, set: set, removeInvitation: removeInvitation };

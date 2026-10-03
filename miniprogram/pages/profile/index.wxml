@@ -22,6 +22,7 @@
     <view class="section-block"><view class="section-heading"><text class="section-title">账户与隐私</text></view><view class="setting-list surface-card">
       <view class="setting-row" bindtap="showPrivacy" hover-class="setting-row-active"><view><text class="setting-title">隐私与账户</text><text class="setting-desc">管理授权、个人数据和账户状态</text></view><text class="setting-arrow">›</text></view>
       <view class="setting-row" bindtap="showAbout" hover-class="setting-row-active"><view><text class="setting-title">关于有谱</text><text class="setting-desc">产品理念与版本信息</text></view><text class="setting-arrow">›</text></view>
+      <view class="setting-row setting-share-row" hover-class="setting-row-active"><view class="setting-share-copy"><text class="setting-title">分享有谱</text><text class="setting-desc">向朋友推荐有谱家谱小程序</text></view><text class="setting-arrow">›</text><button class="setting-share-hit" open-type="share" hover-class="setting-row-active" aria-label="分享有谱家谱"></button></view>
     </view></view>
 
     <view class="section-block"><view class="section-heading"><text class="section-title">帮助与反馈</text></view><view class="setting-list surface-card"><view class="setting-row" bindtap="showFeedbackGroup" hover-class="setting-row-active"><view><text class="setting-title">用户反馈群</text><text class="setting-desc">长按识别二维码，加入微信群反馈问题</text></view><text class="setting-arrow">›</text></view></view></view>

@@ -1,6 +1,8 @@
 const api = require('../../utils/api');
 const posterSession = require('../../utils/poster-session');
 const privacy = require('../../utils/privacy');
+const subscribeNotifications = require('../../utils/subscribe-notifications');
+const app = getApp();
 
 function cancelled(error) {
   return String(error && error.errMsg || '').toLowerCase().includes('cancel');
@@ -64,7 +66,10 @@ Page({
     error: '',
     saving: false,
     sharing: false,
-    permissionGuide: ''
+    permissionGuide: '',
+    showNotificationPrompt: false,
+    notificationTemplates: null,
+    notificationIsAdmin: false
   },
 
   onLoad: function () {
@@ -77,7 +82,26 @@ Page({
       filePath: session.filePath,
       familyName: session.familyName || '家谱',
       sharePayload: session.sharePayload || (session.invitationId ? { invitationId: session.invitationId } : null),
-      entrancePath: session.entrancePath || '/pages/tree/index'
+      entrancePath: session.entrancePath || '/pages/tree/index',
+      notificationIsAdmin: Boolean(app.getCurrentFamily && app.getCurrentFamily() && app.getCurrentFamily().currentRole === 'admin')
+    });
+    if (session.sharePayload && session.sharePayload.invitationId) this.loadNotificationTemplates();
+  },
+
+  loadNotificationTemplates: function () {
+    const self = this;
+    subscribeNotifications.loadTemplates().then(function (templates) {
+      self.setData({ notificationTemplates: templates });
+    }).catch(function () {});
+  },
+
+  closeNotificationPrompt: function () { this.setData({ showNotificationPrompt: false }); },
+
+  requestNotifications: function () {
+    const self = this;
+    subscribeNotifications.request(this.data.notificationTemplates, this.data.notificationIsAdmin).then(function (result) {
+      subscribeNotifications.showResult(result);
+      if (result.accepted) self.setData({ showNotificationPrompt: false });
     });
   },
 
@@ -107,6 +131,10 @@ Page({
       success: function () {
         if (self.data.sharePayload) {
           api.call('share.record', Object.assign({ stage: 'sent' }, self.data.sharePayload)).catch(function () {});
+          if (self.data.sharePayload.invitationId) {
+            self.setData({ showNotificationPrompt: true });
+            self.loadNotificationTemplates();
+          }
         }
       },
       fail: function (error) {

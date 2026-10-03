@@ -10,6 +10,10 @@
 .save-btn { width: 100%; font-size: 30rpx; }
 .section-block { margin-top: 40rpx; }
 .setting-list { padding: 0 24rpx; }.setting-row { min-height: 116rpx; display: flex; align-items: center; justify-content: space-between; border-bottom: 2rpx solid #EEF0ED; }.setting-row:last-child { border-bottom: none; }.setting-row-active { background: #F4F8F5; }.setting-title,.setting-desc { display: block; }.setting-title { font-size: 32rpx; font-weight: 600; }.setting-desc { margin-top: 6rpx; color: #65706A; font-size: 27rpx; line-height: 1.45; }.setting-arrow { color: #9AA39E; font-size: 48rpx; }
+.setting-share-row { position: relative; overflow: hidden; }
+.setting-share-copy { flex: 1; min-width: 0; }
+.setting-share-hit { position: absolute; left: 0; top: 0; z-index: 2; width: 100%; height: 100%; min-width: 100%; min-height: 100%; margin: 0; padding: 0; color: transparent; background: transparent; transform: scale(8); transform-origin: center center; }
+.setting-share-hit::after { border: none; }
 .pending-card { padding: 32rpx; display: flex; flex-direction: column; gap: 18rpx; border-color: #E7B66E; }.pending-title { color: #8A5A16; font-size: 36rpx; font-weight: 650; }.pending-desc { color: #765E3A; font-size: 28rpx; line-height: 1.65; }.contact-button,.text-button { min-height: 88rpx; color: #245C4A; background: transparent; font-size: 30rpx; text-decoration: underline; }
 .empty-action { width: 100%; margin: 0; }
 .banner-ad { margin-top:40rpx; }

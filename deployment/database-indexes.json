@@ -139,7 +139,8 @@
       { "name": "status_id", "fields": [{ "field": "status", "order": "asc" }, { "field": "_id", "order": "asc" }] }
     ],
     "notifications": [
-      { "name": "family_id", "fields": [{ "field": "familyId", "order": "asc" }, { "field": "_id", "order": "asc" }] }
+      { "name": "family_id", "fields": [{ "field": "familyId", "order": "asc" }, { "field": "_id", "order": "asc" }] },
+      { "name": "kind_status", "fields": [{ "field": "kind", "order": "asc" }, { "field": "status", "order": "asc" }] }
     ],
     "example_templates": [
       { "name": "slug_unique", "unique": true, "fields": [{ "field": "slug", "order": "asc" }] },

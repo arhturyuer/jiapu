@@ -15,6 +15,7 @@ function decorateChanges(items) {
 Page({
   data: {
     familyId: '',
+    reviewEntry: false,
     family: null,
     currentRole: 'viewer',
     isAdmin: false,
@@ -35,7 +36,7 @@ Page({
 
   onLoad: function (options) {
     const familyId = options.familyId || '';
-    this.setData({ familyId: familyId });
+    this.setData({ familyId: familyId, reviewEntry: options.review === '1', activeStatus: 'pending' });
     if (!familyId) this.setData({ loading: false, error: '缺少家谱信息，请返回后重试。' });
   },
 
@@ -54,9 +55,18 @@ Page({
   loadPage: function () {
     const self = this;
     this.setData({ loading: true, error: '' });
-    return app.loadFamilies().then(function (families) {
+    return app.loadFamilies(this.data.reviewEntry ? { force: true } : undefined).then(function (families) {
       const family = families.find(function (item) { return item._id === self.data.familyId; });
+      if (!family && self.data.reviewEntry) {
+        self.setData({ loading: false, error: '你无法访问这份家谱，请联系分享者确认权限', changes: [], cursor: '', hasMore: false });
+        return null;
+      }
       if (!family) throw new Error('你已无法访问这份家谱');
+      if (self.data.reviewEntry && family.currentRole !== 'admin') {
+        self.setData({ loading: false, error: '仅这份家谱的管理员可以处理申请', changes: [], cursor: '', hasMore: false });
+        return null;
+      }
+      if (self.data.reviewEntry) app.setCurrentFamily(family);
       self.setData({
         family: family,
         currentRole: family.currentRole,
@@ -111,6 +121,8 @@ Page({
     this.loadChanges(false).catch(function () {});
   },
 
+  goFamily: function () { wx.switchTab({ url: '/pages/members/index' }); },
+
   reviewChange: function (event) {
     const self = this;
     const requestId = event.currentTarget.dataset.id;
@@ -128,6 +140,7 @@ Page({
     }).then(function (data) {
       if (!data) return;
       app.invalidateFamilyData(self.data.familyId);
+      if (app.refreshPendingBadge) app.refreshPendingBadge({ force: true }).catch(function () {});
       wx.showToast({ title: decision === 'approve' ? '已通过' : '已拒绝', icon: 'success' });
       return self.loadChanges(true);
     }).catch(function (error) {

@@ -2,6 +2,7 @@ const cloud = require('wx-server-sdk');
 const crypto = require('crypto');
 const archiver = require('archiver');
 const { PassThrough } = require('stream');
+const subscriptionNotification = require('./subscription-notification');
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
@@ -63,7 +64,7 @@ function assertAuthorized(event) {
   const isKnownTimer = triggerName === 'youpu-retention-maintenance';
   const isTimer = event && (event.Type === 'Timer' || event.type === 'Timer' || isKnownTimer);
   if (isKnownTimer && isTimer && !hasUserIdentity) return;
-  const isTaskDispatch = event && ['task.account-export', 'task.family-backup'].includes(event.action || event.type);
+  const isTaskDispatch = event && ['task.account-export', 'task.family-backup', 'task.notification'].includes(event.action || event.type);
   if (isTaskDispatch && !hasUserIdentity && dispatchSecret && event.internalSecret === dispatchSecret) return;
   if (!expected || expected === 'CHANGE_BEFORE_DEPLOY' || event.secret !== expected) {
     const error = new Error('后台任务鉴权失败');
@@ -796,8 +797,86 @@ async function recoverStaleExportTasks() {
   return recovered;
 }
 
+async function processNotificationEvent(eventId) {
+  const notification = await maybeGet('notifications', eventId);
+  if (!notification || notification.kind !== 'subscription_event' || notification.status !== 'pending') return { processed: false };
+  const state = String(process.env.NOTIFY_MINIPROGRAM_STATE || '');
+  const templates = subscriptionNotification.templateConfig();
+  const template = templates[notification.notificationType];
+  if (!template || !['developer', 'trial', 'formal'].includes(state)) {
+    await db.collection('notifications').doc(eventId).update({ data: { status: 'unavailable', resultCode: 'TEMPLATE_NOT_CONFIGURED', updatedAt: db.serverDate() } });
+    return { processed: false, unavailable: true };
+  }
+  const family = await maybeGet('families', notification.familyId);
+  const source = notification.notificationType === 'join'
+    ? await maybeGet('family_memberships', notification.sourceId)
+    : await maybeGet('change_requests', notification.sourceId);
+  if (!family || family.status !== 'active' || !source || source.familyId !== notification.familyId ||
+    (notification.notificationType === 'join' ? source.status !== 'active' : source.status !== 'pending')) {
+    await db.collection('notifications').doc(eventId).update({ data: { status: 'skipped', resultCode: 'EVENT_NO_LONGER_ACTIVE', updatedAt: db.serverDate() } });
+    return { processed: false, skipped: true };
+  }
+  const sourceUser = notification.notificationType === 'join' ? await maybeGet('users', source.userId) : null;
+  const memberships = await listAllForExport('family_memberships', { familyId: notification.familyId, status: 'active' }, 50000);
+  const recipientIds = subscriptionNotification.recipients(notification, memberships);
+  let sent = 0;
+  for (const recipientId of recipientIds) {
+    const recipient = await maybeGet('users', recipientId);
+    if (!recipient || recipient.status !== 'active' || !recipient.openid) continue;
+    const deliveryId = 'nd_' + hash(eventId + ':' + recipientId, 40);
+    const claimed = await db.runTransaction(async function (transaction) {
+      let existing = null;
+      try {
+        const result = await transaction.collection('notifications').doc(deliveryId).get();
+        existing = result.data || null;
+      } catch (error) {}
+      if (existing) return false;
+      await transaction.collection('notifications').doc(deliveryId).set({ data: {
+        kind: 'subscription_delivery', familyId: notification.familyId, eventId: eventId,
+        recipientId: recipientId, status: 'sending', createdAt: db.serverDate(), updatedAt: db.serverDate()
+      } });
+      return true;
+    });
+    if (!claimed) continue;
+    const latestFamily = await maybeGet('families', notification.familyId);
+    const latestSource = notification.notificationType === 'review' ? await maybeGet('change_requests', notification.sourceId) : source;
+    const membership = memberships.find(function (item) { return item.userId === recipientId; });
+    const latestMembership = membership ? await maybeGet('family_memberships', membership._id) : null;
+    if (!latestFamily || latestFamily.status !== 'active' || !latestSource ||
+      (notification.notificationType === 'review' && latestSource.status !== 'pending') ||
+      !latestMembership || latestMembership.status !== 'active' ||
+      (latestMembership.role !== 'admin' && !(notification.notificationType === 'join' && recipientId === notification.inviterId))) {
+      await db.collection('notifications').doc(deliveryId).update({ data: { status: 'skipped', resultCode: 'RECIPIENT_NO_LONGER_ELIGIBLE', updatedAt: db.serverDate() } });
+      continue;
+    }
+    const payload = subscriptionNotification.messagePayload(notification, family, source, template, sourceUser || {}, state);
+    payload.touser = recipient.openid;
+    try {
+      const response = await cloud.openapi.subscribeMessage.send(payload);
+      const code = Number(response && (response.errCode !== undefined ? response.errCode : response.errcode) || 0);
+      await db.collection('notifications').doc(deliveryId).update({ data: {
+        status: code === 0 ? 'sent' : 'failed', resultCode: String(code), updatedAt: db.serverDate()
+      } });
+      if (code === 0) sent += 1;
+    } catch (error) {
+      await db.collection('notifications').doc(deliveryId).update({ data: {
+        status: 'failed', resultCode: String(error.errCode || error.errcode || error.code || 'SEND_FAILED').slice(0, 80), updatedAt: db.serverDate()
+      } });
+    }
+  }
+  await db.collection('notifications').doc(eventId).update({ data: { status: 'completed', sentCount: sent, updatedAt: db.serverDate() } });
+  return { processed: true, sent: sent };
+}
+
+async function recoverPendingNotifications() {
+  const result = await db.collection('notifications').where({ kind: 'subscription_event', status: 'pending' }).limit(20).get();
+  for (const notification of result.data || []) await processNotificationEvent(notification._id);
+  return (result.data || []).length;
+}
+
 async function retentionRun() {
   return {
+    pendingNotifications: await recoverPendingNotifications(),
     recoveredDeletions: await recoverStaleDeletions(),
     deletions: await processDeletions(),
     archivedFamilies: await purgeArchivedFamilies(),
@@ -899,6 +978,10 @@ exports.main = async function (event) {
     if (!data && action === 'task.family-backup') {
       resolvedAction = action;
       data = await processFamilyBackupTask(String(request.taskId || '').trim().slice(0, 80));
+    }
+    if (!data && action === 'task.notification') {
+      resolvedAction = action;
+      data = await processNotificationEvent(String(request.taskId || '').trim().slice(0, 80));
     }
     if (!data && action === 'maintenance.run') {
       resolvedAction = 'maintenance.run';

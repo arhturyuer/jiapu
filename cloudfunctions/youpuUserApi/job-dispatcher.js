@@ -43,7 +43,7 @@ function createClient(config, Client) {
 async function dispatchJob(action, taskId, options) {
   const safeAction = clean(action, 80);
   const safeTaskId = clean(taskId, 80);
-  if (!['task.account-export', 'task.family-backup'].includes(safeAction) || !safeTaskId) {
+  if (!['task.account-export', 'task.family-backup', 'task.notification'].includes(safeAction) || !safeTaskId) {
     throw Object.assign(new Error('后台任务派发参数不合法'), { code: 'JOB_DISPATCH_INVALID' });
   }
   const config = dispatchConfig(options);

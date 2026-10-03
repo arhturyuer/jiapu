@@ -24,4 +24,5 @@
       </view>
     </view>
   </view>
+  <view class="permission-mask" wx:if="{{showNotificationPrompt}}"><view class="permission-card"><text class="permission-title">开启微信提醒</text><text class="permission-copy">{{notificationTemplates && notificationTemplates.joinTemplateId ? '有人通过你分享的图片加入家谱时可收到提醒。每次订阅通常只可接收一条消息，用完后可在家庭页再次订阅。' : '提醒模板暂未配置，可稍后在家庭页开启。'}}</text><view class="permission-actions"><button class="secondary-button permission-button" bindtap="closeNotificationPrompt">稍后再说</button><button class="primary-button permission-button" wx:if="{{notificationTemplates && notificationTemplates.joinTemplateId}}" bindtap="requestNotifications">开启提醒</button></view></view></view>
 </view>

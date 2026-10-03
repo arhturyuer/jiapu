@@ -4,6 +4,7 @@ const domain = require('./domain');
 const personDate = require('./person-date');
 const commerce = require('./commerce');
 const jobDispatcher = require('./job-dispatcher');
+const subscriptionNotification = require('./subscription-notification');
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
@@ -221,6 +222,126 @@ async function inspectPrivateUpload(fileId) {
 
 function userId(openid) {
   return 'u_' + hash(openid, 32);
+}
+
+function notificationTemplateIds() {
+  const join = cleanText(process.env.NOTIFY_JOIN_TEMPLATE_ID, 128);
+  const review = cleanText(process.env.NOTIFY_REVIEW_TEMPLATE_ID, 128);
+  const key = /^thing\d+$/;
+  return {
+    join: join && key.test(process.env.NOTIFY_JOIN_MEMBER_KEY || '') && /^time\d+$/.test(process.env.NOTIFY_JOIN_TIME_KEY || '') ? join : '',
+    review: review && key.test(process.env.NOTIFY_REVIEW_SUBJECT_KEY || '') && key.test(process.env.NOTIFY_REVIEW_DESCRIPTION_KEY || '') && process.env.NOTIFY_REVIEW_SUBJECT_KEY !== process.env.NOTIFY_REVIEW_DESCRIPTION_KEY ? review : ''
+  };
+}
+
+function notificationEventId(type, openid, requestId) {
+  return 'ne_' + hash([type, openid, requestId].join(':'), 40);
+}
+
+async function recordNotificationEvent(transaction, kind, event, openid, familyId, sourceId, inviterId) {
+  const templates = notificationTemplateIds();
+  if (!templates[kind]) return;
+  const id = notificationEventId(event.type, openid, event.requestId);
+  await transaction.collection('notifications').doc(id).set({
+    data: {
+      kind: 'subscription_event',
+      notificationType: kind,
+      familyId: familyId,
+      sourceId: sourceId,
+      inviterId: inviterId || '',
+      status: 'pending',
+      createdAt: db.serverDate(),
+      updatedAt: db.serverDate()
+    }
+  });
+}
+
+function notificationFailureHint(error) {
+  const detail = String(error && (error.errMsg || error.message) || '');
+  if (/missing wxCloudApiToken/i.test(detail)) return 'MISSING_WX_CLOUD_API_TOKEN';
+  const wxError = detail.match(/wx api error:\s*(-?\d+)/i);
+  if (wxError) return 'WX_API_' + wxError[1];
+  if (/permission|unauthorized/i.test(detail)) return 'OPENAPI_PERMISSION';
+  if (/source\.on is not a function/i.test(detail)) return 'SDK_STREAM_ERROR';
+  return 'SDK_ERROR';
+}
+
+async function sendNotificationEvent(eventId) {
+  const notification = await maybeGet(db, 'notifications', eventId);
+  if (!notification || notification.kind !== 'subscription_event' || notification.status !== 'pending') return;
+  const template = subscriptionNotification.templateConfig()[notification.notificationType];
+  const state = String(process.env.NOTIFY_MINIPROGRAM_STATE || '');
+  if (!template || !['developer', 'trial', 'formal'].includes(state)) return;
+  const family = await maybeGet(db, 'families', notification.familyId);
+  const source = notification.notificationType === 'join'
+    ? await maybeGet(db, 'family_memberships', notification.sourceId)
+    : await maybeGet(db, 'change_requests', notification.sourceId);
+  if (!family || family.status !== 'active' || !source || source.familyId !== notification.familyId ||
+    (notification.notificationType === 'join' ? source.status !== 'active' : source.status !== 'pending')) {
+    await db.collection('notifications').doc(eventId).update({ data: {
+      status: 'skipped', resultCode: 'EVENT_NO_LONGER_ACTIVE', updatedAt: db.serverDate()
+    } });
+    return;
+  }
+  const sourceUser = notification.notificationType === 'join' ? await maybeGet(db, 'users', source.userId) : null;
+  const memberships = await listAll('family_memberships', { familyId: notification.familyId, status: 'active' }, 50000);
+  const recipientIds = subscriptionNotification.recipients(notification, memberships);
+  const results = await Promise.all(recipientIds.map(async function (recipientId) {
+    const recipient = await maybeGet(db, 'users', recipientId);
+    if (!recipient || recipient.status !== 'active' || !recipient.openid) return 0;
+    const deliveryId = 'nd_' + hash(eventId + ':' + recipientId, 40);
+    const claimed = await db.runTransaction(async function (transaction) {
+      const existing = await maybeGet(transaction, 'notifications', deliveryId);
+      if (existing) return false;
+      await transaction.collection('notifications').doc(deliveryId).set({ data: {
+        kind: 'subscription_delivery', familyId: notification.familyId, eventId: eventId,
+        recipientId: recipientId, status: 'sending', createdAt: db.serverDate(), updatedAt: db.serverDate()
+      } });
+      return true;
+    });
+    if (!claimed) return 0;
+    const latestFamily = await maybeGet(db, 'families', notification.familyId);
+    const latestSource = await maybeGet(db, notification.notificationType === 'join' ? 'family_memberships' : 'change_requests', notification.sourceId);
+    const membership = memberships.find(function (item) { return item.userId === recipientId; });
+    const latestMembership = membership ? await maybeGet(db, 'family_memberships', membership._id) : null;
+    if (!latestFamily || latestFamily.status !== 'active' || !latestSource ||
+      (notification.notificationType === 'join' ? latestSource.status !== 'active' : latestSource.status !== 'pending') ||
+      !latestMembership || latestMembership.status !== 'active' ||
+      (latestMembership.role !== 'admin' && !(notification.notificationType === 'join' && recipientId === notification.inviterId))) {
+      await db.collection('notifications').doc(deliveryId).update({ data: {
+        status: 'skipped', resultCode: 'RECIPIENT_NO_LONGER_ELIGIBLE', updatedAt: db.serverDate()
+      } });
+      return 0;
+    }
+    const payload = subscriptionNotification.messagePayload(notification, latestFamily, latestSource, template, sourceUser || {}, state);
+    payload.touser = recipient.openid;
+    try {
+      const response = await cloud.openapi.subscribeMessage.send(payload);
+      const code = Number(response && (response.errCode !== undefined ? response.errCode : response.errcode) || 0);
+      await db.collection('notifications').doc(deliveryId).update({ data: {
+        status: code === 0 ? 'sent' : 'failed', resultCode: String(code), updatedAt: db.serverDate()
+      } });
+      return code === 0 ? 1 : 0;
+    } catch (error) {
+      const resultCode = String(error.errCode || error.errcode || error.code || 'SEND_FAILED').slice(0, 80);
+      const resultHint = notificationFailureHint(error);
+      await db.collection('notifications').doc(deliveryId).update({ data: {
+        status: 'failed', resultCode: resultCode, resultHint: resultHint, updatedAt: db.serverDate()
+      } });
+      console.error(JSON.stringify({ action: 'notification.send', resultCode: resultCode, resultHint: resultHint }));
+      return 0;
+    }
+  }));
+  await db.collection('notifications').doc(eventId).update({ data: {
+    status: 'completed', sentCount: results.reduce(function (sum, count) { return sum + count; }, 0), updatedAt: db.serverDate()
+  } });
+}
+
+async function notificationTemplates() {
+  const openid = getOpenid();
+  await requireActiveUser(openid);
+  const ids = notificationTemplateIds();
+  return { joinTemplateId: ids.join, reviewTemplateId: ids.review };
 }
 
 function publicAccount(user) {
@@ -653,7 +774,7 @@ async function mutate(type, event, openid, handler) {
   const requestId = cleanText(event.requestId, 80);
   assert(requestId, 'REQUEST_ID_REQUIRED', '请求缺少幂等标识，请刷新页面后重试');
   const recordId = idempotencyId(openid, type, requestId);
-  return db.runTransaction(async function (transaction) {
+  const result = await db.runTransaction(async function (transaction) {
     const actor = await maybeGet(transaction, 'users', userId(openid));
     const allowedActorStatuses = ['account.cancelDeletion'].includes(type)
       ? ['pending_delete']
@@ -685,6 +806,18 @@ async function mutate(type, event, openid, handler) {
     });
     return result || {};
   });
+  const notify = (type === 'invite.accept' && result && !result.alreadyJoined) ||
+    (['person.createRelated', 'relation.linkExisting', 'relation.reorderChildren', 'person.update'].includes(type) && result && result.pending);
+  if (notify && notificationTemplateIds()[type === 'invite.accept' ? 'join' : 'review']) {
+    const eventId = notificationEventId(type, openid, requestId);
+    await sendNotificationEvent(eventId).catch(async function (error) {
+      await db.collection('notifications').doc(eventId).update({ data: {
+        status: 'failed', resultCode: String(error.code || 'SEND_FAILED').slice(0, 80), updatedAt: db.serverDate()
+      } }).catch(function () {});
+      console.error(JSON.stringify({ action: 'notification.send', resultCode: error.code || 'SEND_FAILED' }));
+    });
+  }
+  return result;
 }
 
 async function createPersonTx(transaction, familyId, input, openid) {
@@ -1746,6 +1879,7 @@ async function personCreateRelated(event) {
           updatedAt: db.serverDate()
         }
       });
+      await recordNotificationEvent(transaction, 'review', event, openid, event.familyId, result._id);
       return { pending: true, requestId: result._id };
     }
     assert(Number(access.family.relationRevision || 0) === relationRevision, 'GRAPH_CHANGED', '家谱关系刚刚发生变化，请刷新后重试');
@@ -1834,6 +1968,7 @@ async function relationLinkExisting(event) {
           updatedAt: db.serverDate()
         }
       });
+      await recordNotificationEvent(transaction, 'review', event, openid, familyId, result._id);
       return { pending: true, requestId: result._id, person: publicPerson(related) };
     }
     assert(Number(access.family.relationRevision || 0) === relationRevision, 'GRAPH_CHANGED', '家谱关系刚刚发生变化，请重试');
@@ -1925,6 +2060,7 @@ async function relationReorderChildren(event) {
           updatedAt: db.serverDate()
         }
       });
+      await recordNotificationEvent(transaction, 'review', event, openid, familyId, result._id);
       return { pending: true, requestId: result._id };
     }
     assert(Number(access.family.relationRevision || 0) === requestedRevision, 'GRAPH_CHANGED', '家谱关系刚有变化，请刷新后重试');
@@ -2024,6 +2160,7 @@ async function personUpdate(event) {
           updatedAt: db.serverDate()
         }
       });
+      await recordNotificationEvent(transaction, 'review', event, openid, person.familyId, result._id);
       return { pending: true, requestId: result._id, person: publicPerson(person) };
     }
     await transaction.collection('persons').doc(person._id).update({ data: Object.assign({}, changes, { updatedAt: db.serverDate() }) });
@@ -2098,6 +2235,18 @@ async function changeList(event) {
   const page = await listPage('change_requests', where, event, ['createdAt']);
   page.items = page.items.map(publicChangeRequest);
   return page;
+}
+
+async function changePendingCount(event) {
+  const openid = getOpenid();
+  await requireActiveUser(openid);
+  const access = await requireMembership(event.familyId, ACTIVE_ROLES, db, openid);
+  if (access.membership.role === 'viewer') return { count: 0 };
+  const where = access.membership.role === 'admin'
+    ? { familyId: event.familyId, status: 'pending' }
+    : { familyId: event.familyId, status: 'pending', createdBy: userId(openid) };
+  const result = await db.collection('change_requests').where(where).count();
+  return { count: Number(result.total) || 0 };
 }
 
 async function changeReview(event) {
@@ -2231,10 +2380,11 @@ async function inviteCreate(event) {
   const openid = getOpenid();
   await requireActiveUser(openid);
   return mutate('invite.create', event, openid, async function (transaction) {
-    const access = await requireMembership(event.familyId, ['admin'], transaction, openid);
+    const access = await requireMembership(event.familyId, ACTIVE_ROLES, transaction, openid);
     const family = await getFamily(transaction, event.familyId);
     assert(['member', 'viewer'].includes(event.role), 'INVALID_ROLE', '邀请角色只能是共同补全或仅查看');
     const role = event.role;
+    assert(role === 'viewer' || access.membership.role !== 'viewer', 'NO_PERMISSION', '当前身份不能邀请家人共同补全');
     const viewMode = event.viewMode === 'perspective' ? 'perspective' : 'full';
     let viewPersonId = '';
     let viewPersonName = '';
@@ -2245,9 +2395,6 @@ async function inviteCreate(event) {
       viewPersonName = person.name;
     }
     const token = randomToken(24);
-    const expiresInDays = Math.max(1, Math.min(Number(event.expiresInDays) || 30, 30));
-    const maxUses = Math.max(1, Math.min(Number(event.maxUses) || 50, 200));
-    const expiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000);
     const result = await transaction.collection('invitations').add({
       data: {
         tokenHash: hash(token, 64),
@@ -2259,8 +2406,8 @@ async function inviteCreate(event) {
         viewPersonName: viewPersonName,
         status: 'active',
         useCount: 0,
-        maxUses: maxUses,
-        expiresAt: expiresAt,
+        maxUses: null,
+        expiresAt: null,
         createdBy: userId(openid),
         createdByName: access.membership.displayName || '家人',
         createdAt: db.serverDate(),
@@ -2284,8 +2431,8 @@ async function inviteCreate(event) {
       role: role,
       viewMode: viewMode,
       viewPersonName: viewPersonName,
-      expiresAt: expiresAt,
-      maxUses: maxUses
+      expiresAt: null,
+      maxUses: null
     };
   });
 }
@@ -2510,6 +2657,7 @@ async function inviteAccept(event) {
       data: { useCount: _.inc(1), lastUsedAt: db.serverDate(), updatedAt: db.serverDate() }
     });
     await incrementShareMetric(transaction, invitationShareKind(invitation), 'converted');
+    if (!existing) await recordNotificationEvent(transaction, 'join', event, openid, family._id, id, invitation.createdBy);
     await audit(transaction, {
       familyId: family._id,
       openid: openid,
@@ -3613,7 +3761,9 @@ const handlers = {
   'person.update': personUpdate,
   'person.delete': personDelete,
   'change.list': changeList,
+  'change.pendingCount': changePendingCount,
   'change.review': changeReview,
+  'notification.templates': notificationTemplates,
   'invite.create': inviteCreate,
   'invite.createPoster': inviteCreatePoster,
   'invite.getMiniCode': inviteGetMiniCode,

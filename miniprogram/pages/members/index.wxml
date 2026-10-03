@@ -14,7 +14,7 @@
     <text class="family-description">{{currentFamily.description || '一家人，共修一份家谱'}}</text>
     <view class="family-progress-row">
       <view class="family-progress-main"><view class="progress-track"><view class="progress-value" style="width:{{stats.completion}}%;"></view></view><text class="progress-text">资料完整度 {{stats.completion}}%</text></view>
-      <button class="invite-button" wx:if="{{isAdmin}}" bindtap="openShareSheet">邀请家人</button>
+      <button class="invite-button" bindtap="openShareSheet">邀请家人</button>
     </view>
   </view>
 
@@ -34,7 +34,7 @@
   </view>
 
   <view class="section-block" wx:if="{{pendingChanges.length}}">
-    <view class="section-heading"><text class="section-title">{{isAdmin ? '待你确认' : '我的申请'}}</text><text class="status-tag">{{pendingChanges.length}} 项</text></view>
+    <view class="section-heading"><text class="section-title">{{isAdmin ? '待你确认' : '我的申请'}}</text><view class="request-heading-actions"><text class="status-tag">{{stats.pendingCount}} 项</text><button class="review-reminder-button" wx:if="{{currentRole === 'member'}}" open-type="share" data-share-kind="review-reminder">提醒管理员处理</button></view></view>
     <view class="change-card surface-card" wx:for="{{pendingChanges}}" wx:key="_id">
       <view class="change-copy"><text class="change-title">{{item.title}}</text><text class="change-requester">由 {{item.requesterName || '家人'}} 提交</text></view>
       <view class="review-actions" wx:if="{{isAdmin}}"><button class="review-button reject" data-id="{{item._id}}" data-decision="reject" bindtap="reviewChange">拒绝</button><button class="review-button approve" data-id="{{item._id}}" data-decision="approve" bindtap="reviewChange">通过</button></view>
@@ -46,6 +46,7 @@
     <view class="setting-row" bindtap="openActivity" hover-class="setting-row-active"><view><text class="setting-title">家谱变更历史</text><text class="setting-desc">{{membershipActive ? '查看自功能上线以来的完整记录' : '免费家庭可查看最近 20 条'}}</text></view><text class="setting-arrow">›</text></view>
     <view class="setting-row" bindtap="openFamilyBackup" hover-class="setting-row-active"><view><text class="setting-title">完整家庭备份</text><text class="setting-desc">管理员可保存人物关系、变更记录与家庭照片</text></view><text class="setting-arrow">›</text></view>
     <view class="setting-row" bindtap="openDisplaySettings" hover-class="setting-row-active"><view><text class="setting-title">家谱显示设置</text><text class="setting-desc">调整家谱人物信息的显示方式</text></view><text class="setting-arrow">›</text></view>
+    <view class="setting-row" bindtap="openNotificationSettings" hover-class="setting-row-active"><view><text class="setting-title">提醒设置</text><text class="setting-desc">订阅家人加入{{isAdmin ? '和待处理申请' : ''}}的微信提醒</text></view><text class="setting-arrow">›</text></view>
     <view class="setting-row" bindtap="openFamilyManage" hover-class="setting-row-active"><view><text class="setting-title">家庭与权限管理</text><text class="setting-desc">家谱资料、成员角色、邀请和归档</text></view><text class="setting-arrow">›</text></view>
   </view></view>
 
@@ -59,11 +60,12 @@
   <view class="sheet-mask" wx:if="{{showShareSheet}}" bindtap="closeShareSheet">
     <view class="bottom-sheet" catchtap="stopEvent"><view class="sheet-handle"></view><view class="sheet-title">邀请家人</view>
       <text class="share-help">家人将从完整家谱进入，可以随时切换任意成员视角。</text>
-      <view class="share-role {{shareRole === 'member' ? 'selected' : ''}}" data-role="member" bindtap="chooseShareRole" wx:if="{{isAdmin}}"><text class="share-role-title">共同补全</text><text class="share-role-desc">可补普通资料，关键修改需审核</text></view>
+      <view class="share-role {{shareRole === 'member' ? 'selected' : ''}}" data-role="member" bindtap="chooseShareRole" wx:if="{{currentRole !== 'viewer'}}"><text class="share-role-title">共同补全</text><text class="share-role-desc">可补普通资料，关键修改需审核</text></view>
       <view class="share-role {{shareRole === 'viewer' ? 'selected' : ''}}" data-role="viewer" bindtap="chooseShareRole"><text class="share-role-title">仅查看</text><text class="share-role-desc">可以看全谱和切换视角</text></view>
       <button class="primary-button share-button" wx:if="{{!shareReady}}" loading="{{shareCreating}}" disabled="{{shareCreating}}" bindtap="prepareShare">{{shareCreating ? '正在准备微信邀请' : '重新准备微信邀请'}}</button>
       <button class="primary-button share-button" wx:else open-type="share">转发给微信好友</button>
     </view>
   </view>
+  <view class="sheet-mask" wx:if="{{showNotificationPrompt}}" bindtap="closeNotificationSettings"><view class="bottom-sheet" catchtap="stopEvent"><view class="sheet-handle"></view><view class="sheet-title">开启微信提醒</view><text class="share-help">{{notificationTemplates && notificationTemplates.joinTemplateId ? '有人通过你分享的邀请加入时提醒你；管理员还可收到待处理申请提醒。微信每次订阅通常可接收一条消息，用完后可在这里再次订阅。' : '提醒模板暂未配置，稍后可在家庭页再次查看。'}}</text><button class="primary-button share-button" wx:if="{{notificationTemplates && notificationTemplates.joinTemplateId}}" bindtap="requestNotifications">开启提醒</button><button class="secondary-button share-button" bindtap="closeNotificationSettings">稍后再说</button></view></view>
 </view>
 <canvas type="2d" id="members-share-card" class="share-card-canvas"></canvas>

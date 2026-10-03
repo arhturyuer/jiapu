@@ -5,6 +5,7 @@ const shareInvite = require('../../utils/share-invite');
 const shareCard = require('../../utils/share-card');
 const commerceConfig = require('../../config/commerce');
 const membershipDisplay = require('../../utils/membership-display');
+const subscribeNotifications = require('../../utils/subscribe-notifications');
 
 function splitFamilies(items) {
   const active = [];
@@ -46,6 +47,8 @@ Page({
     shareReady: false,
     shareCreating: false,
     shareCard: null,
+    showNotificationPrompt: false,
+    notificationTemplates: null,
     systemShareCard: shareCard.create({ kind: 'discovery' }),
     membershipActive: false,
     membershipTierText: '免费版',
@@ -55,7 +58,28 @@ Page({
   },
 
   onShow: function () {
-    this.loadDashboard();
+    this.loadDashboard({ refreshDashboard: true });
+    this.loadNotificationTemplates();
+  },
+
+  loadNotificationTemplates: function () {
+    const self = this;
+    return subscribeNotifications.loadTemplates().then(function (templates) {
+      self.setData({ notificationTemplates: templates });
+      return templates;
+    }).catch(function () { return null; });
+  },
+
+  openNotificationSettings: function () { this.setData({ showNotificationPrompt: true }); },
+  closeNotificationSettings: function () { this.setData({ showNotificationPrompt: false }); },
+
+  requestNotifications: function (options) {
+    const self = this;
+    const silent = options && options.silent === true;
+    subscribeNotifications.request(this.data.notificationTemplates, this.data.isAdmin).then(function (result) {
+      if (!silent) subscribeNotifications.showResult(result);
+      if (result.accepted) self.setData({ showNotificationPrompt: false });
+    });
   },
 
   onPullDownRefresh: function () {
@@ -71,7 +95,7 @@ Page({
     const displayedFamilyId = this.data.currentFamily && this.data.currentFamily._id;
     const currentFamilyId = currentFamily && currentFamily._id;
     const sameFamily = displayedFamilyId === currentFamilyId;
-    if (!config.force && hasContent && sameFamily && app.isCacheFresh('familyPages', true) && (!currentFamily || app.isCacheFresh('dashboard', currentFamily._id))) {
+    if (!config.force && !config.refreshDashboard && hasContent && sameFamily && app.isCacheFresh('familyPages', true) && (!currentFamily || app.isCacheFresh('dashboard', currentFamily._id))) {
       return Promise.resolve();
     }
     if (!hasContent) this.setData({ loading: true });
@@ -105,7 +129,7 @@ Page({
         self._hasLoaded = true;
         return null;
       }
-      return app.getDashboard(family._id, config);
+      return app.getDashboard(family._id, { force: Boolean(config.force || config.refreshDashboard) });
     }).then(function (data) {
       if (requestId !== self._loadRequestId) return;
       if (!data) return;
@@ -128,6 +152,7 @@ Page({
         self.setData({ systemShareCard: card });
       });
       app.setCurrentFamily(data.family);
+      if (app.setPendingBadgeCount) app.setPendingBadgeCount(data.family._id, data.family.currentRole === 'viewer' ? 0 : data.stats.pendingCount);
       self._hasLoaded = true;
     }).catch(function (error) {
       if (requestId !== self._loadRequestId) return;
@@ -223,6 +248,7 @@ Page({
       if (!data) return;
       wx.showToast({ title: decision === 'approve' ? '已通过' : '已拒绝', icon: 'success' });
       app.invalidateFamilyData(self.data.currentFamily && self.data.currentFamily._id);
+      if (app.refreshPendingBadge) app.refreshPendingBadge({ force: true }).catch(function () {});
       self.loadDashboard({ force: true });
     }).catch(function (error) {
       wx.showToast({ title: api.userMessage(error, '处理失败'), icon: 'none' });
@@ -230,9 +256,10 @@ Page({
   },
 
   openShareSheet: function () {
+    this._inviteShareStarted = false;
     this.setData({
       showShareSheet: true,
-      shareRole: this.data.isAdmin ? 'member' : 'viewer',
+      shareRole: this.data.currentRole === 'viewer' ? 'viewer' : 'member',
       shareReady: false,
       shareCard: null,
       shareCreating: false
@@ -240,13 +267,16 @@ Page({
   },
 
   closeShareSheet: function () {
+    const requestReminder = this._inviteShareStarted;
+    this._inviteShareStarted = false;
     this._sharePreparationSequence = (this._sharePreparationSequence || 0) + 1;
     this.setData({ showShareSheet: false, shareReady: false, shareCard: null });
+    if (requestReminder) this.requestNotifications({ silent: true });
   },
 
   chooseShareRole: function (event) {
     const role = event.currentTarget.dataset.role;
-    if (!role || role === this.data.shareRole) return;
+    if (!['member', 'viewer'].includes(role) || role === this.data.shareRole || (role === 'member' && this.data.currentRole === 'viewer')) return;
     this.setData({ shareRole: role, shareReady: false, shareCard: null }, this.prepareShare);
   },
 
@@ -305,26 +335,38 @@ Page({
 
   onShareAppMessage: function (event) {
     const self = this;
-    if (event && event.from === 'button' && this.data.shareCard) return {
-      title: this.data.shareCard.title,
-      path: this.data.shareCard.path,
-      imageUrl: this.data.shareCard.imageUrl,
-      success: function () {
-        api.call('share.record', { stage: 'sent', invitationId: self.data.shareCard.invitationId }).catch(function () {});
-        api.call('family.markOnboardingShared', {
-          familyId: self.data.currentFamily._id,
-          invitationId: self.data.shareCard.invitationId
-        }).then(function () {
-          const updatedFamily = Object.assign({}, self.data.currentFamily, { sharedAt: new Date().toISOString() });
-          app.invalidateFamilyData(self.data.currentFamily._id);
-          app.setCurrentFamily(updatedFamily);
-          self.setData({
-            currentFamily: updatedFamily
-          });
-          self.loadDashboard({ force: true });
-        }).catch(function () {});
-      }
-    };
+    if (event && event.from === 'button' && event.target && event.target.dataset && event.target.dataset.shareKind === 'review-reminder' &&
+      this.data.currentRole === 'member' && this.data.pendingChanges.length && this.data.currentFamily) {
+      const family = this.data.currentFamily;
+      return {
+        title: family.name + '有待审核的家谱修改，请管理员处理',
+        path: '/pages/change-list/index?familyId=' + encodeURIComponent(family._id) + '&review=1'
+      };
+    }
+    if (event && event.from === 'button' && this.data.shareCard) {
+      const card = this.data.shareCard;
+      const familyId = this.data.currentFamily && this.data.currentFamily._id;
+      this._inviteShareStarted = true;
+      return {
+        title: card.title,
+        path: card.path,
+        imageUrl: card.imageUrl,
+        success: function () {
+          api.call('share.record', { stage: 'sent', invitationId: card.invitationId }).catch(function () {});
+          if (self.data.currentRole !== 'admin') return;
+          api.call('family.markOnboardingShared', {
+            familyId: familyId,
+            invitationId: card.invitationId
+          }).then(function () {
+            const updatedFamily = Object.assign({}, self.data.currentFamily, { sharedAt: new Date().toISOString() });
+            app.invalidateFamilyData(self.data.currentFamily._id);
+            app.setCurrentFamily(updatedFamily);
+            self.setData({ currentFamily: updatedFamily });
+            self.loadDashboard({ force: true });
+          }).catch(function () {});
+        }
+      };
+    }
     const discovery = this.data.systemShareCard || shareCard.create({ kind: 'discovery' });
     api.call('share.record', { stage: 'prepared', kind: 'discovery' }).catch(function () {});
     return {

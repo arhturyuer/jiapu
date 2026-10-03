@@ -28,12 +28,15 @@
 .stat-label { color: #65706A; font-size: 26rpx; }
 .stat-arrow { color: #86A99A; font-size: 36rpx; font-weight: 500; line-height: 1; }
 .section-block { margin-top: 40rpx; }
+.request-heading-actions { display: flex; align-items: center; gap: 12rpx; }
+.review-reminder-button { flex: none; width: auto; height: 60rpx; min-height: 60rpx; margin: 0; padding: 0 18rpx; color: #B43D3D; background: #FBEDEC; border-radius: 16rpx; font-size: 23rpx; line-height: 60rpx; }
+.review-reminder-button::after { border: none; }
 .change-card { margin-bottom: 16rpx; padding: 24rpx; }
 .change-copy { display: flex; flex-direction: column; }
 .change-title { font-weight: 600; }
 .change-requester { margin-top: 8rpx; color: #65706A; font-size: 26rpx; }
 .review-actions { margin-top: 20rpx; display: flex; justify-content: flex-end; gap: 12rpx; }
-.review-button { width: 144rpx; height: 68rpx; font-size: 26rpx; }
+.review-button { width: 144rpx; height: 68rpx; margin: 0; padding: 0; display: flex; flex: none; align-items: center; justify-content: center; font-size: 26rpx; line-height: 1; }
 .review-button.reject { color: #B43D3D; background: #FBEDEC; }
 .review-button.approve { color: #FFFFFF; background: #245C4A; }
 .setting-list { padding: 0 24rpx; }

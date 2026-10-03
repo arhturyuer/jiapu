@@ -1,0 +1,21 @@
+.intro-page { padding-bottom: calc(56rpx + env(safe-area-inset-bottom)); }
+.intro-hero { position: relative; overflow: hidden; min-height: 360rpx; padding: 40rpx 36rpx 150rpx; }
+.intro-eyebrow { display: block; color: #245C4A; font-size: 26rpx; font-weight: 650; letter-spacing: 2rpx; }
+.intro-title { display: block; margin-top: 18rpx; color: #202824; font-size: 48rpx; font-weight: 650; line-height: 1.35; }
+.intro-title-second { margin-top: 0; }
+.intro-copy { display: block; max-width: 560rpx; margin-top: 20rpx; color: #65706A; font-size: 29rpx; line-height: 1.6; }
+.intro-art { position: absolute; right: 24rpx; bottom: 18rpx; width: 240rpx; height: 142rpx; display: flex; align-items: flex-end; justify-content: space-between; }
+.art-node { z-index: 1; width: 92rpx; height: 72rpx; display: flex; align-items: center; justify-content: center; border-radius: 24rpx; color: #245C4A; background: #E4EFEA; font-size: 25rpx; font-weight: 600; }
+.art-node-top { position: absolute; top: 0; left: 74rpx; width: 92rpx; height: 72rpx; color: #FFFFFF; background: #245C4A; }
+.art-link { position: absolute; top: 65rpx; left: 45rpx; width: 150rpx; height: 52rpx; border: 3rpx solid #9DB59E; border-bottom: 0; border-radius: 28rpx 28rpx 0 0; }
+.intro-section { margin-top: 40rpx; }
+.section-title { display: block; margin-bottom: 18rpx; font-size: 34rpx; font-weight: 650; }
+.intro-steps { padding: 8rpx 32rpx; }
+.intro-step { display: flex; gap: 22rpx; padding: 28rpx 0; border-bottom: 2rpx solid #EEF0ED; }
+.intro-step:last-child { border-bottom: 0; }
+.step-number { flex: none; width: 50rpx; height: 50rpx; border-radius: 50%; color: #FFFFFF; background: #245C4A; font-size: 25rpx; font-weight: 600; line-height: 50rpx; text-align: center; }
+.intro-step > view { min-width: 0; flex: 1; }
+.step-title { display: block; color: #202824; font-size: 31rpx; font-weight: 600; }
+.step-copy { display: block; margin-top: 8rpx; color: #65706A; font-size: 27rpx; line-height: 1.55; }
+.intro-actions { display: flex; flex-direction: column; gap: 18rpx; margin-top: 32rpx; }
+.intro-button { width: 100%; min-height: 88rpx; }

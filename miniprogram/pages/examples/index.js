@@ -9,10 +9,14 @@ Page({
     tags: [],
     activeTag: '',
     overflowById: {},
-    expandedById: {}
+    expandedById: {},
+    shareSource: ''
   },
 
-  onLoad: function () { this.loadExamples(); },
+  onLoad: function (options) {
+    this.setData({ shareSource: options && options.source === 'share_menu' ? 'share_menu' : '' });
+    this.loadExamples();
+  },
 
   onUnload: function () { if (this._tagTimer) clearTimeout(this._tagTimer); },
 
@@ -83,10 +87,12 @@ Page({
 
   openExample: function (event) {
     const slug = event.currentTarget.dataset.slug;
-    if (slug) wx.navigateTo({ url: '/pages/example/index?slug=' + encodeURIComponent(slug) });
+    if (slug) wx.navigateTo({ url: '/pages/example/index?slug=' + encodeURIComponent(slug) + (this.data.shareSource ? '&source=share_menu' : '') });
   },
 
   createFamily: function () {
-    wx.navigateTo({ url: '/pages/create-family/index?source=examples' });
+    wx.navigateTo({ url: this.data.shareSource
+      ? '/pages/create-family/index?source=share_menu&opened=1'
+      : '/pages/create-family/index?source=examples' });
   }
 });

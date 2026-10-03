@@ -48,6 +48,29 @@ const sandboxVariables = {
   VP_APP_KEY: values.STAGING_VP_APP_KEY || '',
   VP_INTERNAL_NOTIFY_SECRET: values.STAGING_VP_INTERNAL_NOTIFY_SECRET || ''
 };
+const notificationNames = [
+  'NOTIFY_JOIN_TEMPLATE_ID', 'NOTIFY_JOIN_MEMBER_KEY', 'NOTIFY_JOIN_TIME_KEY',
+  'NOTIFY_REVIEW_TEMPLATE_ID', 'NOTIFY_REVIEW_SUBJECT_KEY', 'NOTIFY_REVIEW_DESCRIPTION_KEY'
+];
+const configuredNotificationNames = notificationNames.filter(function (name) {
+  return values['STAGING_' + name] && !/REPLACE_WITH/.test(values['STAGING_' + name]);
+});
+if (configuredNotificationNames.length && configuredNotificationNames.length !== notificationNames.length) {
+  fail('订阅消息模板必须完整配置两类模板 ID 和字段键，或全部留空。');
+}
+const notificationVariables = {};
+if (configuredNotificationNames.length === notificationNames.length) {
+  for (const name of notificationNames) notificationVariables[name] = values['STAGING_' + name];
+  for (const name of notificationNames.filter(function (item) { return item.endsWith('_KEY'); })) {
+    const pattern = name === 'NOTIFY_JOIN_TIME_KEY' ? /^time\d+$/ : /^thing\d+$/;
+    if (!pattern.test(notificationVariables[name])) fail('订阅消息字段类型与所选模板不符：' + name);
+  }
+  if (notificationVariables.NOTIFY_JOIN_TEMPLATE_ID === notificationVariables.NOTIFY_REVIEW_TEMPLATE_ID ||
+    notificationVariables.NOTIFY_REVIEW_SUBJECT_KEY === notificationVariables.NOTIFY_REVIEW_DESCRIPTION_KEY) {
+    fail('订阅消息需要两个不同模板，且每个模板的两个字段键不能相同。');
+  }
+  notificationVariables.NOTIFY_MINIPROGRAM_STATE = 'developer';
+}
 for (const [key, value] of Object.entries(sandboxVariables)) {
   if (!value || /REPLACE_WITH|CHANGE_BEFORE_DEPLOY|\s/.test(value)) fail('缺少有效的 STAGING_' + key + '；不会生成沙箱部署清单。');
 }
@@ -68,13 +91,13 @@ for (const fn of manifest.functions || []) {
   if (fn.name === 'youpuJobs') Object.assign(fn.envVariables, {
     BOOTSTRAP_SECRET: bootstrapSecret,
     JOB_DISPATCH_SECRET: bootstrapSecret
-  });
+  }, notificationVariables);
   if (fn.name === 'youpuUserApi') Object.assign(fn.envVariables, {
     JOB_DISPATCH_SECRET: bootstrapSecret, JOB_FUNCTION_NAMESPACE: envId,
     PAYMENT_MODE: 'sandbox', VP_APP_ID: sandboxVariables.VP_APP_ID,
     VP_APP_SECRET: sandboxVariables.VP_APP_SECRET, VP_OFFER_ID: sandboxVariables.VP_OFFER_ID,
     VP_APP_KEY: sandboxVariables.VP_APP_KEY, VP_INTERNAL_NOTIFY_SECRET: sandboxVariables.VP_INTERNAL_NOTIFY_SECRET
-  });
+  }, notificationVariables);
   if (fn.name === 'youpuPaymentNotify') Object.assign(fn.envVariables, {
     VP_INTERNAL_NOTIFY_SECRET: sandboxVariables.VP_INTERNAL_NOTIFY_SECRET
   });

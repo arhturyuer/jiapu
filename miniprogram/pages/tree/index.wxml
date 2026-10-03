@@ -43,7 +43,7 @@
           {{viewMode === 'perspective' ? '从' + viewpointName + '看' : '以某人看'}}
         </view>
       </view>
-      <view class="toolbar-share landscape-hidden" wx:if="{{currentRole === 'admin'}}" bindtap="startShare">分享</view>
+      <view class="toolbar-share landscape-hidden" bindtap="startShare">分享</view>
     </view>
 
     <view class="tree-share-reminder" wx:if="{{showShareReminder}}">
@@ -184,7 +184,7 @@
             <text class="action-title">调整子女排行</text>
             <text class="action-desc">按出生日期与已确认顺序排列</text>
           </view>
-          <view class="action-cell action-cell-wide" wx:if="{{currentRole === 'admin'}}" bindtap="shareSelectedPerson">
+          <view class="action-cell action-cell-wide" bindtap="shareSelectedPerson">
             <text class="action-title">从此人分享</text>
             <text class="action-desc">家人打开后直接看到此人视角</text>
           </view>
@@ -243,11 +243,11 @@
       <view class="sheet-title">分享给家人</view>
       <view class="share-summary surface-card">
         <text class="share-summary-title">{{shareMode === 'perspective' ? '从' + sharePersonName + '看家谱' : '分享完整家谱'}}</text>
-        <text class="share-summary-desc">分享卡片将在 30 天后失效，可在后台撤销。</text>
+        <text class="share-summary-desc">分享卡片可在邀请管理中撤销。</text>
       </view>
       <text class="share-label">家人打开后的权限</text>
       <view class="share-role-options">
-        <view class="share-role {{shareRole === 'member' ? 'selected' : ''}}" data-role="member" bindtap="chooseShareRole" wx:if="{{currentRole === 'admin'}}">
+        <view class="share-role {{shareRole === 'member' ? 'selected' : ''}}" data-role="member" bindtap="chooseShareRole" wx:if="{{currentRole !== 'viewer'}}">
           <text class="share-role-title">共同补全</text>
           <text class="share-role-desc">可补资料，关键修改需审核</text>
         </view>

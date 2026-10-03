@@ -44,3 +44,9 @@ test('分享卡品牌兜底图为 5:4 的轻量 JPEG', function () {
   assert.ok(fs.statSync(fallback).size <= 180 * 1024);
   assert.deepEqual(jpegDimensions(fallback), { width: 750, height: 600 });
 });
+
+test('有谱介绍分享图为 5:4 的轻量 JPEG', function () {
+  const intro = path.join(miniprogramRoot, 'images/share/youpu-intro.jpg');
+  assert.ok(fs.statSync(intro).size <= 180 * 1024);
+  assert.deepEqual(jpegDimensions(intro), { width: 750, height: 600 });
+});

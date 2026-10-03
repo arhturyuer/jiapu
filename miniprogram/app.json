@@ -2,7 +2,9 @@
   "pages": [
     "pages/tree/index",
     "pages/members/index",
+    "pages/notification-entry/index",
     "pages/profile/index",
+    "pages/share-intro/index",
     "pages/display-settings/index",
     "pages/create-family/index",
     "pages/examples/index",

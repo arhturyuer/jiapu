@@ -1,0 +1,1 @@
+<view class="entry"><text>{{message}}</text><button class="primary-button" bindtap="goFamily">打开家庭页</button></view>

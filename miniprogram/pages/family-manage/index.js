@@ -1,19 +1,22 @@
 const app = getApp();
 const api = require('../../utils/api');
 const format = require('../../utils/format');
+const shareInvite = require('../../utils/share-invite');
 
 function decorateInvitations(items) {
   return (items || []).map(function (item) {
     const poster = item.purpose === 'poster';
+    const noExpiry = item.expiresAt === null;
+    const noUseLimit = item.maxUses === null;
     return Object.assign({}, item, {
       roleText: format.roleText(item.role),
       inviteTitle: poster
         ? '高清图片 · 仅查看'
         : format.roleText(item.role) + ' · ' + (item.viewMode === 'perspective' ? item.viewPersonName + '视角' : '完整家谱'),
       statusText: item.displayStatus === 'active'
-        ? (poster ? '长期有效' : '有效')
+        ? (noExpiry ? '长期有效' : '有效')
         : item.displayStatus === 'revoked' ? '已撤销' : item.displayStatus === 'expired' ? '已过期' : '已用完',
-      usageText: poster ? '已加入 ' + Number(item.useCount || 0) + ' 人' : '已使用 ' + Number(item.useCount || 0) + '/' + Number(item.maxUses || 0)
+      usageText: noUseLimit ? '已加入 ' + Number(item.useCount || 0) + ' 人' : '已使用 ' + Number(item.useCount || 0) + '/' + Number(item.maxUses || 0)
     });
   });
 }
@@ -238,6 +241,7 @@ Page({
       return api.call('invite.revoke', { invitationId: invitationId });
     }).then(function (data) {
       if (!data) return;
+      shareInvite.removeInvitation(invitationId);
       app.invalidateCache({ dashboard: self.data.familyId });
       app.invalidateInvites(self.data.familyId);
       wx.showToast({ title: '邀请已撤销', icon: 'success' });

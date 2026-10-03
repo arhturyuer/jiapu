@@ -98,4 +98,5 @@ test('邀请状态按撤销、过期和次数上限统一转换', function () {
   assert.equal(domain.invitationState({ status: 'active', expiresAt: '2026-08-13T00:00:00Z', useCount: 50, maxUses: 50 }, now), 'exhausted');
   assert.equal(domain.invitationState({ status: 'active', expiresAt: '2026-08-13T00:00:00Z', useCount: 49, maxUses: 50 }, now), 'active');
   assert.equal(domain.invitationState({ status: 'active', expiresAt: null, useCount: 999, maxUses: null }, now), 'active');
+  assert.equal(domain.invitationState({ status: 'revoked', expiresAt: null, useCount: 999, maxUses: null }, now), 'revoked');
 });

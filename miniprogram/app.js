@@ -66,6 +66,13 @@ App({
     this.ensureLogin().catch(function () {});
   },
 
+  onShow: function () {
+    const self = this;
+    this.ensureLogin().then(function () {
+      return self.refreshPendingBadge();
+    }).catch(function () { self.clearPendingBadge(); });
+  },
+
   restoreLocalState: function () {
     this.globalData.user = wx.getStorageSync('youpu_user') || null;
     wx.removeStorageSync('youpu_openid');
@@ -402,12 +409,72 @@ App({
     this.invalidateInvites(familyId);
   },
 
+  clearPendingBadge: function () {
+    this._pendingBadgeVersion = (this._pendingBadgeVersion || 0) + 1;
+    this._pendingBadgeRequest = null;
+    this._pendingBadgeFamilyId = '';
+    this._pendingBadgeCount = 0;
+    if (typeof wx !== 'undefined' && wx.removeTabBarBadge) wx.removeTabBarBadge({ index: 1 });
+  },
+
+  setPendingBadgeCount: function (familyId, count) {
+    const current = this.getCurrentFamily();
+    if (!current || current._id !== familyId) return;
+    this._pendingBadgeVersion = (this._pendingBadgeVersion || 0) + 1;
+    this._pendingBadgeRequest = null;
+    const value = Math.max(0, Math.floor(Number(count) || 0));
+    this._pendingBadgeFamilyId = familyId;
+    this._pendingBadgeCount = value;
+    if (typeof wx === 'undefined') return;
+    if (value && wx.setTabBarBadge) wx.setTabBarBadge({ index: 1, text: value > 99 ? '99+' : String(value) });
+    else if (wx.removeTabBarBadge) wx.removeTabBarBadge({ index: 1 });
+  },
+
+  refreshPendingBadge: function (options) {
+    const family = this.getCurrentFamily();
+    if (!family || family.status === 'archived' || this.globalData.accountState === 'pending_delete') {
+      this.clearPendingBadge();
+      return Promise.resolve(0);
+    }
+    const familyId = family._id;
+    const actorId = this.globalData.user && this.globalData.user._id || '';
+    const key = actorId + '|' + familyId;
+    if (!(options && options.force) && this._pendingBadgeRequest && this._pendingBadgeRequest.key === key) {
+      return this._pendingBadgeRequest.promise;
+    }
+    const version = this._pendingBadgeVersion = (this._pendingBadgeVersion || 0) + 1;
+    const self = this;
+    const request = { key: key, promise: null };
+    request.promise = api.call('change.pendingCount', { familyId: familyId }).then(function (data) {
+      if (version !== self._pendingBadgeVersion || !self.getCurrentFamily() || self.getCurrentFamily()._id !== familyId ||
+        (self.globalData.user && self.globalData.user._id || '') !== actorId) return null;
+      self.setPendingBadgeCount(familyId, data.count);
+      return self._pendingBadgeCount;
+    }).catch(function (error) {
+      if (version === self._pendingBadgeVersion) self.clearPendingBadge();
+      throw error;
+    }).then(function (count) {
+      if (self._pendingBadgeRequest === request) self._pendingBadgeRequest = null;
+      return count;
+    }, function (error) {
+      if (self._pendingBadgeRequest === request) self._pendingBadgeRequest = null;
+      throw error;
+    });
+    this._pendingBadgeRequest = request;
+    return request.promise;
+  },
+
   setCurrentFamily: function (family) {
+    const previous = this.globalData.currentFamily;
     this.globalData.currentFamily = family || null;
     if (family) {
       wx.setStorageSync('youpu_current_family', family);
     } else {
       wx.removeStorageSync('youpu_current_family');
+    }
+    if ((previous && previous._id || '') !== (family && family._id || '')) {
+      this.clearPendingBadge();
+      if (family) this.refreshPendingBadge().catch(function () {});
     }
   },
 
@@ -447,6 +514,7 @@ App({
   },
 
   clearLocalData: function () {
+    this.clearPendingBadge();
     api.clearMediaUrlCache();
     wx.removeStorageSync('youpu_user');
     wx.removeStorageSync('youpu_openid');

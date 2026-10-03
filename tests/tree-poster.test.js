@@ -377,7 +377,7 @@ test('小程序与微信相册权限均已开启时保存失败不再误报系�
   }
 });
 
-test('服务端强制图片邀请为长期仅查看并保留普通邀请默认值', function () {
+test('服务端强制图片邀请为长期仅查看，普通邀请也不设期限和次数', function () {
   const source = fs.readFileSync(path.join(root, 'cloudfunctions/youpuUserApi/index.js'), 'utf8');
   const config = JSON.parse(fs.readFileSync(path.join(root, 'cloudfunctions/youpuUserApi/config.json'), 'utf8'));
   const invitePage = fs.readFileSync(path.join(root, 'miniprogram/pages/invite/index.js'), 'utf8');
@@ -388,8 +388,7 @@ test('服务端强制图片邀请为长期仅查看并保留普通邀请默认�
   assert.match(source, /wxacode\.getUnlimited\([\s\S]*isHyaline: true/);
   assert.match(source, /invitation\.purpose === 'poster'[\s\S]*\? 'viewer'/);
   assert.match(source, /purpose: 'direct'/);
-  assert.match(source, /Number\(event\.expiresInDays\) \|\| 30/);
-  assert.match(source, /Number\(event\.maxUses\) \|\| 50/);
+  assert.match(source, /purpose: 'direct',[\s\S]*maxUses: null,[\s\S]*expiresAt: null/);
   assert.ok(config.permissions.openapi.includes('wxacode.getUnlimited'));
   assert.match(invitePage, /options\.token \|\| options\.scene/);
 });

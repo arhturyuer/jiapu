@@ -3,6 +3,7 @@ const api = require('../../utils/api');
 const privacy = require('../../utils/privacy');
 const formState = require('../../utils/form-state');
 const commerceConfig = require('../../config/commerce');
+const shareCard = require('../../utils/share-card');
 
 var AVATAR_CACHE_KEY = 'youpu_avatar_cache';
 
@@ -51,7 +52,7 @@ Page({
     adVisible: false
   },
 
-  onShow: function () { this.loadPage(); },
+  onShow: function () { this.loadPage(); if (app.refreshPendingBadge) app.refreshPendingBadge().catch(function () {}); },
 
   onUnload: function () { formState.clearLeaveAlert(this); },
 
@@ -191,6 +192,19 @@ Page({
   showPrivacy: function () { wx.navigateTo({ url: '/pages/privacy/index' }); },
   showFeedbackGroup: function () { wx.navigateTo({ url: '/pages/feedback-group/index' }); },
   hideAd: function () { this.setData({ adVisible: false }); },
+
+  onShareAppMessage: function () {
+    const card = shareCard.create({ kind: 'discovery', variant: 'intro' });
+    api.call('share.record', { stage: 'prepared', kind: 'discovery' }).catch(function () {});
+    return {
+      title: card.title,
+      path: card.path,
+      imageUrl: card.imageUrl,
+      success: function () {
+        api.call('share.record', { stage: 'sent', kind: 'discovery' }).catch(function () {});
+      }
+    };
+  },
 
   showAbout: function () { wx.navigateTo({ url: '/pages/about/index' }); }
 });

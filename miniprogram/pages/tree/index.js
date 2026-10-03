@@ -12,6 +12,7 @@ const shareInvite = require('../../utils/share-invite');
 const shareCard = require('../../utils/share-card');
 const posterInvite = require('../../utils/poster-invite');
 const treePosterFlow = require('../../utils/tree-poster-flow');
+const subscribeNotifications = require('../../utils/subscribe-notifications');
 
 const MAX_INTERACTIVE_NODES = 80;
 
@@ -80,14 +81,31 @@ Page({
     shareCard: null,
     systemShareCard: shareCard.create({ kind: 'discovery' }),
     posterGenerating: false,
-    showShareReminder: false
+    showShareReminder: false,
+    notificationTemplates: null
   },
 
   onShow: function () {
+    if (app.refreshPendingBadge) app.refreshPendingBadge().catch(function () {});
     this.resetPageOrientation();
     const pendingView = app.consumePendingView();
     this.loadPage(pendingView);
+    this.loadNotificationTemplates();
     this.syncPageOrientationSoon();
+  },
+
+  loadNotificationTemplates: function () {
+    const self = this;
+    return subscribeNotifications.loadTemplates().then(function (templates) {
+      self.setData({ notificationTemplates: templates });
+    }).catch(function () {});
+  },
+
+  requestNotifications: function (options) {
+    const silent = options && options.silent === true;
+    subscribeNotifications.request(this.data.notificationTemplates, this.data.currentRole === 'admin').then(function (result) {
+      if (!silent) subscribeNotifications.showResult(result);
+    });
   },
 
   onHide: function () {
@@ -855,6 +873,7 @@ Page({
       relationRevision: this.data.relationRevision
     }).then(function (data) {
       wx.showToast({ title: data.pending ? '已提交管理员审核' : '子女排行已更新', icon: data.pending ? 'none' : 'success' });
+      if (data.pending && app.refreshPendingBadge) app.refreshPendingBadge({ force: true }).catch(function () {});
       self.setData({ childOrderSaving: false });
       self.closeChildOrderSheet();
       if (!data.pending) {
@@ -1013,12 +1032,13 @@ Page({
   },
 
   openShareSheet: function (mode, personId, personName) {
+    this._inviteShareStarted = false;
     this.setData({
       showShareSheet: true,
       shareMode: mode || 'full',
       sharePersonId: personId || '',
       sharePersonName: personName || '',
-      shareRole: this.data.currentRole === 'admin' ? 'member' : 'viewer',
+      shareRole: this.data.currentRole === 'viewer' ? 'viewer' : 'member',
       shareReady: false,
       shareCard: null,
       shareCreating: false
@@ -1026,13 +1046,16 @@ Page({
   },
 
   closeShareSheet: function () {
+    const requestReminder = this._inviteShareStarted;
+    this._inviteShareStarted = false;
     this._sharePreparationSequence = (this._sharePreparationSequence || 0) + 1;
     this.setData({ showShareSheet: false, shareReady: false, shareCard: null });
+    if (requestReminder) this.requestNotifications({ silent: true });
   },
 
   chooseShareRole: function (event) {
     const role = event.currentTarget.dataset.role;
-    if (!role || role === this.data.shareRole) return;
+    if (!['member', 'viewer'].includes(role) || role === this.data.shareRole || (role === 'member' && this.data.currentRole === 'viewer')) return;
     this.setData({ shareRole: role, shareReady: false, shareCard: null }, this.prepareShare);
   },
 
@@ -1097,28 +1120,29 @@ Page({
   onShareAppMessage: function (event) {
     const card = this.data.shareCard;
     const self = this;
-    if (event && event.from === 'button' && card) return {
-      title: card.title,
-      path: card.path,
-      imageUrl: card.imageUrl,
-      success: function () {
-        api.call('share.record', { stage: 'sent', invitationId: card.invitationId }).catch(function () {});
-        api.call('family.markOnboardingShared', {
-          familyId: self.data.currentFamily._id,
-          invitationId: card.invitationId
-        }).then(function () {
-          const family = self.data.currentFamily;
-          const updatedFamily = Object.assign({}, family, { sharedAt: new Date().toISOString() });
-          app.invalidateFamilyData(family._id);
-          app.setCurrentFamily(updatedFamily);
-          self.setData({
-            showShareReminder: false,
-            currentFamily: updatedFamily
-          });
-          self.loadPage(null, { force: true });
-        }).catch(function () {});
-      }
-    };
+    if (event && event.from === 'button' && card) {
+      this._inviteShareStarted = true;
+      return {
+        title: card.title,
+        path: card.path,
+        imageUrl: card.imageUrl,
+        success: function () {
+          api.call('share.record', { stage: 'sent', invitationId: card.invitationId }).catch(function () {});
+          if (self.data.currentRole !== 'admin') return;
+          api.call('family.markOnboardingShared', {
+            familyId: self.data.currentFamily._id,
+            invitationId: card.invitationId
+          }).then(function () {
+            const family = self.data.currentFamily;
+            const updatedFamily = Object.assign({}, family, { sharedAt: new Date().toISOString() });
+            app.invalidateFamilyData(family._id);
+            app.setCurrentFamily(updatedFamily);
+            self.setData({ showShareReminder: false, currentFamily: updatedFamily });
+            self.loadPage(null, { force: true });
+          }).catch(function () {});
+        }
+      };
+    }
     const discovery = this.data.systemShareCard || shareCard.create({ kind: 'discovery' });
     api.call('share.record', { stage: 'prepared', kind: 'discovery' }).catch(function () {});
     return {

@@ -4,6 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { assertDeploymentTarget } from './target-guard.mjs';
+import { productionNotificationConfig, notificationKeys } from './production-notification-config.mjs';
 
 const envId = process.argv[2];
 if (!envId) {
@@ -19,6 +20,11 @@ const manifestPath = process.env.DEPLOYMENT_TARGET === 'staging' && existsSync(g
   ? generatedStagingManifest
   : resolve(root, 'deployment/cloudbaserc.example.json');
 const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+const productionManifestPath = resolve(root, 'deployment/cloudbaserc.production.local.json');
+const productionDefinitions = process.env.DEPLOYMENT_TARGET === 'production' && existsSync(productionManifestPath)
+  ? new Map(JSON.parse(readFileSync(productionManifestPath, 'utf8')).functions.map(item => [item.name, item]))
+  : new Map();
+const actualProductionVariables = new Map();
 const productionPaymentEnvironmentKeys = {
   youpuUserApi: ['CONTENT_MODERATION_MODE', 'JOB_DISPATCH_SECRET', 'JOB_FUNCTION_NAMESPACE', 'PAYMENT_MODE', 'VP_APP_ID', 'VP_APP_SECRET', 'VP_OFFER_ID', 'VP_APP_KEY', 'VP_INTERNAL_NOTIFY_SECRET'],
   youpuJobs: ['BOOTSTRAP_SECRET', 'JOB_DISPATCH_SECRET'],
@@ -57,7 +63,8 @@ function sameValues(left, right) {
 
 function expectedEnvironmentKeys(expected) {
   if (process.env.DEPLOYMENT_TARGET === 'production' && productionPaymentEnvironmentKeys[expected.name]) {
-    return new Set(productionPaymentEnvironmentKeys[expected.name]);
+    const generated = productionDefinitions.get(expected.name);
+    return new Set(generated ? Object.keys(generated.envVariables || {}) : productionPaymentEnvironmentKeys[expected.name]);
   }
   return new Set(Object.keys(expected.envVariables || {}));
 }
@@ -74,8 +81,23 @@ for (const expected of expectedFunctions) {
   const actualEnvKeys = new Set(((actual.Environment || {}).Variables || []).map(function (item) { return item.Key; }));
   const expectedEnvKeys = expectedEnvironmentKeys(expected);
   if (!sameValues(actualEnvKeys, expectedEnvKeys)) throw new Error(expected.name + ' 环境变量键不符合部署清单');
+  if (process.env.DEPLOYMENT_TARGET === 'staging') {
+    const actualEnv = new Map(((actual.Environment || {}).Variables || []).map(function (item) { return [item.Key, item.Value]; }));
+    for (const [key, value] of Object.entries(expected.envVariables || {})) {
+      if (key.startsWith('NOTIFY_') && actualEnv.get(key) !== value) {
+        throw new Error(expected.name + ' 订阅消息配置回读不符合部署清单：' + key);
+      }
+    }
+  }
   if (process.env.DEPLOYMENT_TARGET === 'production') {
     const actualEnv = new Map(((actual.Environment || {}).Variables || []).map(function (item) { return [item.Key, item.Value]; }));
+    actualProductionVariables.set(expected.name, actualEnv);
+    const generated = productionDefinitions.get(expected.name);
+    for (const key of notificationKeys) {
+      if (generated && actualEnv.get(key) !== (generated.envVariables || {})[key]) {
+        throw new Error(expected.name + ' 生产订阅配置回读不符合部署清单：' + key);
+      }
+    }
     if (expected.name === 'youpuUserApi' && (actualEnv.get('PAYMENT_MODE') !== 'live' || actualEnv.get('CONTENT_MODERATION_MODE') !== 'strict')) {
       throw new Error('youpuUserApi production 支付或内容审核模式不符合要求');
     }
@@ -107,4 +129,12 @@ for (const expected of expectedFunctions) {
   ].join(' / '));
 }
 
+if (process.env.DEPLOYMENT_TARGET === 'production') {
+  const user = actualProductionVariables.get('youpuUserApi');
+  const jobs = actualProductionVariables.get('youpuJobs');
+  productionNotificationConfig(user, jobs);
+  if (user.get('JOB_DISPATCH_SECRET') !== jobs.get('JOB_DISPATCH_SECRET') || user.get('JOB_FUNCTION_NAMESPACE') !== envId) {
+    throw new Error('生产任务派发密钥或目标不一致');
+  }
+}
 console.log('云函数运行配置验证完成；未输出任何环境变量值。');

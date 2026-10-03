@@ -1,0 +1,22 @@
+<view class="intro-page page-shell">
+  <view class="intro-hero surface-card">
+    <text class="intro-eyebrow">有谱家谱</text>
+    <text class="intro-title">从一位家人开始，</text><text class="intro-title intro-title-second">把一家人连起来</text>
+    <text class="intro-copy">记录亲属关系，保存家庭记忆，再邀请家人一起完善。</text>
+    <view class="intro-art" aria-hidden="true"><view class="art-node art-node-top">家</view><view class="art-link"></view><view class="art-node">你</view><view class="art-node">家人</view></view>
+  </view>
+
+  <view class="intro-section">
+    <text class="section-title">可以这样开始</text>
+    <view class="intro-steps surface-card">
+      <view class="intro-step"><text class="step-number">1</text><view><text class="step-title">先看看示例</text><text class="step-copy">浏览虚构家谱，了解关系图怎样使用；不用填写家人资料。</text></view></view>
+      <view class="intro-step"><text class="step-number">2</text><view><text class="step-title">创建自己的家谱</text><text class="step-copy">从一位家人开始，按提示逐步补充关系。</text></view></view>
+      <view class="intro-step"><text class="step-number">3</text><view><text class="step-title">邀请家人共修</text><text class="step-copy">创建后再邀请家人共同维护。家谱默认仅受邀家人可访问。</text></view></view>
+    </view>
+  </view>
+
+  <view class="intro-actions">
+    <button class="primary-button intro-button" bindtap="openExamples">先看示例家谱</button>
+    <button class="secondary-button intro-button" bindtap="createFamily">创建我的家谱</button>
+  </view>
+</view>

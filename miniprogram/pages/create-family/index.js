@@ -21,7 +21,7 @@ Page({
     this._spouseGenderTouched = false;
     const source = options.source === 'share_menu' ? 'share_menu' : (options.source || '');
     this.setData({ source: source });
-    if (source === 'share_menu') api.call('share.record', { stage: 'opened', kind: 'discovery' }).catch(function () {});
+    if (source === 'share_menu' && options.opened !== '1') api.call('share.record', { stage: 'opened', kind: 'discovery' }).catch(function () {});
   },
 
   inputField: function (event) {

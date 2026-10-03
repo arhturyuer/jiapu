@@ -131,6 +131,14 @@ test('关于页使用正式版实际版本并按最新在前展示受控更新�
   const verifier = fs.readFileSync(path.join(root, 'deployment/verify-release-note.mjs'), 'utf8');
   assert.deepEqual(releaseInfo.validateReleaseNotes(releaseNotes), [
     {
+      version: '1.6.2',
+      summary: '家庭页新增待审核提醒，家谱成员可按自身权限分享长期有效、不限人数的邀请。'
+    },
+    {
+      version: '1.6.1',
+      summary: '新增有谱家谱介绍分享卡，朋友打开后可先看示例或创建家谱。'
+    },
+    {
       version: '1.6.0',
       summary: '成员生卒时间可按公历或农历分精度填写，并区分健在与已故资料。'
     },
@@ -263,7 +271,7 @@ test('我的页具备账户三态、独立个人资料和受控媒体展示', fu
   assert.match(template, /账户正在注销冷静期/);
   assert.match(template, /profile-card/);
   assert.match(template, /账户与隐私/);
-  assert.doesNotMatch(template, /创建家谱|当前家谱|切换家谱|家庭管理|家谱回收站|家谱变更历史|完整家庭备份|membershipTierText/);
+  assert.doesNotMatch(template, /当前家谱|切换家谱|家庭管理|家谱回收站|家谱变更历史|完整家庭备份|membershipTierText|bindtap="createFamily"/);
   assert.match(template, /保存名字/);
   assert.match(clientApi, /function getMediaPresentation/);
   assert.match(userApi, /'media\.getPresentation':\s*mediaGetPresentation/);
@@ -324,7 +332,7 @@ test('分享弹框预先准备本机邀请码并直接转发给微信好友', fu
     assert.doesNotMatch(template, /生成微信邀请/);
   });
   assert.match(cache, /youpu_share_invite_cards/);
-  assert.match(cache, /expirationTime\(entry\.expiresAt\) > now/);
+  assert.match(cache, /entry\.expiresAt === null \|\| expirationTime\(entry\.expiresAt\) > now/);
   assert.match(cache, /ownerId.*familyId.*role.*viewMode.*viewPersonId/s);
 });
 

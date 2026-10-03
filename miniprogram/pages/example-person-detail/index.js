@@ -8,14 +8,15 @@ function labelForRelation(person, relation, related) {
   return kinship.directRelationshipLabel(person, related, role);
 }
 
-function createFamilyUrl(slug) {
-  return '/pages/create-family/index?source=example&example=' + encodeURIComponent(slug);
+function createFamilyUrl(slug, source) {
+  return '/pages/create-family/index?source=' + (source === 'share_menu' ? 'share_menu&opened=1' : 'example')
+    + '&example=' + encodeURIComponent(slug);
 }
 
 Page({
-  data: { slug: '', personId: '', loading: true, error: '', person: null, relatives: [], openRelationId: '' },
+  data: { slug: '', personId: '', shareSource: '', loading: true, error: '', person: null, relatives: [], openRelationId: '' },
   onLoad: function (options) {
-    this.setData({ slug: options.slug || '', personId: options.id || '' });
+    this.setData({ slug: options.slug || '', personId: options.id || '', shareSource: options.source === 'share_menu' ? 'share_menu' : '' });
     if (!options.slug || !options.id) this.setData({ loading: false, error: '缺少示例人物信息，请返回家谱重新选择。' });
   },
   onShow: function () { if (this.data.slug && this.data.personId) this.loadPerson(); },
@@ -39,7 +40,7 @@ Page({
   openRelative: function (event) {
     if (this._suppressRelationTapUntil && Date.now() < this._suppressRelationTapUntil) return;
     if (this.data.openRelationId) return this.setData({ openRelationId: '' });
-    wx.navigateTo({ url: '/pages/example-person-detail/index?slug=' + encodeURIComponent(this.data.slug) + '&id=' + encodeURIComponent(event.currentTarget.dataset.id) });
+    wx.navigateTo({ url: '/pages/example-person-detail/index?slug=' + encodeURIComponent(this.data.slug) + '&id=' + encodeURIComponent(event.currentTarget.dataset.id) + (this.data.shareSource ? '&source=share_menu' : '') });
   },
   onRelationTouchStart: function (event) {
     const touch = event.touches && event.touches[0]; if (!touch) return;
@@ -60,6 +61,6 @@ Page({
     this._relationTouch = null;
   },
   onRelationTouchCancel: function (event) { this.onRelationTouchEnd(event); },
-  explainCreate: function () { wx.navigateTo({ url: createFamilyUrl(this.data.slug) }); },
-  viewFromPerson: function () { wx.redirectTo({ url: '/pages/example/index?slug=' + encodeURIComponent(this.data.slug) + '&personId=' + encodeURIComponent(this.data.personId) }); }
+  explainCreate: function () { wx.navigateTo({ url: createFamilyUrl(this.data.slug, this.data.shareSource) }); },
+  viewFromPerson: function () { wx.redirectTo({ url: '/pages/example/index?slug=' + encodeURIComponent(this.data.slug) + '&personId=' + encodeURIComponent(this.data.personId) + (this.data.shareSource ? '&source=share_menu' : '') }); }
 });
