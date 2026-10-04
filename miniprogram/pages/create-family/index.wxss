@@ -59,6 +59,14 @@
   margin-top: 32rpx;
 }
 
+.parents-spouse-choice {
+  margin-top: 16rpx;
+  min-height: 80rpx;
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
 .field-input,
 .field-textarea {
   width: 100%;

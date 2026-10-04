@@ -75,11 +75,16 @@ function createExamplePage(data) {
   return page;
 }
 
-test('拖动和捏合过程中只记录原生视口状态，不同步 setData', function () {
+test('手势开始只记录视口，结束仅提交标量变换、不重新绘制节点', function () {
   const instance = createPage();
-  instance.page.onGraphChange({ detail: { x: -123.45, y: 67.89, source: 'touch' } });
-  instance.page.onGraphScale({ detail: { scale: 0.73 } });
+  instance.page.commitGraphTransform({ x: 0, y: 0, scale: 1 });
+  instance.setDataCalls.length = 0;
+  const version = instance.page._gestureVersion;
+  instance.page.onGraphGestureState({ version: version, sequence: 1, active: true, x: 0, y: 0, scale: 1 });
   assert.equal(instance.setDataCalls.length, 0);
+  instance.page.onGraphGestureState({ version: version, sequence: 2, active: false, x: -123.45, y: 67.89, scale: 0.73 });
+  assert.equal(instance.setDataCalls.length, 1);
+  assert.equal(instance.setDataCalls[0].nodes, undefined);
   assert.equal(instance.page._currentGraphX, -123.45);
   assert.equal(instance.page._currentGraphY, 67.89);
   assert.equal(instance.page._currentGraphScale, 0.73);
@@ -487,4 +492,132 @@ test('方向流光只使用 transform 和 opacity，不触发布局属性动画'
   assert.doesNotMatch(animationStyles, /(?:^|[;{])\s*(?:left|top)\s*:/m);
   assert.match(wxml, /class="flow-runner flow-step-\{\{item\.flowStep\}\}"/);
   assert.match(wxml, /wx:if="\{\{item\.isAnimatedFlow\}\}"/);
+});
+
+['tree', 'example'].forEach(function (pageName) {
+  function cleanScreenPage(landscape) {
+    const page = pageName === 'tree' ? createPage().page : createExamplePage({});
+    const nodes = [{ _id: 'test-member' }];
+    page.data.nodes = nodes;
+    page.data.currentFamily = { name: '测试家谱' };
+    page.data.example = { title: '测试示例' };
+    page.data.isLandscape = Boolean(landscape);
+    page.data.pageOrientation = landscape ? 'landscape' : 'portrait';
+    page._lastLayout = { nodes: nodes };
+    const chrome = [];
+    global.wx = {
+      getWindowInfo: function () {
+        return { windowWidth: landscape ? 667 : 375, windowHeight: landscape ? 375 : (pageName === 'tree' && !page.data.isCleanScreen ? 617 : 667) };
+      },
+      nextTick: function (callback) { callback(); },
+      hideTabBar: function () { chrome.push('hide'); },
+      showTabBar: function () { chrome.push('show'); },
+      setNavigationBarTitle: function (options) { chrome.push(options.title); }
+    };
+    page.createSelectorQuery = function () {
+      return {
+        select: function () { return this; }, boundingClientRect: function () { return this; },
+        exec: function (callback) {
+          const size = landscape ? { windowWidth: 667, windowHeight: 375 } : wx.getWindowInfo();
+          const top = landscape || page.data.isCleanScreen ? 0 : (pageName === 'tree' ? 56 : 177);
+          callback([{ left: 0, top: top, width: size.windowWidth, height: size.windowHeight - top }]);
+        }
+      };
+    };
+    page.measureGraphViewport(wx.getWindowInfo(), function (viewport) { page._graphViewport = viewport; });
+    page.commitGraphTransform({ scale: 0.6, x: -90, y: -130 });
+    return { page: page, chrome: chrome, nodes: nodes };
+  }
+  function logicalCenter(page) {
+    const viewport = page.getGraphViewport(), transform = page.getGraphTransform();
+    return [(viewport.width / 2 - transform.x) / transform.scale / viewport.rpxToPx,
+      (viewport.height / 2 - transform.y) / transform.scale / viewport.rpxToPx];
+  }
+  function assertCenter(page, expected) {
+    logicalCenter(page).forEach(function (value, index) { assert.ok(Math.abs(value - expected[index]) < 1e-8); });
+  }
+
+  test(pageName + ' 清屏往返扩展画布，保留缩放、中心、人物视角和原节点', function () {
+    const previousWx = global.wx;
+    try {
+      [false, true].forEach(function (landscape) {
+        const h = cleanScreenPage(landscape), page = h.page;
+        page.data.viewMode = 'perspective'; page.data.viewpointId = 'test-member';
+        const before = page.getGraphViewport(), center = logicalCenter(page);
+        page.toggleCleanScreen();
+        assert.equal(page.data.isCleanScreen, true);
+        assert.equal(page.getGraphViewport().top, 0);
+        assert.equal(page.getGraphViewport().height, wx.getWindowInfo().windowHeight);
+        assert.equal(page.getGraphTransform().scale, 0.6);
+        assertCenter(page, center);
+        assert.equal(page.data.graphGestureConfig.top, 0);
+        page.toggleCleanScreen();
+        assert.equal(page.data.isCleanScreen, false);
+        assert.equal(page.getGraphViewport().height, before.height);
+        assertCenter(page, center);
+        assert.equal(page.data.graphGestureConfig.top, before.top);
+        assert.equal(page.data.viewMode, 'perspective');
+        assert.equal(page.data.viewpointId, 'test-member');
+        assert.equal(page.data.nodes, h.nodes);
+        if (pageName === 'tree') assert.equal(h.chrome[h.chrome.length - 1], landscape ? 'hide' : 'show');
+      });
+    } finally { global.wx = previousWx; }
+  });
+
+  test(pageName + ' 清屏先同步活动手势的最新变换，离页恢复页面控件', function () {
+    const previousWx = global.wx;
+    try {
+      const h = cleanScreenPage(false), page = h.page, version = page._gestureVersion;
+      page.onGraphGestureState({ version: version, sequence: 1, active: true, x: -90, y: -130, scale: 0.6 });
+      page.toggleCleanScreen();
+      assert.equal(page.data.isCleanScreen, false);
+      const id = page.data.graphGestureRequest.id;
+      const viewport = page.getGraphViewport();
+      const center = [(viewport.width / 2 + 120) / 0.9 / viewport.rpxToPx,
+        (viewport.height / 2 + 170) / 0.9 / viewport.rpxToPx];
+      page.onGraphGestureState({ version: version, sequence: 2, requestId: id, active: false, x: -120, y: -170, scale: 0.9 });
+      assert.equal(page.data.isCleanScreen, true);
+      assertCenter(page, center);
+      assert.equal(page.getGraphTransform().scale, 0.9);
+      page.onHide();
+      assert.equal(page.data.isCleanScreen, false);
+      assert.equal(page.data.pageOrientation, 'portrait');
+      assert.equal(page.data.graphGestureConfig.disabled, true);
+      if (pageName === 'tree') assert.equal(h.chrome[h.chrome.length - 1], 'show');
+      // Unload also restores chrome when onHide was not called first.
+      page.data.isCleanScreen = true;
+      page.onUnload();
+      assert.equal(page.data.isCleanScreen, false);
+      if (pageName === 'tree') assert.equal(h.chrome[h.chrome.length - 1], 'show');
+    } finally { global.wx = previousWx; }
+  });
+
+  test(pageName + ' 横屏系统窗口信息迟到时清屏不切回竖屏', function () {
+    const previousWx = global.wx;
+    try {
+      const page = cleanScreenPage(true).page;
+      wx.getWindowInfo = function () { return { windowWidth: 375, windowHeight: 667 }; };
+      const center = logicalCenter(page);
+      page.toggleCleanScreen();
+      assert.equal(page.data.pageOrientation, 'landscape');
+      assert.equal(page.data.isLandscape, true);
+      assert.equal(page.getGraphViewport().rpxToPx, 667 / 750);
+      assertCenter(page, center);
+      page.toggleCleanScreen();
+      assert.equal(page.data.pageOrientation, 'landscape');
+      assert.equal(page.data.isCleanScreen, false);
+      assertCenter(page, center);
+    } finally { global.wx = previousWx; }
+  });
+
+  test(pageName + ' 方向切换中和空图不进入清屏', function () {
+    const previousWx = global.wx;
+    try {
+      const page = cleanScreenPage(false).page;
+      page.data.orientationChanging = true; page.toggleCleanScreen();
+      assert.equal(page.data.isCleanScreen, false);
+      page.data.orientationChanging = false; page.data.nodes = []; page.toggleCleanScreen();
+      assert.equal(page.data.isCleanScreen, false);
+    } finally { global.wx = previousWx; }
+  });
 });

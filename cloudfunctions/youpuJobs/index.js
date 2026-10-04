@@ -34,6 +34,12 @@ const COLLECTIONS = [
   'feedback_group_settings',
   'example_templates',
   'example_template_versions',
+  'analytics_activity_daily',
+  'analytics_daily',
+  'analytics_reports',
+  'analytics_snapshots',
+  'analytics_snapshot_items',
+  'analytics_history',
   'share_metrics_daily'
 ];
 
@@ -99,13 +105,16 @@ async function ensureCollections(event) {
   }
   await db.collection('system_config').doc('schema').set({
     data: {
-      version: 8,
+      version: 10,
       graphPersonLimit: 500,
       archiveRetentionDays: 30,
       deletionCoolingDays: 7,
       updatedAt: db.serverDate()
     }
   });
+  if (!await maybeGet('system_config', 'analytics')) {
+    await db.collection('system_config').doc('analytics').set({ data: { trackingStartedAt: db.serverDate(), version: 1 } });
+  }
   let initialOperator = null;
   const authUid = String((event && event.initialOperatorAuthUid) || '').trim().slice(0, 128);
   if (authUid) {
@@ -311,6 +320,7 @@ async function anonymizeUser(request) {
   }, 5000);
   await updateMany('payment_orders', { payerUserId: user._id }, {
     payerUserId: anonymousActor,
+    payerAnalyticsId: user._id,
     payerAnonymizedAt: db.serverDate(),
     updatedAt: db.serverDate()
   }, 1000);
@@ -404,9 +414,34 @@ async function deleteFamilyBackupFiles(familyId) {
   return fileIds.length;
 }
 
+async function preserveFamilyAnalytics(family) {
+  const snapshot = {
+    kind: 'family', entityId: family._id, createdAt: family.createdAt,
+    creatorId: family.creatorId, status: 'deleted', cleaned: true,
+    firstRelativeJoinedAt: family.firstRelativeJoinedAt || null
+  };
+  await db.collection('analytics_history').doc('family_' + family._id).set({ data: snapshot });
+  let cursor = '';
+  while (true) {
+    const where = { familyId: family._id };
+    if (cursor) where._id = _.gt(cursor);
+    const page = await db.collection('family_memberships').where(where).orderBy('_id', 'asc').limit(100).get();
+    for (const member of page.data || []) {
+      await db.collection('analytics_history').doc('membership_' + member._id).set({ data: {
+        kind: 'membership', entityId: member._id, familyId: family._id, userId: member.userId,
+        firstJoinedAt: member.firstJoinedAt || member.joinedAt, joinedAt: member.joinedAt,
+        status: 'deleted', cleaned: true
+      } });
+    }
+    if (!page.data || page.data.length < 100) break;
+    cursor = page.data[page.data.length - 1]._id;
+  }
+}
+
 async function purgeFamily(family, allowResume) {
   const claimed = await claimFamilyDeletion(family._id, allowResume);
   if (!claimed) return { familyId: family._id, skipped: true };
+  await preserveFamilyAnalytics(family);
   const deletedFiles = await deleteFamilyMediaFiles(family._id);
   const deletedBackupFiles = await deleteFamilyBackupFiles(family._id);
   const collections = [
@@ -881,6 +916,9 @@ async function retentionRun() {
     deletions: await processDeletions(),
     archivedFamilies: await purgeArchivedFamilies(),
     cleanup: await cleanTemporaryData(),
+    analyticsSnapshots: await removeMany('analytics_snapshots', { expiresAt: _.lt(new Date()) }, 5000),
+    analyticsSnapshotItems: await removeMany('analytics_snapshot_items', { expiresAt: _.lt(new Date()) }, 5000),
+    analyticsReports: await removeMany('analytics_reports', { expiresAt: _.lt(new Date()) }, 5000),
     staleExports: await recoverStaleExportTasks(),
     expiredExports: await expireExportTasks()
   };

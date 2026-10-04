@@ -94,6 +94,7 @@ for (const fn of manifest.functions || []) {
   }, notificationVariables);
   if (fn.name === 'youpuUserApi') Object.assign(fn.envVariables, {
     JOB_DISPATCH_SECRET: bootstrapSecret, JOB_FUNCTION_NAMESPACE: envId,
+    STAGING_ACCOUNT_RESET_ENABLED: '1', STAGING_ACCOUNT_RESET_ENV: envId,
     PAYMENT_MODE: 'sandbox', VP_APP_ID: sandboxVariables.VP_APP_ID,
     VP_APP_SECRET: sandboxVariables.VP_APP_SECRET, VP_OFFER_ID: sandboxVariables.VP_OFFER_ID,
     VP_APP_KEY: sandboxVariables.VP_APP_KEY, VP_INTERNAL_NOTIFY_SECRET: sandboxVariables.VP_INTERNAL_NOTIFY_SECRET

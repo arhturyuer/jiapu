@@ -23,11 +23,15 @@ function read(relativePath) {
     assert.doesNotMatch(template, /bindtap="locateGraphFocus"/);
     assert.doesNotMatch(template, /class="graph-control[^>]+bindtap="(?:toggleNameLayout|expandAllBranches)"/);
     assert.match(template, /class="graph-control graph-control-text" bindtap="openDisplaySettings">设置<\/view>/);
+    assert.match(template, /bindtap="generatePoster">图片<\/view>\s*<view[^>]*bindtap="toggleCleanScreen"[^>]*aria-label="清屏查看家谱"[^>]*>\s*<view class="clean-screen-icon"[^>]*>[\s\S]*?<\/view>\s*<\/view>\s*<\/view>/);
+    assert.match(template, /<button class="clean-screen-exit"[^>]*aria-label="退出清屏"[^>]*>\s*<view class="clean-screen-icon is-exit"/);
+    assert.doesNotMatch(template, />清屏<|>退出清屏</);
     assert.match(script, /pageOrientation:\s*'portrait'/);
     assert.match(script, /togglePageOrientation:\s*function/);
     assert.match(script, /onPageResize:\s*function/);
     assert.match(style, /\.is-landscape/);
-    assert.match(style, /\.is-landscape \.graph-viewport \{[^}]*height:\s*100vh/);
+    if (pageName === 'tree') assert.match(style, /\.is-landscape \.graph-viewport \{[^}]*height:\s*100vh/);
+    else assert.match(style, /\.is-landscape \.graph-viewport \{[^}]*height:\s*100vh/);
   });
 });
 
@@ -35,7 +39,7 @@ test('主家谱横屏隐藏页面工具栏和原生 TabBar，并显示当前家�
   const script = read('miniprogram/pages/tree/index.js');
   const style = read('miniprogram/pages/tree/index.wxss');
   assert.match(style, /\.tree-page\.is-landscape \.tree-toolbar \{[^}]*display:\s*none/);
-  assert.match(script, /setNavigationBarTitle\(\{ title: isLandscape && familyName \? familyName : '有谱' \}\)/);
+  assert.match(script, /setNavigationBarTitle\(\{ title: familyName \|\| '有谱' \}\)/);
   assert.match(script, /wx\.hideTabBar\(\{ animation: false \}\)/);
   assert.match(script, /wx\.showTabBar\(\{ animation: false \}\)/);
 });
@@ -45,7 +49,7 @@ test('主家谱竖屏画布只扣除顶部工具栏，不重复预留原生 TabB
   const style = read('miniprogram/pages/tree/index.wxss');
   assert.match(style, /height:\s*calc\(100vh - 112rpx\)/);
   assert.doesNotMatch(style, /height:\s*calc\(100vh - 112rpx - 120rpx\)/);
-  assert.match(script, /isLandscape \? 0 : 112 \* rpxToPx/);
-  assert.match(script, /width > height \? 0 : 112 \* width \/ 750/);
+  assert.match(script, /isLandscape \|\| this\.data\.isCleanScreen \? 0 : 112 \* rpxToPx/);
+  assert.match(script, /width > height \|\| this\.data\.isCleanScreen \? 0 : 112 \* width \/ 750/);
   assert.match(style, /\.graph-help \{[^}]*bottom:\s*calc\(24rpx \+ env\(safe-area-inset-bottom\)\)/);
 });

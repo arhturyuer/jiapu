@@ -254,7 +254,7 @@ test('快速切换人物视角只保存最后一次偏好', async function () {
   } finally { api.call = originalCall; }
 });
 
-test('没有家谱的账号结束加载并展示空状态，重复切 Tab 不重复请求', async function () {
+test('没有家谱的账号进入默认示例，家庭页空状态仍复用缓存', async function () {
   const app = {
     globalData: { accountState: 'active' },
     getCurrentFamily: function () { return null; },
@@ -266,18 +266,18 @@ test('没有家谱的账号结束加载并展示空状态，重复切 Tab 不重
     consumePendingView: function () { return null; }
   };
   const previousWx = global.wx;
-  global.wx = { stopPullDownRefresh: function () {} };
+  const redirects = [];
+  global.wx = { stopPullDownRefresh: function () {}, redirectTo: function (options) { redirects.push(options.url); options.success(); } };
   const tree = createPage(loadPage('../miniprogram/pages/tree/index', app));
   const members = createPage(loadPage('../miniprogram/pages/members/index', app));
 
   await tree.loadPage();
   await members.loadDashboard();
-  assert.equal(tree.data.loading, false);
+  assert.equal(tree.data.loading, true);
+  assert.deepEqual(redirects, ['/pages/example/index?entry=default']);
   assert.equal(members.data.loading, false);
-  assert.equal(tree._hasLoaded, true);
   assert.equal(members._hasLoaded, true);
   const callsAfterFirstLoad = app.calls;
-  await tree.loadPage();
   await members.loadDashboard();
   assert.equal(app.calls, callsAfterFirstLoad);
   global.wx = previousWx;

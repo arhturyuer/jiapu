@@ -5,19 +5,24 @@ const personDate = require('./person-date');
 const commerce = require('./commerce');
 const jobDispatcher = require('./job-dispatcher');
 const subscriptionNotification = require('./subscription-notification');
+const stagingAccountReset = require('./staging-account-reset');
+const analytics = require('./analytics');
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
 const db = cloud.database();
 const _ = db.command;
+const analyticsTracker = analytics.createTracker(db);
 const PAGE_SIZE = 50;
 const GRAPH_PERSON_LIMIT = 500;
 const GRAPH_RELATION_LIMIT = 2000;
 const MODERATION_CONFIG_ID = 'moderation';
 const ACTIVE_ROLES = domain.ACTIVE_ROLES;
 const RATE_LIMITS = {
+  'analytics.track': { max: 300, windowMs: 60 * 60 * 1000 },
   'auth.updateProfile': { max: 20, windowMs: 60 * 60 * 1000 },
   'auth.updateAvatar': { max: 20, windowMs: 60 * 60 * 1000 },
+  'account.resetTest': { max: 20, windowMs: 60 * 60 * 1000 },
   'account.export': { max: 3, windowMs: 24 * 60 * 60 * 1000 },
   'payment.createOrder': { max: 10, windowMs: 60 * 60 * 1000 },
   'payment.reconcileNow': { max: 20, windowMs: 60 * 60 * 1000 },
@@ -37,12 +42,14 @@ const RATE_LIMITS = {
   'media.prepare': { max: 100, windowMs: 24 * 60 * 60 * 1000 }
 };
 const MUTATION_TYPES = new Set([
+  'analytics.track',
   'auth.updateProfile',
   'auth.updateAvatar',
   'account.export',
   'account.exportUrl',
   'account.requestDeletion',
   'account.cancelDeletion',
+  'account.resetTest',
   'payment.createOrder',
   'payment.reconcileNow',
   'payment.mockComplete',
@@ -220,8 +227,10 @@ async function inspectPrivateUpload(fileId) {
   return { url: url, size: size };
 }
 
+const testAccounts = stagingAccountReset.createService({ db, command: _, assert, hash, randomToken, listAll });
+
 function userId(openid) {
-  return 'u_' + hash(openid, 32);
+  return testAccounts.currentUserId(openid, 'u_' + hash(openid, 32));
 }
 
 function notificationTemplateIds() {
@@ -428,11 +437,11 @@ function publicChangeRequest(item) {
 }
 
 function membershipId(familyId, openid) {
-  return 'fm_' + hash(familyId + ':' + openid, 32);
+  return 'fm_' + hash(familyId + ':' + testAccounts.identityKey(openid), 32);
 }
 
 function preferenceId(familyId, openid) {
-  return 'fp_' + hash(familyId + ':' + openid, 32);
+  return 'fp_' + hash(familyId + ':' + testAccounts.identityKey(openid), 32);
 }
 
 function normalizeFamilyPreference(value) {
@@ -560,6 +569,11 @@ async function listPage(collectionName, where, event, allowedSortFields) {
 }
 
 async function ensureUser(openid, scope) {
+  if (!scope) {
+    const existing = await maybeGet(db, 'users', userId(openid));
+    if (existing) return existing;
+    return db.runTransaction(transaction => ensureUser(openid, transaction));
+  }
   const database = scope || db;
   const id = userId(openid);
   const existing = await maybeGet(database, 'users', id);
@@ -600,7 +614,7 @@ async function getFamily(scope, familyId, options) {
 
 async function getMembership(scope, familyId, openid) {
   const membership = await maybeGet(scope || db, 'family_memberships', membershipId(familyId, openid));
-  if (!membership || membership.status !== 'active') return null;
+  if (!membership || membership.status !== 'active' || membership.userId !== userId(openid)) return null;
   return membership;
 }
 
@@ -785,6 +799,9 @@ async function mutate(type, event, openid, handler) {
     const existing = await maybeGet(transaction, 'idempotency_records', recordId);
     if (existing && existing.status === 'completed') return existing.result || {};
     assert(!existing || existing.status === 'failed', 'REQUEST_IN_PROGRESS', '操作正在处理中，请勿重复提交');
+    if (testAccounts.usesTestIdentity(cloud.getWXContext() || {})) {
+      await transaction.collection('users').doc(actor._id).update({ data: { updatedAt: db.serverDate() } });
+    }
     await transaction.collection('idempotency_records').doc(recordId).set({
       data: {
         actorId: userId(openid),
@@ -1350,6 +1367,7 @@ async function familyCreate(event) {
     let personCount = 1;
     let relationCount = 0;
     const relatives = event.relatives || {};
+    const createdParents = {};
     const definitions = [
       ['father', relatives.fatherName, 'male'],
       ['mother', relatives.motherName, 'female'],
@@ -1357,8 +1375,13 @@ async function familyCreate(event) {
     ];
     for (const definition of definitions) {
       if (!cleanText(definition[1], 30)) continue;
-      await createRelatedTx(transaction, familyId, startPerson._id, definition[0], { name: definition[1], gender: definition[2] }, openid);
+      const related = await createRelatedTx(transaction, familyId, startPerson._id, definition[0], { name: definition[1], gender: definition[2] }, openid);
+      if (definition[0] === 'father' || definition[0] === 'mother') createdParents[definition[0]] = related.person;
       personCount += 1;
+      relationCount += related.relationCount;
+    }
+    if (relatives.parentsAreSpouses === true && createdParents.father && createdParents.mother) {
+      await createRelationTx(transaction, familyId, 'spouse', createdParents.father._id, createdParents.mother._id, openid);
       relationCount += 1;
     }
     await transaction.collection('families').doc(familyId).update({
@@ -1379,6 +1402,7 @@ async function familyCreate(event) {
       summary: '创建家谱',
       requestId: event.requestId
     });
+    await analytics.firstConversion(db, transaction, user._id, 'firstCreatedFamilyAt');
     if (shareSource === 'share_menu') await incrementShareMetric(transaction, 'discovery', 'converted');
     return {
       family: { _id: familyId, name: name, description: description, status: 'active', currentRole: 'admin' },
@@ -2650,9 +2674,16 @@ async function inviteAccept(event) {
         avatarAssetId: user.avatarAssetId || '',
         status: 'active',
         joinedAt: db.serverDate(),
+        firstJoinedAt: existing && (existing.firstJoinedAt || existing.joinedAt) || db.serverDate(),
         updatedAt: db.serverDate()
       }
     });
+    if (family.creatorId !== user._id) {
+      await analytics.firstConversion(db, transaction, user._id, 'firstJoinedFamilyAt', existing && (existing.firstJoinedAt || existing.joinedAt));
+      if (!family.firstRelativeJoinedAt) await transaction.collection('families').doc(family._id).update({
+        data: { firstRelativeJoinedAt: existing && (existing.firstJoinedAt || existing.joinedAt) || db.serverDate() }
+      });
+    }
     await transaction.collection('invitations').doc(invitation._id).update({
       data: { useCount: _.inc(1), lastUsedAt: db.serverDate(), updatedAt: db.serverDate() }
     });
@@ -3716,7 +3747,44 @@ async function feedbackGroupGet() {
   }
 }
 
+async function analyticsTrack(event) {
+  const openid = getOpenid();
+  const user = await requireActiveUser(openid);
+  const kind = cleanText(event.kind, 20);
+  assert(['foreground', 'family', 'example'].includes(kind), 'ANALYTICS_INVALID_EVENT', '访问类型无效');
+  let familyId = '';
+  if (kind === 'family') {
+    familyId = cleanText(event.familyId, 80);
+    assert(familyId, 'FAMILY_NOT_FOUND', '缺少家谱信息');
+    await requireMembership(familyId, ACTIVE_ROLES, db, openid);
+  }
+  if (kind === 'example') {
+    const slug = cleanText(event.slug, 80);
+    assert(slug, 'EXAMPLE_NOT_FOUND', '缺少示例信息');
+    const result = await db.collection('example_templates').where({ slug: slug, status: 'published' }).limit(1).get();
+    assert(result.data && result.data.length, 'EXAMPLE_NOT_FOUND', '示例暂不可用');
+  }
+  await analyticsTracker.record(user, familyId, kind === 'family', kind === 'example');
+  return { recorded: true };
+}
+
+// Old clients contribute successful business calls; cached displays are captured
+// explicitly by the new client. Analytics failures never change a business result.
+async function recordBusinessActivity(type, request, data) {
+  if (type === 'analytics.track' || type === 'account.resetTest') return;
+  const openid = getOpenid();
+  const user = await maybeGet(db, 'users', userId(openid));
+  if (!user || user.status !== 'active') return;
+  let familyId = cleanText(request.familyId || data && data.family && data.family._id, 80);
+  if (familyId) {
+    try { await requireMembership(familyId, ACTIVE_ROLES, db, openid); }
+    catch (error) { familyId = ''; }
+  }
+  await analyticsTracker.record(user, familyId, Boolean(familyId && ['graph.get', 'family.dashboard'].includes(type)), type === 'examples.get');
+}
+
 const handlers = {
+  'analytics.track': analyticsTrack,
   'auth.login': authLogin,
   'auth.updateProfile': authUpdateProfile,
   'auth.updateAvatar': authUpdateAvatar,
@@ -3724,6 +3792,7 @@ const handlers = {
   'account.exportStatus': accountExportStatus,
   'account.exportUrl': accountExportUrl,
   'account.requestDeletion': accountRequestDeletion,
+  'account.resetTest': function (event) { return testAccounts.reset(cloud.getWXContext() || {}, event); },
   'account.cancelDeletion': accountCancelDeletion,
   'membership.catalog': membershipCatalog,
   'membership.status': membershipStatus,
@@ -3792,15 +3861,24 @@ exports.main = async function (event) {
   const type = cleanText(request.type, 80);
   const requestId = cleanText(request.requestId, 80) || randomToken(12);
   const context = cloud.getWXContext() || {};
-  const anonymousActorId = context.OPENID ? userId(context.OPENID) : '';
+  let anonymousActorId = context.OPENID ? userId(context.OPENID) : '';
   try {
     const handler = handlers[type];
     assert(handler, 'UNKNOWN_ACTION', '暂不支持这个操作');
-    if (MUTATION_TYPES.has(type)) request.requestId = requestId;
-    if (RATE_LIMITS[type]) await enforceRateLimit(getOpenid(), type);
-    const data = await handler(request);
-    console.log(JSON.stringify({ requestId: requestId, actorId: anonymousActorId, action: type, success: true, durationMs: Date.now() - startedAt, resultCode: 'OK' }));
-    return success(data);
+    if (type === 'account.resetTest') testAccounts.assertAllowed(context, request);
+    return await testAccounts.run(context, async function () {
+      anonymousActorId = context.OPENID ? userId(context.OPENID) : '';
+      if (MUTATION_TYPES.has(type)) request.requestId = requestId;
+      if (type !== 'account.resetTest' && MUTATION_TYPES.has(type) && testAccounts.usesTestIdentity(context) && request.testActorId) {
+        assert(request.testActorId === anonymousActorId, 'ACCOUNT_SESSION_CHANGED', '账户已重置，请重新进入');
+      }
+      if (RATE_LIMITS[type]) await enforceRateLimit(getOpenid(), type);
+      const data = await handler(request);
+      try { await recordBusinessActivity(type, request, data); }
+      catch (error) { console.warn(JSON.stringify({ requestId, type: 'analytics_capture_failed', action: type, code: error.code || 'CAPTURE_FAILED' })); }
+      console.log(JSON.stringify({ requestId: requestId, actorId: anonymousActorId, action: type, success: true, durationMs: Date.now() - startedAt, resultCode: 'OK' }));
+      return success(data);
+    });
   } catch (error) {
     console.error(JSON.stringify({
       requestId: requestId,

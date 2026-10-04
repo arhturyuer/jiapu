@@ -14,6 +14,7 @@ Page({
   },
 
   onLoad: function (options) {
+    this._selectionMode = Boolean(options && options.select === '1');
     this.setData({ shareSource: options && options.source === 'share_menu' ? 'share_menu' : '' });
     this.loadExamples();
   },
@@ -87,6 +88,14 @@ Page({
 
   openExample: function (event) {
     const slug = event.currentTarget.dataset.slug;
+    if (slug && this._selectionMode) {
+      if (this._selectionSubmitted) return;
+      this._selectionSubmitted = true;
+      this.getOpenerEventChannel().emit('exampleSelected', { slug: slug });
+      const self = this;
+      wx.navigateBack({ fail: function () { self._selectionSubmitted = false; } });
+      return;
+    }
     if (slug) wx.navigateTo({ url: '/pages/example/index?slug=' + encodeURIComponent(slug) + (this.data.shareSource ? '&source=share_menu' : '') });
   },
 

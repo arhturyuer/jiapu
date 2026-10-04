@@ -225,8 +225,8 @@ test('示例家谱图片码保留全谱或人物视角', function () {
   assert.match(source, /async function examplesResolvePoster[\s\S]*\^e\[0-9a-f\]\{20\}\[fp\]\[0-9a-f\]\{10\}\$/);
   assert.match(source, /'examples\.getMiniCode': examplesGetMiniCode/);
   assert.match(source, /'examples\.resolvePoster': examplesResolvePoster/);
-  assert.match(examplePage, /options\.scene[\s\S]*api\.call\('examples\.resolvePoster'/);
-  assert.match(examplePage, /_shareSource = 'example_poster'/);
+  assert.match(examplePage, /decodedScene\(value\.scene\)[\s\S]*api\.call\('examples\.resolvePoster'/);
+  assert.match(examplePage, /_shareSource = this\._scene \? 'example_poster'/);
 });
 
 test('首次保存先申请小程序相册权限再调用官方保存接口', async function () {

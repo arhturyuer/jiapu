@@ -46,6 +46,12 @@ const collections = [
   'feedback_group_settings',
   'example_templates',
   'example_template_versions',
+  'analytics_activity_daily',
+  'analytics_daily',
+  'analytics_reports',
+  'analytics_snapshots',
+  'analytics_snapshot_items',
+  'analytics_history',
   'share_metrics_daily'
 ];
 

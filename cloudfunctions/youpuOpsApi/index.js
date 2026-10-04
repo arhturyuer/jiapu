@@ -2,6 +2,7 @@ const cloud = require('wx-server-sdk');
 const crypto = require('crypto');
 const participation = require('./participation');
 const exampleValidation = require('./example-validation');
+const analyticsService = require('./analytics-service');
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
@@ -892,6 +893,26 @@ async function commerceSummary(event, context) {
     sku: Object.keys(sku).map(function (key) { return sku[key]; }),
     generatedAt: now.toISOString()
   };
+}
+
+const dataAnalytics = analyticsService.createService({ db, command: _, listAll, listByIds, maybeGet });
+async function analyticsSummary(event, context) {
+  await requireOperator(context, ['super_admin', 'operator']);
+  return dataAnalytics.summary(event);
+}
+async function analyticsDetails(event, context) {
+  const operator = await requireOperator(context, ['super_admin', 'operator']);
+  const result = await dataAnalytics.details(event);
+  await writeOpsAudit(db, operator, 'ops.analytics.view', 'analytics', event.metric, '运营后台查看', '查看统计明细', event.requestId);
+  return result;
+}
+
+async function commerceDetail(event, context) {
+  const operator = await requireOperator(context, ['super_admin', 'operator']);
+  const order = await maybeGet('payment_orders', cleanText(event.orderId, 80));
+  assert(order, 'ORDER_NOT_FOUND', '订单不存在');
+  await writeOpsAudit(db, operator, 'ops.order.view', 'payment_order', order._id, '运营后台查看', '查看订单资料', event.requestId, order.familyId);
+  return publicCommerceOrder(order);
 }
 
 async function commerceOrders(event, context) {
@@ -1946,9 +1967,12 @@ async function examplesArchive(event, context) {
 
 const handlers = {
   'session.me': sessionMe,
+  'analytics.summary': analyticsSummary,
+  'analytics.details': analyticsDetails,
   'dashboard.summary': dashboardSummary,
   'commerce.summary': commerceSummary,
   'commerce.orders': commerceOrders,
+  'commerce.detail': commerceDetail,
   'commerce.retryOrder': commerceRetryOrder,
   'users.list': usersList,
   'users.detail': usersDetail,

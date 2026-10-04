@@ -173,21 +173,28 @@ test('示例图谱复用真实家谱的选中连线、定位与只读资料交�
   assert.doesNotMatch(graph, /person\.update|person\.createRelated|relation\.remove/);
 });
 
-test('示例家谱竖屏保留标题操作区，横屏仅保留原生家谱标题', function () {
+test('示例家谱竖屏区分创建引导与示例查看，横屏仅显示画布', function () {
   const page = read('miniprogram/pages/example/index.wxml');
   const style = read('miniprogram/pages/example/index.wxss');
   const treeStyle = read('miniprogram/pages/tree/index.wxss');
   const source = read('miniprogram/pages/example/index.js');
-  assert.match(page, /example-identity/);
-  assert.match(page, /example-actions/);
-  assert.match(style, /\.example-header \{ height:196rpx/);
-  assert.match(style, /height:calc\(100vh - 196rpx - 120rpx\)/);
-  assert.match(style, /\.example-page\.is-landscape \.example-header \{ display:none; \}/);
-  assert.match(style, /\.example-page\.is-landscape \.graph-viewport \{ height:100vh; \}/);
+  assert.match(page, /example-selector/);
+  assert.match(page, /example-toolbar/);
+  assert.match(page, /以下为示例家谱/);
+  assert.match(page, /class="example-create-actions"[\s\S]*bindtap="createFamily">创建我的家谱[\s\S]*bindtap="openExamples">切换示例/);
+  assert.doesNotMatch(page, /tour-mask|showTour/);
+  assert.match(style, /\.example-page\.is-landscape \.example-header \{[^}]*display:none/);
+  assert.match(style, /\.example-page\.is-landscape \.graph-viewport \{[^}]*flex:1/);
+  assert.match(page, /scroll-x[\s\S]*bindtap="selectExampleTab"/);
+  assert.doesNotMatch(page, /example-footer/);
+  assert.match(page, /<button class="toolbar-share" size="mini" open-type="share" disabled="\{\{loading \|\| error \|\| !example\}\}">分享<\/button>/);
+  assert.doesNotMatch(page, /showShareSheet|closeShareSheet|分享示例家谱/);
+  assert.doesNotMatch(source, /showShareSheet|startShare|closeShareSheet/);
+  assert.doesNotMatch(style, /\.create \{ display:none/);
   assert.match(style, /height:164rpx; min-height:164rpx/);
   assert.match(treeStyle, /height: 164rpx;\n  min-height: 164rpx/);
-  assert.match(source, /isLandscape \? 0 : 316 \* width \/ 750/);
-  assert.match(source, /setNavigationBarTitle\(\{ title: isLandscape && familyName \? familyName : '示例家谱' \}\)/);
+  assert.match(source, /fallbackGraphViewport/);
+  assert.match(source, /setNavigationBarTitle\(\{ title: '有谱家谱·微信云开发·安全可靠' \}\)/);
 });
 
 test('示例家谱全谱适配沿用真实家谱的完整画布定位策略', function () {

@@ -1,6 +1,7 @@
+<wxs module="graphGesture" src="../../wxs/graph-gesture.wxs" />
 <import src="../../templates/kinship-card.wxml" />
 <page-meta page-orientation="{{pageOrientation}}" bindresize="onPageResize"></page-meta>
-<view class="tree-page {{isLandscape ? 'is-landscape' : ''}}">
+<view class="tree-page {{isLandscape ? 'is-landscape' : ''}} {{isCleanScreen ? 'is-clean-screen' : ''}}">
   <view class="loading-panel" wx:if="{{loading}}">
     <view class="loading-dot"></view>
     <text>正在整理家谱...</text>
@@ -56,23 +57,9 @@
       <text class="muted-text">先添加第一位家庭成员</text>
     </view>
 
-    <movable-area class="graph-viewport" wx:else>
-      <movable-view
-        class="graph-movable {{graphZoomClass}}"
-        style="width:{{canvasWidth}}rpx;height:{{canvasHeight}}rpx;"
-        direction="all"
-        x="{{graphX}}"
-        y="{{graphY}}"
-        scale="{{!graphRendering}}"
-        scale-value="{{graphScale}}"
-        scale-min="{{graphScaleMin}}"
-        scale-max="1.6"
-        inertia="{{false}}"
-        animation="{{false}}"
-        bindscale="onGraphScale"
-        bindchange="onGraphChange"
-      >
-        <view class="graph-canvas" style="width:{{canvasWidth}}rpx;height:{{canvasHeight}}rpx;" bindtap="clearGraphSelection">
+    <view prop="{{graphGestureConfig}}" change:prop="{{graphGesture.configure}}" request="{{graphGestureRequest}}" change:request="{{graphGesture.snapshot}}" bindtouchstart="{{graphGesture.start}}" catchtouchmove="{{graphGesture.move}}" bindtouchend="{{graphGesture.end}}" bindtouchcancel="{{graphGesture.cancel}}" class="graph-viewport" wx:else>
+      <view class="graph-movable {{graphZoomClass}}" style="width:{{canvasWidth}}rpx;height:{{canvasHeight}}rpx;">
+        <view class="graph-canvas" style="width:{{canvasWidth}}rpx;height:{{canvasHeight}}rpx;" bindtap="{{graphGesture.tap}}" data-gesture-action="clearGraphSelection">
         <view
           wx:for="{{lines}}"
           wx:key="_id"
@@ -97,7 +84,7 @@
           class="person-node gender-surface {{showGenderColors && item.gender !== 'unknown' ? item.genderClass : 'gender-neutral'}} {{nameLayout === 'vertical' ? 'node-vertical' : ''}} {{item.lifeStatus === 'deceased' ? 'is-deceased' : ''}} {{item.isViewpoint ? 'is-viewpoint' : ''}} {{item.isSelected ? 'is-selected' : ''}}"
           style="{{item.style}}"
           data-id="{{item._id}}"
-          catchtap="showPerson"
+          catchtap="{{graphGesture.tap}}" data-gesture-action="showPerson"
         >
           <text class="gender-badge gender-node-badge {{showGenderColors && item.gender !== 'unknown' ? item.genderClass : 'gender-neutral'}}" wx:if="{{showGenderBadge}}">{{item.genderText}}</text>
           <text class="life-status-badge" wx:if="{{item.lifeStatus === 'deceased'}}">故</text>
@@ -114,12 +101,12 @@
           </block>
           <text class="node-kinship-multiple" wx:if="{{viewMode === 'perspective' && item.hasMultipleKinships}}">多重关系</text>
           <text class="child-rank-badge" wx:if="{{showChildRankBadge && item.childRankLabel}}">{{item.childRankLabel}}</text>
-          <view class="node-action-trigger" wx:if="{{item.isSelected}}" data-id="{{item._id}}" catchtap="openMemberActions">•••</view>
-          <view class="branch-count" wx:if="{{item.hiddenDescendantCount > 0}}" data-id="{{item._id}}" catchtap="expandBranch">+{{item.hiddenDescendantCount}} 人</view>
+          <view class="node-action-trigger" wx:if="{{item.isSelected}}" data-id="{{item._id}}" catchtap="{{graphGesture.tap}}" data-gesture-action="openMemberActions">•••</view>
+          <view class="branch-count" wx:if="{{item.hiddenDescendantCount > 0}}" data-id="{{item._id}}" catchtap="{{graphGesture.tap}}" data-gesture-action="expandBranch">+{{item.hiddenDescendantCount}} 人</view>
         </view>
         </view>
-      </movable-view>
-    </movable-area>
+      </view>
+    </view>
 
     <view class="graph-controls" wx:if="{{nodes.length > 0}}">
       <view class="graph-control" bindtap="zoomGraphIn">＋</view>
@@ -128,6 +115,9 @@
       <view class="graph-control graph-control-text orientation-control {{orientationChanging ? 'is-disabled' : ''}}" bindtap="togglePageOrientation">{{orientationChanging ? '切换中' : isLandscape ? '竖屏' : '横屏'}}</view>
       <view class="graph-control graph-control-text" bindtap="openDisplaySettings">设置</view>
       <view class="graph-control graph-control-text {{posterGenerating ? 'is-disabled' : ''}}" bindtap="generatePoster">图片</view>
+      <view class="graph-control {{orientationChanging ? 'is-disabled' : ''}}" bindtap="toggleCleanScreen" aria-role="button" aria-label="清屏查看家谱">
+        <view class="clean-screen-icon" aria-hidden="true"><view class="icon-corner top-left"></view><view class="icon-corner top-right"></view><view class="icon-corner bottom-left"></view><view class="icon-corner bottom-right"></view></view>
+      </view>
     </view>
 
     <view class="graph-help" wx:if="{{nodes.length > 0}}">
@@ -137,6 +127,10 @@
       <text wx:else>{{viewMode === 'full' ? '拖动查看全谱，点击成员进行操作' : '当前从' + viewpointName + '查看关系'}}</text>
     </view>
   </block>
+
+  <button class="clean-screen-exit" size="mini" wx:if="{{isCleanScreen}}" bindtap="toggleCleanScreen" aria-label="退出清屏">
+    <view class="clean-screen-icon is-exit" aria-hidden="true"><view class="icon-corner top-left"></view><view class="icon-corner top-right"></view><view class="icon-corner bottom-left"></view><view class="icon-corner bottom-right"></view></view>
+  </button>
 
   <view class="sheet-mask" wx:if="{{showFamilySheet}}" bindtap="closeFamilySheet">
     <view class="bottom-sheet" catchtap="stopEvent">

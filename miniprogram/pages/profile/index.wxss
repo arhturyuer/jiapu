@@ -17,3 +17,8 @@
 .pending-card { padding: 32rpx; display: flex; flex-direction: column; gap: 18rpx; border-color: #E7B66E; }.pending-title { color: #8A5A16; font-size: 36rpx; font-weight: 650; }.pending-desc { color: #765E3A; font-size: 28rpx; line-height: 1.65; }.contact-button,.text-button { min-height: 88rpx; color: #245C4A; background: transparent; font-size: 30rpx; text-decoration: underline; }
 .empty-action { width: 100%; margin: 0; }
 .banner-ad { margin-top:40rpx; }
+
+.test-reset-card { padding: 28rpx; }
+.test-reset-button { min-height: 88rpx; margin-top: 24rpx; padding: 16rpx 24rpx; color: #A13E36; background: #FFF4F1; border: 2rpx solid #E4B7B0; border-radius: 20rpx; font-size: 30rpx; line-height: 1.6; }
+.test-reset-button::after { border: none; }
+.test-reset-button[disabled] { opacity: 0.6; }

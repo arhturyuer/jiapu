@@ -1,0 +1,168 @@
+// View-layer state belongs to the viewport instance, never the shared module.
+function surface(owner) {
+  return owner.selectComponent('.graph-viewport');
+}
+function paint(owner, state) {
+  var canvas = owner.selectComponent('.graph-movable');
+  if (canvas) canvas.setStyle({
+    transform: 'translate3d(' + state.x + 'px,' + state.y + 'px,0) scale(' + state.scale + ')'
+  });
+}
+function report(owner, state, requestId) {
+  state.sequence = (state.sequence || 0) + 1;
+  owner.callMethod('onGraphGestureState', {
+    version: state.version, sequence: state.sequence,
+    requestId: requestId || 0, active: !!state.active,
+    x: state.x, y: state.y, scale: state.scale
+  });
+}
+function configure(value, oldValue, owner, instance) {
+  if (!value) return;
+  var state = instance.getState();
+  if (state.active) state.blocked = true;
+  if (value.disabled || state.disabled) {
+    state.blocked = false;
+    state.suppressTap = true;
+  }
+  state.active = false;
+  state.version = value.version;
+  state.x = value.x;
+  state.y = value.y;
+  state.scale = value.scale;
+  state.left = value.left || 0;
+  state.top = value.top || 0;
+  state.minimum = value.minimum;
+  state.maximum = value.maximum;
+  state.disabled = !!value.disabled;
+  paint(owner, state);
+}
+function snapshot(value, oldValue, owner, instance) {
+  if (!value || !value.id) return;
+  var state = instance.getState();
+  if (state.version !== value.version) return;
+  if (state.active) {
+    state.blocked = true;
+    state.suppressTap = true;
+  }
+  state.active = false;
+  report(owner, state, value.id);
+}
+function point(touch, state) {
+  return { id: touch.identifier, x: touch.clientX - state.left, y: touch.clientY - state.top };
+}
+function pick(touches, id) {
+  for (var i = 0; i < touches.length; i++) {
+    if (touches[i].identifier === id) return touches[i];
+  }
+  return null;
+}
+function rebase(touches, state) {
+  var first = pick(touches, state.firstId) || touches[0];
+  var second = pick(touches, state.secondId);
+  if (!second || second.identifier === first.identifier) {
+    second = null;
+    for (var i = 0; i < touches.length; i++) {
+      if (touches[i].identifier !== first.identifier) { second = touches[i]; break; }
+    }
+  }
+  state.firstId = first.identifier;
+  state.secondId = second ? second.identifier : null;
+  state.first = point(first, state);
+  state.second = second ? point(second, state) : null;
+  if (second) state.suppressTap = true;
+}
+function start(event, owner) {
+  var instance = surface(owner);
+  if (!instance || !event.touches.length) return;
+  var state = instance.getState();
+  if (state.disabled || !state.scale || state.blocked) return;
+  if (!state.active) {
+    state.active = true;
+    state.suppressTap = event.touches.length > 1;
+    state.origin = point(event.touches[0], state);
+    state.firstId = event.touches[0].identifier;
+    state.secondId = null;
+    report(owner, state, 0);
+  }
+  rebase(event.touches, state);
+}
+function move(event, owner) {
+  var instance = surface(owner);
+  if (!instance) return;
+  var state = instance.getState();
+  if (!state.active || state.blocked || !event.touches.length) return false;
+  var firstTouch = pick(event.touches, state.firstId);
+  var secondTouch = state.secondId === null ? null : pick(event.touches, state.secondId);
+  if (!firstTouch || (state.second && !secondTouch) || (!state.second && event.touches.length > 1)) {
+    rebase(event.touches, state);
+    return false;
+  }
+  var first = point(firstTouch, state);
+  if (state.second) {
+    var second = point(secondTouch, state);
+    var oldX = (state.first.x + state.second.x) / 2;
+    var oldY = (state.first.y + state.second.y) / 2;
+    var nextX = (first.x + second.x) / 2;
+    var nextY = (first.y + second.y) / 2;
+    var oldDX = state.first.x - state.second.x;
+    var oldDY = state.first.y - state.second.y;
+    var dx = first.x - second.x;
+    var dy = first.y - second.y;
+    var distance = Math.sqrt(oldDX * oldDX + oldDY * oldDY);
+    var nextDistance = Math.sqrt(dx * dx + dy * dy);
+    // Rebase every frame, including at the limits, so reversal is immediate.
+    var nextScale = distance > 0 && nextDistance > 0
+      ? Math.max(state.minimum, Math.min(state.maximum, state.scale * nextDistance / distance)) : state.scale;
+    state.x = nextX - (oldX - state.x) / state.scale * nextScale;
+    state.y = nextY - (oldY - state.y) / state.scale * nextScale;
+    state.scale = nextScale;
+    state.second = second;
+    state.suppressTap = true;
+  } else {
+    var offsetX = first.x - state.origin.x;
+    var offsetY = first.y - state.origin.y;
+    if (offsetX * offsetX + offsetY * offsetY > 64) state.suppressTap = true;
+    state.x += first.x - state.first.x;
+    state.y += first.y - state.first.y;
+  }
+  state.first = first;
+  paint(owner, state);
+  return false;
+}
+function end(event, owner) {
+  var instance = surface(owner);
+  if (!instance) return;
+  var state = instance.getState();
+  if (event.touches.length) {
+    if (state.active) rebase(event.touches, state);
+    return;
+  }
+  state.blocked = false;
+  if (!state.active) return;
+  state.active = false;
+  report(owner, state, 0);
+}
+function cancel(event, owner) {
+  var instance = surface(owner);
+  if (!instance) return;
+  var state = instance.getState();
+  state.suppressTap = true;
+  state.blocked = false;
+  if (!state.active) return;
+  state.active = false;
+  report(owner, state, 0);
+}
+function tap(event, owner) {
+  var instance = surface(owner);
+  if (!instance) return false;
+  var state = instance.getState();
+  if (state.suppressTap || state.active || state.blocked || state.disabled) return false;
+  var dataset = event.currentTarget.dataset;
+  // Only these graph actions are allowed through the view-layer tap gate.
+  var action = dataset.gestureAction;
+  if (action === 'showPerson' || action === 'openMemberActions' || action === 'expandBranch' || action === 'clearGraphSelection') {
+    owner.callMethod(action, { currentTarget: { dataset: { id: dataset.id } } });
+  }
+  return false;
+}
+module.exports = { configure: configure, snapshot: snapshot, start: start, move: move, end: end, cancel: cancel, tap: tap };

@@ -9,6 +9,8 @@ Page({
     startGender: '',
     fatherName: '',
     motherName: '',
+    hasBothParents: false,
+    parentsAreSpouses: true,
     spouseName: '',
     spouseGender: '',
     familyName: '',
@@ -28,10 +30,19 @@ Page({
     const field = event.currentTarget.dataset.field;
     const data = {};
     data[field] = event.detail.value;
+    if (field === 'fatherName' || field === 'motherName') {
+      const fatherName = field === 'fatherName' ? event.detail.value : this.data.fatherName;
+      const motherName = field === 'motherName' ? event.detail.value : this.data.motherName;
+      data.hasBothParents = Boolean(fatherName.trim() && motherName.trim());
+    }
     if (field === 'spouseName' && event.detail.value.trim() && !this._spouseGenderTouched && !this.data.spouseGender) {
       data.spouseGender = personGender.opposite(this.data.startGender);
     }
     this.setData(data);
+  },
+
+  chooseParentsAreSpouses: function (event) {
+    this.setData({ parentsAreSpouses: event.detail.value.includes('parentsAreSpouses') });
   },
 
   chooseGender: function (event) {
@@ -97,6 +108,7 @@ Page({
       relatives: {
         fatherName: this.data.fatherName.trim(),
         motherName: this.data.motherName.trim(),
+        parentsAreSpouses: this.data.parentsAreSpouses,
         spouseName: this.data.spouseName.trim(),
         spouseGender: this.data.spouseName.trim() ? this.data.spouseGender : ''
       },

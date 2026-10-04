@@ -68,9 +68,18 @@ App({
 
   onShow: function () {
     const self = this;
+    if (this._analyticsTimer) clearInterval(this._analyticsTimer);
+    // Local date checks only; daily dedup prevents periodic cloud requests.
+    this._analyticsTimer = setInterval(function () { self.recordVisibleActivity(); }, 60000);
     this.ensureLogin().then(function () {
+      self.recordVisibleActivity();
       return self.refreshPendingBadge();
     }).catch(function () { self.clearPendingBadge(); });
+  },
+
+  onHide: function () {
+    if (this._analyticsTimer) clearInterval(this._analyticsTimer);
+    this._analyticsTimer = null;
   },
 
   restoreLocalState: function () {
@@ -91,7 +100,9 @@ App({
       });
     }
 
+    const sessionVersion = this._sessionVersion || 0;
     this.loginPromise = api.call('auth.login').then(function (data) {
+      self.assertSessionVersion(sessionVersion);
       if (self.globalData.user && data.user && self.globalData.user._id !== data.user._id) {
         self.dataCache = emptyDataCache();
         api.clearMediaUrlCache();
@@ -115,10 +126,10 @@ App({
       console.error('有谱登录失败', error);
       throw error;
     }).then(function (data) {
-      self.loginPromise = null;
+      if ((self._sessionVersion || 0) === sessionVersion) self.loginPromise = null;
       return data;
     }, function (error) {
-      self.loginPromise = null;
+      if ((self._sessionVersion || 0) === sessionVersion) self.loginPromise = null;
       throw error;
     });
 
@@ -127,6 +138,7 @@ App({
 
   loadFamilies: function (options) {
     const self = this;
+    const sessionVersion = this._sessionVersion || 0;
     return this.ensureLogin().then(function () {
       if (self.globalData.accountState === 'pending_delete') {
         self.globalData.familyList = [];
@@ -135,6 +147,7 @@ App({
       }
       return self.loadFamilyPages(false, options);
     }).then(function (data) {
+      self.assertSessionVersion(sessionVersion);
       const families = data.families || [];
       self.globalData.familyList = families;
 
@@ -157,6 +170,7 @@ App({
 
   loadCached: function (entry, loader, options) {
     const self = this;
+    const sessionVersion = this._sessionVersion || 0;
     const force = Boolean(options && options.force);
     if (!force && isFresh(entry)) return Promise.resolve(entry.data);
     if (force && entry.promise && entry.promiseVersion === (Number(entry.version) || 0) && entry.forcedVersion === entry.promiseVersion) {
@@ -168,7 +182,11 @@ App({
     const version = Number(entry.version) || 0;
     if (force) entry.forcedVersion = version;
     if (entry.promise && entry.promiseVersion === version) return entry.promise;
-    const request = Promise.resolve().then(loader).then(function (data) {
+    const request = Promise.resolve().then(function () {
+      self.assertSessionVersion(sessionVersion);
+      return loader();
+    }).then(function (data) {
+      self.assertSessionVersion(sessionVersion);
       // A write can invalidate a cache while an earlier read is still in flight.
       // Do not let that response update the cache or a waiting page with stale data.
       if ((Number(entry.version) || 0) !== version) {
@@ -233,15 +251,42 @@ App({
     const entry = this.getCacheEntry('graph', familyId);
     return this.loadCached(entry, function () {
       return api.call('graph.get', { familyId: familyId });
-    }, options);
+    }, options).then(data => { this.recordFamilyVisit(familyId); return data; });
   },
 
   getDashboard: function (familyId, options) {
     const entry = this.getCacheEntry('dashboard', familyId);
     return this.loadCached(entry, function () {
       return api.call('family.dashboard', { familyId: familyId });
-    }, options);
+    }, options).then(data => { this.recordFamilyVisit(familyId); return data; });
   },
+
+  recordVisit: function (kind, payload) {
+    if (!this.globalData.loggedIn || !this.globalData.user) return;
+    const date = new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10);
+    if (this._analyticsDay !== date) { this._analyticsDay = date; this._analyticsVisits = {}; }
+    const visits = this._analyticsVisits || (this._analyticsVisits = {});
+    const key = this.globalData.user._id + ':' + kind + ':' + ((payload && (payload.familyId || payload.slug)) || '');
+    if (visits[key]) return;
+    visits[key] = true;
+    api.call('analytics.track', Object.assign({ kind: kind }, payload || {})).catch(function () { delete visits[key]; });
+  },
+
+  recordVisibleActivity: function () {
+    this.recordVisit('foreground');
+    if (typeof getCurrentPages !== 'function') return;
+    const pages = getCurrentPages();
+    const page = pages[pages.length - 1];
+    if (!page || !page.data || page.data.loading || page.data.error) return;
+    if (page.route === 'pages/example/index' && page.data.example) this.recordExampleVisit(page.data.slug);
+    if (['pages/tree/index', 'pages/members/index', 'pages/family-manage/index'].includes(page.route)) {
+      const family = page.data.currentFamily || page.data.family;
+      if (family) this.recordFamilyVisit(family._id);
+    }
+  },
+
+  recordFamilyVisit: function (familyId) { if (familyId) this.recordVisit('family', { familyId: familyId }); },
+  recordExampleVisit: function (slug) { if (slug) this.recordVisit('example', { slug: slug }); },
 
   getPersonDetail: function (personId, options) {
     return this.loadCached(this.getCacheEntry('personDetail', personId), function () {
@@ -259,7 +304,7 @@ App({
   getExample: function (slug, options) {
     return this.loadCached(this.getCacheEntry('example', slug), function () {
       return api.call('examples.get', { slug: slug });
-    }, options);
+    }, options).then(data => { this.recordExampleVisit(slug); return data; });
   },
 
   getPreference: function (familyId, options) {
@@ -513,7 +558,27 @@ App({
     return view;
   },
 
+  assertSessionVersion: function (version) {
+    if ((this._sessionVersion || 0) !== version) {
+      const error = new Error('账户已重置，请重新进入');
+      error.code = 'ACCOUNT_SESSION_CHANGED';
+      throw error;
+    }
+  },
+
+  clearTestSession: function () {
+    this.clearLocalData();
+    const keys = wx.getStorageInfoSync().keys || [];
+    keys.forEach(function (key) {
+      if (key.indexOf('youpu_') === 0) wx.removeStorageSync(key);
+    });
+  },
+
   clearLocalData: function () {
+    this._sessionVersion = (this._sessionVersion || 0) + 1;
+    this.loginPromise = null;
+    this.globalData.accountState = 'active';
+    this.globalData.deletion = null;
     this.clearPendingBadge();
     api.clearMediaUrlCache();
     wx.removeStorageSync('youpu_user');

@@ -3,8 +3,9 @@ import { computed, onMounted, reactive, ref } from 'vue';
 import { callOps, getErrorMessage, hasLoginState, signIn, signOut } from './cloudbase';
 import ExampleManager from './components/ExampleManager.vue';
 import FeedbackGroupManager from './components/FeedbackGroupManager.vue';
+import DataManager from './components/DataManager.vue';
 
-type ModuleKey = 'dashboard' | 'commerce' | 'users' | 'families' | 'examples' | 'feedbackGroup' | 'reports' | 'moderation' | 'deletions' | 'audits' | 'operators';
+type ModuleKey = 'analytics' | 'dashboard' | 'commerce' | 'users' | 'families' | 'examples' | 'feedbackGroup' | 'reports' | 'moderation' | 'deletions' | 'audits' | 'operators';
 type ModerationScope = 'pending' | 'reviewed';
 type ModerationMode = 'strict' | 'review';
 type ParticipationFilter = 'all' | 'visitor' | 'creator' | 'member' | 'creator_member' | 'participating';
@@ -47,6 +48,7 @@ interface ShareFunnelItem {
 
 const navItems: Array<{ key: ModuleKey; label: string; caption: string }> = [
   { key: 'dashboard', label: '概览', caption: '运行状态' },
+  { key: 'analytics', label: '数据管理', caption: '增长、活跃与付费' },
   { key: 'commerce', label: '商业化', caption: '收入与订单' },
   { key: 'users', label: '用户', caption: '账号处置' },
   { key: 'families', label: '家谱', caption: '风险治理' },
@@ -59,7 +61,7 @@ const navItems: Array<{ key: ModuleKey; label: string; caption: string }> = [
   { key: 'operators', label: '运营账号', caption: '白名单' }
 ];
 
-const actionByModule: Record<Exclude<ModuleKey, 'dashboard' | 'examples' | 'feedbackGroup'>, string> = {
+const actionByModule: Record<Exclude<ModuleKey, 'analytics' | 'dashboard' | 'examples' | 'feedbackGroup'>, string> = {
   commerce: 'commerce.orders',
   users: 'users.list',
   families: 'families.list',
@@ -91,6 +93,8 @@ const pageCursors = ref<string[]>(['']);
 const totals = reactive({ activeUsers: 0, currentParticipatingUsers: 0, visitorUsers: 0, activeFamilies: 0, reportBacklog: 0, moderationBacklog: 0, deletionBacklog: 0 });
 const shareFunnel = ref<{ days: number; items: ShareFunnelItem[] }>({ days: 30, items: [] });
 const commerceStats = ref<Row>({});
+const analyticsRefreshKey = ref(0);
+const analyticsLoading = ref(false);
 const dialog = reactive({
   open: false,
   title: '',
@@ -102,7 +106,7 @@ const dialog = reactive({
   payload: {} as Record<string, unknown>
 });
 const detail = ref<Row | null>(null);
-const detailKind = ref<'family' | 'user' | 'report'>('family');
+const detailKind = ref<'family' | 'user' | 'report' | 'order'>('family');
 const familyPeople = reactive({
   familyId: '', keyword: '', items: [] as Row[], nextCursor: '', hasMore: false, loading: false, error: ''
 });
@@ -328,6 +332,12 @@ async function loadModule(module: ModuleKey, direction: 'reset' | 'next' | 'prev
       resetListPagination();
       return;
     }
+    if (module === 'analytics') {
+      analyticsRefreshKey.value += 1;
+      rows.value = [];
+      resetListPagination();
+      return;
+    }
     if (module === 'examples' || module === 'feedbackGroup') {
       rows.value = [];
       resetListPagination();
@@ -396,9 +406,9 @@ function activeFilterDescription(): string {
       all: '', visitor: '仅访问未参与用户', participating: '当前参与家谱用户', creator: '创建者', member: '加入者', creator_member: '创建并加入用户'
     };
     const type = labels[userParticipationFilter.value];
-    return type || (listStatus.value === 'active' ? '活跃用户' : '');
+    return type || (listStatus.value === 'active' ? '可用用户' : '');
   }
-  if (activeModule.value === 'families' && listStatus.value === 'active') return '活跃家谱（未归档、未冻结）';
+  if (activeModule.value === 'families' && listStatus.value === 'active') return '有效家谱（未归档、未冻结）';
   if (activeModule.value === 'reports' && listScope.value === 'backlog') return '举报待办（待领取或处理中）';
   if (activeModule.value === 'deletions' && listScope.value === 'backlog') return '注销待办（待执行或失败）';
   return '';
@@ -472,6 +482,15 @@ async function viewUser(row: Row): Promise<void> {
     detailKind.value = 'user';
   } catch (err) {
     error.value = err instanceof Error ? err.message : '详情加载失败';
+  }
+}
+
+async function viewOrder(row: Row): Promise<void> {
+  try {
+    detail.value = await callOps<Row>('commerce.detail', { orderId: row._id });
+    detailKind.value = 'order';
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : '订单详情加载失败';
   }
 }
 
@@ -578,7 +597,7 @@ onMounted(bootstrap);
   <div v-if="booting" class="boot-screen"><div class="spinner"></div><p>正在验证运营身份...</p></div>
 
   <main v-else-if="!authenticated" class="login-page">
-    <section class="login-copy"><div class="brand-mark">谱</div><p class="eyebrow">YOUPU OPERATIONS</p><h1>让每一份家谱<br />都被稳妥地守护</h1><p>运营后台只处理必要的安全、举报与数据权利工单。所有访问都会留下审计记录。</p></section>
+    <section class="login-copy"><div class="brand-mark">谱</div><p class="eyebrow">YOUPU OPERATIONS</p><h1>让每一份家谱<br />都被稳妥地守护</h1><p>查看用户增长、家谱活跃与付费数据，处理安全、举报与数据权利工单。</p></section>
     <form class="login-card" aria-describedby="login-help login-error" @submit.prevent="submitLogin">
       <div><p class="eyebrow">运营人员登录</p><h2>欢迎回来</h2><p class="muted">仅限白名单中的 CloudBase 邮箱账号。</p></div>
       <label>邮箱<input v-model="login.email" type="email" inputmode="email" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="operator@example.com" :disabled="login.loading" required /></label>
@@ -597,16 +616,18 @@ onMounted(bootstrap);
     </aside>
 
     <main class="workspace">
-      <header><div><p class="eyebrow">{{ currentNav.caption }}</p><h1>{{ currentNav.label }}</h1></div><div class="header-actions"><button v-if="activeModule === 'operators' && operator?.role === 'super_admin'" class="primary compact" @click="operatorForm.open = true">新增运营账号</button><button class="secondary compact" :disabled="loading" @click="showAllRecords">刷新数据</button></div></header>
+      <header><div><p class="eyebrow">{{ currentNav.caption }}</p><h1>{{ currentNav.label }}</h1></div><div class="header-actions"><button v-if="activeModule === 'operators' && operator?.role === 'super_admin'" class="primary compact" @click="operatorForm.open = true">新增运营账号</button><button class="secondary compact" :disabled="loading || (activeModule === 'analytics' && analyticsLoading)" @click="showAllRecords">刷新数据</button></div></header>
 
       <p v-if="error" class="alert">{{ error }} <button @click="error = ''">关闭</button></p>
       <p v-if="notice" class="alert success" role="status">{{ notice }} <button @click="notice = ''">关闭</button></p>
 
+      <DataManager v-if="activeModule === 'analytics'" :refresh-key="analyticsRefreshKey" @loading="analyticsLoading = $event" @view-user="viewUser" @view-family="viewFamily" @view-order="viewOrder" />
+
       <section v-if="activeModule === 'dashboard'" class="dashboard-grid">
-        <button class="dashboard-card" :disabled="loading" @click="openDashboardList('users', { status: 'active' })"><span>活跃用户</span><strong>{{ totals.activeUsers }}</strong><small>已进入小程序的可用用户</small><em>查看列表 →</em></button>
+        <button class="dashboard-card" :disabled="loading" @click="openDashboardList('users', { status: 'active' })"><span>可用用户总数</span><strong>{{ totals.activeUsers }}</strong><small>已进入小程序的可用用户</small><em>查看列表 →</em></button>
         <button class="dashboard-card" :disabled="loading" @click="openDashboardList('users', { status: 'active', participationType: 'participating' })"><span>当前参与家谱用户</span><strong>{{ totals.currentParticipatingUsers }}</strong><small>创建或加入有效家谱</small><em>查看列表 →</em></button>
         <button class="dashboard-card" :disabled="loading" @click="openDashboardList('users', { status: 'active', participationType: 'visitor' })"><span>仅访问未参与用户</span><strong>{{ totals.visitorUsers }}</strong><small>已进入，尚未参与家谱</small><em>查看列表 →</em></button>
-        <button class="dashboard-card" :disabled="loading" @click="openDashboardList('families', { status: 'active' })"><span>活跃家谱</span><strong>{{ totals.activeFamilies }}</strong><small>未归档、未冻结</small><em>查看列表 →</em></button>
+        <button class="dashboard-card" :disabled="loading" @click="openDashboardList('families', { status: 'active' })"><span>有效家谱总数</span><strong>{{ totals.activeFamilies }}</strong><small>未归档、未冻结</small><em>查看列表 →</em></button>
         <button class="dashboard-card" :disabled="loading" :class="{ attention: totals.reportBacklog > 0 }" @click="openDashboardList('reports', { scope: 'backlog' })"><span>举报待办</span><strong>{{ totals.reportBacklog }}</strong><small>待领取或处理中</small><em>查看列表 →</em></button>
         <button class="dashboard-card" :disabled="loading" :class="{ attention: totals.moderationBacklog > 0 }" @click="openDashboardList('moderation')"><span>内容复核</span><strong>{{ totals.moderationBacklog }}</strong><small>机器疑似与审核中</small><em>查看列表 →</em></button>
         <button class="dashboard-card" :disabled="loading" :class="{ attention: totals.deletionBacklog > 0 }" @click="openDashboardList('deletions', { scope: 'backlog' })"><span>注销任务</span><strong>{{ totals.deletionBacklog }}</strong><small>待执行或失败</small><em>查看列表 →</em></button>
@@ -633,7 +654,7 @@ onMounted(bootstrap);
         <div class="table-card"><div v-if="loading && !rows.length" class="loading-state"><div class="spinner"></div><p>正在读取订单…</p></div><div v-else-if="!rows.length" class="empty-state"><div>空</div><h3>当前没有订单</h3></div><div v-else class="table-wrap"><table><thead><tr><th>订单 / 家谱</th><th>商品</th><th>金额</th><th>状态</th><th>查单状态</th><th>创建时间</th><th>操作</th></tr></thead><tbody><tr v-for="row in rows" :key="row._id"><td><strong>{{ row._id }}</strong><small>{{ row.familyName || row.familyId }}</small></td><td><strong>{{ row.productName }}</strong><small>{{ row.productId }}</small></td><td>{{ formatMoney(row.priceCents) }}</td><td><span class="status" :class="row.status">{{ commerceStatusLabel(row.status) }}</span></td><td><strong>{{ row.reconcileStatus || '—' }}</strong><small>{{ row.reconcileMessage }}</small></td><td>{{ formatDate(row.createdAt) }}</td><td class="row-actions"><button v-if="row.status === 'pending'" @click="openAction('重新查询订单', '只会请求后台重新向微信平台查单，不会手工开会员、改价或退款。', 'commerce.retryOrder', { orderId: row._id })">查单重试</button></td></tr></tbody></table></div><div v-if="rows.length" class="pagination"><span>本页 {{ rows.length }} 条</span><div><button :disabled="loading || pageNumber === 1" @click="loadModule(activeModule, 'previous')">上一页</button><strong>第 {{ pageNumber }} 页</strong><button :disabled="loading || !hasMore" @click="loadModule(activeModule, 'next')">下一页</button></div></div></div>
       </section>
 
-      <section v-else class="table-card">
+      <section v-else-if="activeModule !== 'analytics'" class="table-card">
         <div v-if="activeFilterDescription()" class="active-filter"><span>当前查看：{{ activeFilterDescription() }}</span><button :disabled="loading" @click="showAllRecords">查看全部</button></div>
         <div v-if="activeModule === 'users'" class="moderation-tabs" role="tablist" aria-label="用户家谱参与筛选">
           <button v-for="filter in ([['all', '全部'], ['visitor', '仅访问'], ['participating', '参与中'], ['creator', '创建者'], ['member', '加入者'], ['creator_member', '创建并加入']] as Array<[ParticipationFilter, string]>)" :key="filter[0]" role="tab" :aria-selected="userParticipationFilter === filter[0]" :class="{ active: userParticipationFilter === filter[0] }" :disabled="loading" @click="switchUserParticipationFilter(filter[0])">{{ filter[1] }}</button>
@@ -817,6 +838,16 @@ onMounted(bootstrap);
             </div>
             <p v-else class="detail-empty">暂无需要展示的运营动作。</p>
           </section>
+        </template>
+
+        <template v-else-if="detailKind === 'order'">
+          <div class="detail-hero"><div class="detail-heading"><p class="eyebrow">订单资料</p><h2>{{ detail.productName }}</h2><span class="status" :class="detail.status">{{ commerceStatusLabel(detail.status) }}</span></div></div>
+          <section class="detail-section"><dl class="detail-info-grid">
+            <div class="wide"><dt>订单 ID</dt><dd>{{ detail._id }}</dd></div><div class="wide"><dt>家谱 ID</dt><dd>{{ detail.familyId }}</dd></div>
+            <div><dt>金额</dt><dd>{{ formatMoney(detail.priceCents) }}</dd></div><div><dt>支付环境</dt><dd>{{ detail.paymentMode }}</dd></div>
+            <div><dt>创建</dt><dd>{{ formatDate(detail.createdAt) }}</dd></div><div><dt>支付</dt><dd>{{ formatDate(detail.paidAt) }}</dd></div>
+            <div><dt>退款</dt><dd>{{ formatDate(detail.refundedAt) }}</dd></div><div><dt>查单状态</dt><dd>{{ detail.reconcileStatus || '—' }}</dd></div>
+          </dl></section>
         </template>
 
         <template v-else>

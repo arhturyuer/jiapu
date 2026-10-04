@@ -2,6 +2,8 @@ const app = getApp();
 const api = require('../../utils/api');
 const graphLayout = require('../../utils/graph-layout');
 const graphViewport = require('../../utils/graph-viewport');
+const graphGesturePage = require('../../utils/graph-gesture-page');
+const graphCleanScreen = require('../../utils/graph-clean-screen');
 const kinship = require('../../utils/kinship');
 const personGender = require('../../utils/person-gender');
 const childRank = require('../../utils/child-rank');
@@ -16,7 +18,7 @@ const subscribeNotifications = require('../../utils/subscribe-notifications');
 
 const MAX_INTERACTIVE_NODES = 80;
 
-Page({
+Page(graphGesturePage.wrap({
   data: {
     selectedKinship: null,
     loading: true,
@@ -46,6 +48,7 @@ Page({
     graphY: 0,
     graphZoomClass: 'zoom-detail',
     graphScaleMin: 0.32,
+    isCleanScreen: false,
     pageOrientation: 'portrait',
     isLandscape: false,
     orientationChanging: false,
@@ -86,6 +89,8 @@ Page({
   },
 
   onShow: function () {
+    this._pageHidden = false;
+    if (app.recordFamilyVisit && this.data.currentFamily && !this.data.loading && !this.data.error) app.recordFamilyVisit(this.data.currentFamily._id);
     if (app.refreshPendingBadge) app.refreshPendingBadge().catch(function () {});
     this.resetPageOrientation();
     const pendingView = app.consumePendingView();
@@ -109,18 +114,21 @@ Page({
   },
 
   onHide: function () {
+    this._pageHidden = true;
+    this._loadRequestId = (this._loadRequestId || 0) + 1;
     this.flushGraphPreference();
     treePosterFlow.cancel(this);
     this.resetPageOrientation();
   },
 
   onUnload: function () {
+    this._pageHidden = true;
+    this._loadRequestId = (this._loadRequestId || 0) + 1;
     this.flushGraphPreference();
     if (this._perspectiveFilterTimer) clearTimeout(this._perspectiveFilterTimer);
     treePosterFlow.cancel(this);
-    if (this._graphSettleTimer) clearTimeout(this._graphSettleTimer);
     if (this._orientationTimer) clearTimeout(this._orientationTimer);
-    this.syncPageChrome(false);
+    this.resetPageOrientation();
   },
 
   onPullDownRefresh: function () {
@@ -136,10 +144,11 @@ Page({
     const returnFocus = this._relationReturnFocus;
     this._relationReturnFocus = null;
     const hasContent = this._hasLoaded && !this.data.loading;
+    const renderedFamilyId = this.data.currentFamily && this.data.currentFamily._id;
     const familyIsFresh = app.isCacheFresh('familyPages', false);
     const currentFamily = app.getCurrentFamily();
     const graphIsFresh = currentFamily && app.isCacheFresh('graph', currentFamily._id);
-    if (!config.force && !pendingView && hasContent && familyIsFresh && (!currentFamily || graphIsFresh)) {
+    if (!config.force && !pendingView && hasContent && familyIsFresh && currentFamily && graphIsFresh) {
       return Promise.resolve();
     }
     if (!hasContent) this.setData({ loading: true, loadError: '' });
@@ -147,10 +156,24 @@ Page({
     return app.loadFamilies(config).then(function (families) {
       if (requestId !== self._loadRequestId) return null;
       const currentFamily = app.getCurrentFamily();
+      const accountPending = app.globalData.accountState === 'pending_delete';
+      if (!currentFamily && !accountPending) {
+        self.setData({ loading: true, loadError: '', currentFamily: null, familyList: families });
+        return new Promise(function (resolve) {
+          wx.redirectTo({
+            url: '/pages/example/index?entry=default',
+            success: function () { resolve(); },
+            fail: function () {
+              if (requestId === self._loadRequestId) self.setData({ loading: false, loadError: '示例家谱暂时没有打开，请重试' });
+              resolve();
+            }
+          });
+        });
+      }
       self.setData({
         familyList: families,
         currentFamily: currentFamily,
-        accountPending: app.globalData.accountState === 'pending_delete',
+        accountPending: accountPending,
         loading: false
       });
       self.syncPageChrome(self.data.isLandscape);
@@ -213,7 +236,12 @@ Page({
         app.setCurrentFamily(data.family);
         const focusPersonId = !pendingView && returnFocus && returnFocus.familyId === data.family._id
           && persons.some(function (person) { return person._id === returnFocus.personId; }) ? returnFocus.personId : '';
-        self.renderGraph(mode, personId, { nameLayout: nameLayout, focusPersonId: focusPersonId });
+        self.renderGraph(mode, personId, {
+          nameLayout: nameLayout,
+          focusPersonId: focusPersonId,
+          initialView: true,
+          preserveViewport: Boolean(hasContent && renderedFamilyId === data.family._id && !pendingView && !returnFocus)
+        });
         self._hasLoaded = true;
         const tourKey = 'youpu_new_family_tour_' + data.family._id;
         if (wx.getStorageSync(tourKey)) {
@@ -303,11 +331,11 @@ Page({
     this.setData(patch, function () {
       if (optionsValue.preserveViewport) return;
       if (optionsValue.focusPersonId && result.nodes.some(function (node) { return node._id === optionsValue.focusPersonId; })) {
-        self.fitGraph(optionsValue.focusPersonId, false, { minimumFocusScale: 0.6 });
+        self.fitGraph(optionsValue.focusPersonId, false, { minimumFocusScale: 0.6, initialView: optionsValue.initialView });
       } else if (mode === 'perspective' && viewpointId) {
-        self.fitGraph(viewpointId, false, { minimumFocusScale: 0.6 });
+        self.fitGraph(viewpointId, false, { minimumFocusScale: 0.6, initialView: optionsValue.initialView });
       } else {
-        self.fitGraph('', true);
+        self.fitGraph('', true, { initialView: optionsValue.initialView });
       }
     });
   },
@@ -325,6 +353,7 @@ Page({
     this._currentGraphX = transform.x;
     this._currentGraphY = transform.y;
     this.setData({
+      graphGestureConfig: graphGesturePage.config(this, transform),
       graphScale: transform.scale,
       graphX: transform.x,
       graphY: transform.y,
@@ -333,18 +362,20 @@ Page({
   },
 
   getGraphDisplayScale: function (scale) {
-    return scale * graphViewport.MIN_SCALE / (this.data.graphScaleMin || graphViewport.MIN_SCALE);
+    return scale * this.getGraphViewport().rpxToPx / 0.5;
   },
 
   getGraphViewport: function () {
+    // Resize measurements are authoritative; window info may still describe
+    // portrait after the canvas has switched to landscape.
+    if (this._graphViewport) return this._graphViewport;
     const info = this.getWindowSize();
     const width = info.windowWidth || 375;
-    if (this._graphViewport && this._graphViewport.windowWidth === width) return this._graphViewport;
     const rpxToPx = width / 750;
     const isLandscape = width > (info.windowHeight || 667);
     return {
       width: width,
-      height: Math.max(isLandscape ? 120 : 240, (info.windowHeight || 667) - (isLandscape ? 0 : 112 * rpxToPx)),
+      height: Math.max(isLandscape ? 120 : 240, (info.windowHeight || 667) - (isLandscape || this.data.isCleanScreen ? 0 : 112 * rpxToPx)),
       rpxToPx: rpxToPx,
       windowWidth: width
     };
@@ -361,9 +392,24 @@ Page({
   fitGraph: function (focusPersonId, fitAll, fitOptions) {
     const layout = this._lastLayout;
     if (!layout || !layout.nodes.length) return;
+    if ((!this._graphViewport || this._graphViewport.left === undefined) && (this.createSelectorQuery || wx.createSelectorQuery)) {
+      const page = this;
+      const version = this._gestureVersion;
+      const layout = this._lastLayout;
+      this.measureGraphViewport(this.getWindowSize(), function (measured) {
+        if (page._pageHidden || page._hidden || page._unloaded || page._lastLayout !== layout || page._gestureVersion !== version) return;
+        page._graphViewport = measured;
+        // A missing rect leaves the controls usable without retry recursion.
+        if (measured.left === undefined) measured.left = 0;
+        page.fitGraph(focusPersonId, fitAll, fitOptions);
+      });
+      return;
+    }
     const viewport = this.getGraphViewport();
+    this._graphViewport = viewport;
     const optionsValue = fitOptions || {};
-    const transform = graphViewport.fitTransform(layout, viewport, {
+    const transform = (optionsValue.initialView ? graphViewport.initialTransform : graphViewport.fitTransform)(layout, viewport, {
+      relations: this.data.rawRelations,
       fitAll: fitAll,
       focusPersonId: focusPersonId,
       currentScale: this.getGraphTransform().scale,
@@ -401,25 +447,28 @@ Page({
     this.changeGraphScale(-0.15);
   },
 
+  toggleCleanScreen: function () { graphCleanScreen.toggle.call(this); },
+
   resetPageOrientation: function () {
     this._orientationResizeSequence = (this._orientationResizeSequence || 0) + 1;
     if (this._orientationTimer) clearTimeout(this._orientationTimer);
     this._orientationTimer = null;
-    const needsReset = this.data.pageOrientation !== 'portrait' || this.data.isLandscape || this.data.orientationChanging;
+    const needsReset = this.data.pageOrientation !== 'portrait' || this.data.isLandscape || this.data.orientationChanging || this.data.isCleanScreen;
     if (needsReset) {
       if (!this._orientationViewport) this._orientationViewport = this.getGraphViewport();
       if (!this._orientationTransform) this._orientationTransform = this.getGraphTransform();
       this._orientationTarget = 'portrait';
-      this.setData({ pageOrientation: 'portrait', isLandscape: false, orientationChanging: false });
+      this.setData({ pageOrientation: 'portrait', isLandscape: false, orientationChanging: false, isCleanScreen: false });
     }
     this.syncPageChrome(false);
   },
 
   syncPageChrome: function (isLandscape) {
     if (typeof wx === 'undefined') return;
+    isLandscape = isLandscape || this.data.isCleanScreen;
     const familyName = this.data.currentFamily && this.data.currentFamily.name;
     if (wx.setNavigationBarTitle) {
-      wx.setNavigationBarTitle({ title: isLandscape && familyName ? familyName : '有谱' });
+      wx.setNavigationBarTitle({ title: familyName || '有谱' });
     }
     if (isLandscape) {
       if (wx.hideTabBar) wx.hideTabBar({ animation: false });
@@ -508,7 +557,7 @@ Page({
                 minimumScale: minimumScale
               }));
             } else {
-              self.fitGraph(self.data.selectedPersonId || self.data.viewpointId, !(self.data.selectedPersonId || self.data.viewpointId));
+              self.fitGraph(self.data.selectedPersonId || self.data.viewpointId, !(self.data.selectedPersonId || self.data.viewpointId), { initialView: true });
             }
           }
           if (settled) {
@@ -527,7 +576,7 @@ Page({
     const height = Number(size.windowHeight) || 667;
     const fallback = {
       width: width,
-      height: Math.max(width > height ? 120 : 240, height - (width > height ? 0 : 112 * width / 750)),
+      height: Math.max(width > height ? 120 : 240, height - (width > height || this.data.isCleanScreen ? 0 : 112 * width / 750)),
       rpxToPx: width / 750,
       windowWidth: width
     };
@@ -536,6 +585,8 @@ Page({
     query.exec(function (result) {
       const rect = result && result[0];
       callback(rect && rect.width && rect.height ? {
+        left: rect.left,
+        top: rect.top,
         width: rect.width,
         height: rect.height,
         rpxToPx: width / 750,
@@ -614,30 +665,6 @@ Page({
     return this._graphPreferenceInFlight;
   },
 
-  onGraphScale: function (event) {
-    const scale = event.detail.scale;
-    if (!scale) return;
-    this._currentGraphScale = scale;
-    this.scheduleGraphSettle();
-  },
-
-  onGraphChange: function (event) {
-    if (typeof event.detail.x === 'number') this._currentGraphX = event.detail.x;
-    if (typeof event.detail.y === 'number') this._currentGraphY = event.detail.y;
-    this.scheduleGraphSettle();
-  },
-
-  scheduleGraphSettle: function () {
-    const self = this;
-    if (this._graphSettleTimer) clearTimeout(this._graphSettleTimer);
-    this._graphSettleTimer = setTimeout(function () {
-      self._graphSettleTimer = null;
-      const scale = self.getGraphDisplayScale(self.getGraphTransform().scale);
-      const nextClass = graphViewport.zoomClassForScale(scale, self.data.graphZoomClass);
-      if (nextClass !== self.data.graphZoomClass) self.setData({ graphZoomClass: nextClass });
-    }, 160);
-  },
-
   expandAllBranches: function () {
     if (this.data.autoCollapseEnabled && this.data.rawPersons.length > MAX_INTERACTIVE_NODES) {
       wx.showToast({ title: '家谱较大，请按分支展开', icon: 'none' });
@@ -695,6 +722,7 @@ Page({
   },
 
   switchFamily: function (event) {
+    graphGesturePage.invalidate(this);
     const familyId = event.currentTarget.dataset.id;
     const family = this.data.familyList.find(function (item) { return item._id === familyId; });
     if (!family) return;
@@ -950,6 +978,7 @@ Page({
   showFullGraph: function () {
     const family = this.data.currentFamily;
     this.renderGraph('full', '', {
+      initialView: true,
       selectedPersonId: '',
       statePatch: {
         viewMode: 'full',
@@ -1154,4 +1183,4 @@ Page({
   },
 
   stopEvent: function () {}
-});
+}));

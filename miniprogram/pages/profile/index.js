@@ -4,6 +4,13 @@ const privacy = require('../../utils/privacy');
 const formState = require('../../utils/form-state');
 const commerceConfig = require('../../config/commerce');
 const shareCard = require('../../utils/share-card');
+const environmentConfig = require('../../config/env');
+
+function canResetTestAccount() {
+  const runtime = environmentConfig.resolveRuntimeEnvironment(wx);
+  return runtime.active === 'staging' && runtime.runtimeVersion === 'develop' &&
+    app.globalData.environment === 'staging' && app.globalData.env === runtime.environment.cloudEnv;
+}
 
 var AVATAR_CACHE_KEY = 'youpu_avatar_cache';
 
@@ -49,16 +56,25 @@ Page({
     savingProfile: false,
     hasNameChanges: false,
     adUnitId: '',
-    adVisible: false
+    adVisible: false,
+    showTestReset: false,
+    resettingTestAccount: false
   },
 
-  onShow: function () { this.loadPage(); if (app.refreshPendingBadge) app.refreshPendingBadge().catch(function () {}); },
+  onShow: function () {
+    this._unloaded = false;
+    this.setData({ showTestReset: canResetTestAccount() });
+    if (this.data.resettingTestAccount) return;
+    this.loadPage();
+    if (app.refreshPendingBadge) app.refreshPendingBadge().catch(function () {});
+  },
 
-  onUnload: function () { formState.clearLeaveAlert(this); },
+  onUnload: function () { this._unloaded = true; this._pageVersion = (this._pageVersion || 0) + 1; formState.clearLeaveAlert(this); },
 
   loadPage: function (options) {
     const self = this;
     const config = options || {};
+    const version = this._pageVersion = (this._pageVersion || 0) + 1;
     const hasContent = this._hasLoaded && !this.data.loading;
     if (!config.force && hasContent && app.isCacheFresh('profile')) return Promise.resolve();
     if (!hasContent) this.setData({ loading: true, error: '' });
@@ -95,6 +111,7 @@ Page({
         });
       });
     }, config).then(function (pageData) {
+      if (self._unloaded || version !== self._pageVersion || self.data.resettingTestAccount) return;
       if (pageData.pending) {
         const cachedUrl = getCachedAvatarUrl(pageData.user.avatarAssetId);
         self.setData({
@@ -108,6 +125,7 @@ Page({
       self._hasLoaded = true;
       formState.clearLeaveAlert(self);
     }).catch(function (error) {
+      if (self._unloaded || version !== self._pageVersion || self.data.resettingTestAccount) return;
       if (!hasContent) self.setData({ loading: false, error: api.userMessage(error, '页面加载失败，请检查网络后重试') });
       else console.warn('后台刷新我的页面失败，保留当前内容', error);
     });
@@ -125,7 +143,7 @@ Page({
 
   chooseAvatar: function () {
     const self = this;
-    if (this.data.savingAvatar || this.data.savingProfile || this.data.accountState !== 'active') return Promise.resolve();
+    if (this.data.resettingTestAccount || this.data.savingAvatar || this.data.savingProfile || this.data.accountState !== 'active') return Promise.resolve();
     let selectedPath = '';
     return privacy.ensurePrivacyAuthorized().then(function () {
       return wx.chooseMedia({ count: 1, mediaType: ['image'], sourceType: ['album', 'camera'] });
@@ -174,7 +192,7 @@ Page({
   saveProfile: function () {
     const self = this;
     const newName = (this.data.nickName || '').trim();
-    if (!newName || this.data.savingProfile || this.data.savingAvatar || this.data.accountState !== 'active') return Promise.resolve();
+    if (!newName || this.data.resettingTestAccount || this.data.savingProfile || this.data.savingAvatar || this.data.accountState !== 'active') return Promise.resolve();
     this.setData({ savingProfile: true });
     return api.call('auth.updateProfile', { nickName: newName }).then(function (data) {
       app.setUser(data.user);
@@ -186,6 +204,43 @@ Page({
     }).catch(function (error) {
       wx.showToast({ title: api.userMessage(error, '保存失败'), icon: 'none' });
       self.setData({ savingProfile: false });
+    });
+  },
+
+  resetTestAccount: function () {
+    const self = this;
+    if (!canResetTestAccount() || this.data.resettingTestAccount || this.data.savingAvatar || this.data.savingProfile) return Promise.resolve();
+    this.setData({ resettingTestAccount: true });
+    this._pageVersion = (this._pageVersion || 0) + 1;
+    const confirmation = this._testResetCompleted ? Promise.resolve({ confirm: true }) : wx.showModal({
+      title: '注销测试账户并重新体验？',
+      content: '仅限测试环境：立即注销当前测试身份，清除本机体验记录，重新以空白账户进入。你将退出所有家谱；只有你一位管理员的家谱会归档。此操作没有冷静期，旧身份无法恢复。',
+      confirmText: '注销重进', confirmColor: '#B43D3D'
+    });
+    return confirmation.then(function (result) {
+      if (!result.confirm || self._unloaded) return null;
+      if (self._testResetCompleted) return { reset: true };
+      if (!self._testResetRequest) {
+        self._testResetRequest = {
+          idempotencyKey: 'test-reset-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12),
+          expectedUserId: self.data.user && self.data.user._id || '', envVersion: 'develop'
+        };
+      }
+      return api.call('account.resetTest', self._testResetRequest);
+    }).then(function (data) {
+      if (!data || !data.reset) return;
+      if (!self._testResetCompleted) {
+        self._testResetCompleted = true;
+        app.clearTestSession();
+        formState.clearLeaveAlert(self);
+        if (!self._unloaded) self.setData({ user: null, nickName: '', avatarUrl: '', avatarAssetId: '', hasNameChanges: false, adVisible: false, accountState: 'active', deletion: null });
+      }
+      return wx.reLaunch({ url: '/pages/tree/index' });
+    }).catch(function (error) {
+      if (self._unloaded) return;
+      wx.showToast({ title: api.userMessage(error, self._testResetCompleted ? '注销完成，请再次点击重新进入' : '注销失败，请重试'), icon: 'none' });
+    }).then(function () {
+      if (!self._unloaded) self.setData({ resettingTestAccount: false });
     });
   },
 

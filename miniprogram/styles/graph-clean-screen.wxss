@@ -1,0 +1,49 @@
+button.clean-screen-exit {
+  position: fixed;
+  right: calc(12px + env(safe-area-inset-right));
+  bottom: calc(12px + env(safe-area-inset-bottom));
+  z-index: 22;
+  width: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  height: 44px;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #245C4A;
+  background: rgba(255, 254, 250, 0.92);
+  border: 1px solid #D8DED9;
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 42px;
+}
+
+.clean-screen-icon {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  pointer-events: none;
+}
+
+.icon-corner {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  box-sizing: border-box;
+  border: solid #245C4A;
+}
+
+.icon-corner.top-left { top: 0; left: 0; border-width: 2px 0 0 2px; }
+.icon-corner.top-right { top: 0; right: 0; border-width: 2px 2px 0 0; }
+.icon-corner.bottom-left { bottom: 0; left: 0; border-width: 0 0 2px 2px; }
+.icon-corner.bottom-right { bottom: 0; right: 0; border-width: 0 2px 2px 0; }
+.clean-screen-icon.is-exit .top-left { border-width: 0 2px 2px 0; }
+.clean-screen-icon.is-exit .top-right { border-width: 0 0 2px 2px; }
+.clean-screen-icon.is-exit .bottom-left { border-width: 2px 2px 0 0; }
+.clean-screen-icon.is-exit .bottom-right { border-width: 2px 0 0 2px; }
+
+.clean-screen-exit::after {
+  border: 0;
+}

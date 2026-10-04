@@ -49,6 +49,12 @@ function call(type, data) {
   payload.requestId = payload.idempotencyKey || requestId();
   delete payload.idempotencyKey;
   payload.type = type;
+  const runtime = environmentConfig.resolveRuntimeEnvironment(typeof wx === 'undefined' ? null : wx);
+  if (runtime.active === 'staging' && runtime.runtimeVersion === 'develop' && typeof getApp === 'function') {
+    const app = getApp();
+    const user = app && app.globalData && app.globalData.user;
+    if (user && user._id) payload.testActorId = user._id;
+  }
 
   function invoke(retriesLeft) {
     return new Promise(function (resolve, reject) {
