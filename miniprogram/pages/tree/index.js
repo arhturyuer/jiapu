@@ -1,3 +1,4 @@
+const launchAd = require('../../utils/launch-ad');
 const app = getApp();
 const api = require('../../utils/api');
 const graphLayout = require('../../utils/graph-layout');
@@ -9,7 +10,7 @@ const personGender = require('../../utils/person-gender');
 const childRank = require('../../utils/child-rank');
 const personDate = require('../../utils/person-date');
 const memberActions = require('../../utils/member-actions');
-const commerceConfig = require('../../config/commerce');
+const adAccess = require('../../utils/ad-access');
 const shareInvite = require('../../utils/share-invite');
 const shareCard = require('../../utils/share-card');
 const posterInvite = require('../../utils/poster-invite');
@@ -18,7 +19,7 @@ const subscribeNotifications = require('../../utils/subscribe-notifications');
 
 const MAX_INTERACTIVE_NODES = 80;
 
-Page(graphGesturePage.wrap({
+Page(launchAd.wrap(graphGesturePage.wrap({
   data: {
     selectedKinship: null,
     loading: true,
@@ -63,8 +64,10 @@ Page(graphGesturePage.wrap({
     selectedPersonId: '',
     selectedPerson: null,
     showMemberSheet: false,
+    topAdUnitId: '',
+    topAdVisible: false, topAdLoaded: false, topAdFamilyId: '', topAdVersion: 0,
     memberAdUnitId: '',
-    memberAdVisible: false,
+    memberAdVisible: false, memberAdMounted: false, memberAdLoaded: false, memberAdReserved: false, memberAdPreloadState: 'idle', memberAdWidth: 0, memberAdLayoutPending: false, memberAdFamilyId: '', memberAdVersion: 0,
     showFamilySheet: false,
     showPerspectiveSheet: false,
     showChildOrderSheet: false,
@@ -94,6 +97,9 @@ Page(graphGesturePage.wrap({
     if (app.refreshPendingBadge) app.refreshPendingBadge().catch(function () {});
     this.resetPageOrientation();
     const pendingView = app.consumePendingView();
+    adAccess.hide(this, true);
+    adAccess.hide(this, 'treeTop');
+    this._adPageHidden = false;
     this.loadPage(pendingView);
     this.loadNotificationTemplates();
     this.syncPageOrientationSoon();
@@ -114,6 +120,9 @@ Page(graphGesturePage.wrap({
   },
 
   onHide: function () {
+    this._adPageHidden = true;
+    adAccess.hide(this, true);
+    adAccess.hide(this, 'treeTop');
     this._pageHidden = true;
     this._loadRequestId = (this._loadRequestId || 0) + 1;
     this.flushGraphPreference();
@@ -122,6 +131,9 @@ Page(graphGesturePage.wrap({
   },
 
   onUnload: function () {
+    this._adPageHidden = true;
+    adAccess.hide(this, true);
+    adAccess.hide(this, 'treeTop');
     this._pageHidden = true;
     this._loadRequestId = (this._loadRequestId || 0) + 1;
     this.flushGraphPreference();
@@ -139,6 +151,8 @@ Page(graphGesturePage.wrap({
 
   loadPage: function (pendingView, options) {
     const self = this;
+    adAccess.hide(this, 'treeTop');
+    adAccess.hide(this, true);
     const config = options || {};
     const requestId = this._loadRequestId = (this._loadRequestId || 0) + 1;
     const returnFocus = this._relationReturnFocus;
@@ -149,7 +163,7 @@ Page(graphGesturePage.wrap({
     const currentFamily = app.getCurrentFamily();
     const graphIsFresh = currentFamily && app.isCacheFresh('graph', currentFamily._id);
     if (!config.force && !pendingView && hasContent && familyIsFresh && currentFamily && graphIsFresh) {
-      return Promise.resolve();
+      return Promise.all([this.refreshTreeAd(), this.preloadMemberAd()]);
     }
     if (!hasContent) this.setData({ loading: true, loadError: '' });
     else this.setData({ loadError: '' });
@@ -276,8 +290,30 @@ Page(graphGesturePage.wrap({
       console.error('加载家谱失败', error);
       if (!hasContent) self.setData({ loading: false, loadError: api.userMessage(error, '家谱加载失败') });
       else console.warn('后台刷新家谱失败，保留当前内容', error);
+    }).then(function () {
+      if (requestId === self._loadRequestId) return Promise.all([self.refreshTreeAd(), self.preloadMemberAd()]);
     });
   },
+
+  preloadMemberAd: function () {
+    if (this.data.loading || this.data.loadError || this.data.accountPending) return Promise.resolve();
+    return adAccess.preloadMember(this, app, this.data.currentFamily);
+  },
+
+  refreshTreeAd: function () {
+    const self = this;
+    return adAccess.refresh(this, app, 'treeTop', this.data.currentFamily, function () {
+      return !self.data.loading && !self.data.loadError && !self.data.accountPending
+        && !self.data.showShareReminder && !self._adPageHidden && !self._unloaded
+        && !(typeof wx !== 'undefined' && wx.canIUse && !wx.canIUse('ad-custom'));
+    });
+  },
+
+  adLoad: function (event) { adAccess.loaded(this, 'treeTop', event); },
+  adError: function (event) { adAccess.error(this, 'treeTop', event); },
+  adClose: function (event) { adAccess.error(this, 'treeTop', event); },
+  dismissTopAd: function () { adAccess.hide(this, 'treeTop'); },
+  openTopAdMembership: function () { adAccess.openMembership(this, app, 'treeTop'); },
 
   shouldShowShareReminder: function (family) {
     return Boolean(family
@@ -289,6 +325,8 @@ Page(graphGesturePage.wrap({
 
   renderGraph: function (mode, viewpointId, renderOptions) {
     const optionsValue = renderOptions || {};
+    if (optionsValue.statePatch && optionsValue.statePatch.showMemberSheet === false
+      && (this.data.memberAdVisible || this.data.memberAdReserved || this.data.memberAdLayoutPending)) adAccess.closeMember(this);
     const collapsedIds = optionsValue.collapsedPersonIds || this.data.collapsedPersonIds;
     const nameLayout = optionsValue.nameLayout === 'vertical' ? 'vertical' : optionsValue.nameLayout === 'horizontal' ? 'horizontal' : this.data.nameLayout;
     const selectedPersonId = Object.prototype.hasOwnProperty.call(optionsValue, 'selectedPersonId')
@@ -547,6 +585,7 @@ Page(graphGesturePage.wrap({
       graphScaleMin: minimumScale
     }, function () {
       if (resizeSequence !== self._orientationResizeSequence) return;
+      adAccess.resizeMember(self, app);
       const measure = function () {
         self.measureGraphViewport({ windowWidth: width, windowHeight: height }, function (nextViewport) {
           if (resizeSequence !== self._orientationResizeSequence) return;
@@ -763,18 +802,16 @@ Page(graphGesturePage.wrap({
     const personId = event.currentTarget.dataset.id;
     const person = this.data.rawPersons.find(function (item) { return item._id === personId; });
     if (!person) return;
-    const memberAdUnitId = commerceConfig.resolveBanner(app.globalData && app.globalData.environment, 'memberSheet');
     const family = this.data.currentFamily;
     this.setData({
       selectedKinship: this.data.viewMode === 'perspective' ? kinship.memberKinshipCard(this._lastLayout && this._lastLayout.kinshipDetails, personId, this.data.viewpointName, this.data.rawPersons) : null,
       selectedPersonId: personId,
       selectedPerson: this.decorateSelectedPerson(person),
       showMemberSheet: true,
-      memberAdUnitId: memberAdUnitId,
-      memberAdVisible: Boolean(memberAdUnitId && family && !(family.membership && family.membership.active))
+      memberAdReserved: adAccess.reserveMemberSpace(app, family, this)
     });
+    return adAccess.openMember(this, app, family);
   },
-
   decorateSelectedPerson: function (person) {
     const node = (this._lastLayout && this._lastLayout.nodes || []).find(function (item) {
       return item._id === person._id;
@@ -798,6 +835,7 @@ Page(graphGesturePage.wrap({
   },
 
   closeMemberSheet: function () {
+    adAccess.closeMember(this);
     this.setData({ showMemberSheet: false, selectedKinship: null });
   },
 
@@ -840,6 +878,7 @@ Page(graphGesturePage.wrap({
       wx.showToast({ title: '至少有两个孩子才需要排行', icon: 'none' });
       return;
     }
+    adAccess.closeMember(this);
     this.setData({
       showMemberSheet: false,
       showChildOrderSheet: true,
@@ -1028,9 +1067,11 @@ Page(graphGesturePage.wrap({
     });
   },
 
-  hideMemberAd: function () {
-    this.setData({ memberAdVisible: false });
-  },
+  hideMemberAd: function (event) { adAccess.error(this, true, event); },
+  closeMemberAd: function (event) { adAccess.error(this, true, event); },
+  dismissMemberAd: function () { adAccess.dismissMember(this); },
+  showMemberAd: function (event) { adAccess.loaded(this, true, event); },
+  openAdMembership: function () { adAccess.openMembership(this, app, true); },
 
   startShare: function () {
     this.openShareSheet(this.data.viewMode, this.data.viewpointId, this.data.viewpointName);
@@ -1040,7 +1081,8 @@ Page(graphGesturePage.wrap({
     const self = this;
     const family = this.data.currentFamily;
     if (!family || !this.data.showShareReminder) return;
-    api.call('family.dismissShareReminder', { familyId: family._id }).then(function () {
+    return api.call('family.dismissShareReminder', { familyId: family._id }).then(function () {
+      if (self._adPageHidden || self._unloaded || !self.data.currentFamily || self.data.currentFamily._id !== family._id) return;
       const updatedFamily = Object.assign({}, family, { shareReminderDismissedAt: new Date().toISOString() });
       app.invalidateFamilyData(family._id);
       app.setCurrentFamily(updatedFamily);
@@ -1048,6 +1090,7 @@ Page(graphGesturePage.wrap({
         showShareReminder: false,
         currentFamily: updatedFamily
       });
+      return self.refreshTreeAd();
     }).catch(function (error) {
       wx.showToast({ title: api.userMessage(error, '暂时无法关闭提醒'), icon: 'none' });
     });
@@ -1183,4 +1226,4 @@ Page(graphGesturePage.wrap({
   },
 
   stopEvent: function () {}
-}));
+})));

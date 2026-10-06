@@ -20,7 +20,15 @@
   <view class="graph-help" wx:if="{{!loading && !error && example}}"><text wx:if="{{selectedPersonId && !showMemberSheet}}">关系已高亮，再次点击成员或点“•••”进行操作</text><text wx:elif="{{hiddenBranchCount > 0}}">已收起 {{hiddenBranchCount}} 人，点击 +人数 可展开分支</text><text wx:else>{{viewMode === 'full' ? '拖动查看全谱，点击成员进行操作' : '当前从' + viewpointName + '查看关系'}}</text></view>
   <button class="clean-screen-exit" size="mini" wx:if="{{isCleanScreen}}" bindtap="toggleCleanScreen" aria-label="退出清屏"><view class="clean-screen-icon is-exit" aria-hidden="true"><view class="icon-corner top-left"></view><view class="icon-corner top-right"></view><view class="icon-corner bottom-left"></view><view class="icon-corner bottom-right"></view></view></button>
 
-  <view class="sheet-mask" wx:if="{{showMemberSheet}}" bindtap="closeMemberSheet">
+  <view class="sheet-mask member-sheet-mask member-ad-measure" aria-hidden="true">
+    <view class="bottom-sheet person-sheet">
+      <view class="member-sheet-ad-placement">
+        <view class="member-sheet-ad-slot member-sheet-ad-measure-slot"></view>
+      </view>
+    </view>
+  </view>
+
+  <view class="sheet-mask member-sheet-mask {{!showMemberSheet ? 'member-ad-hidden' : ''}}" wx:if="{{showMemberSheet || memberAdMounted}}" hidden="{{!showMemberSheet}}" bindtap="closeMemberSheet">
     <view class="bottom-sheet person-sheet" catchtap="">
       <view class="person-sheet-content">
         <view class="sheet-handle"></view>
@@ -45,7 +53,18 @@
           </view>
         </view>
       </view>
-      <ad class="member-sheet-ad" wx:if="{{memberAdVisible}}" unit-id="{{memberAdUnitId}}" binderror="hideMemberAd"></ad>
+      <view class="member-sheet-ad-placement {{!memberAdReserved ? 'member-ad-hidden' : ''}}" wx:if="{{memberAdReserved || memberAdMounted}}" hidden="{{!memberAdReserved}}">
+        <view class="member-sheet-ad-header">
+          <button class="member-sheet-ad-close" aria-label="关闭广告" bindtap="dismissMemberAd"><icon type="cancel" size="16" color="#65706A" /></button>
+          <button class="member-sheet-membership-link" bindtap="openAdMembership">开会员，全家人免广告</button>
+        </view>
+        <view class="member-sheet-ad-slot member-sheet-ad-visible-slot">
+          <view class="member-sheet-ad-placeholder" wx:if="{{!memberAdLoaded}}">广告位，收益用于运营开支</view>
+          <view class="member-sheet-ad-content" style="width:{{memberAdWidth}}px;">
+            <ad-custom class="member-sheet-ad {{!memberAdVisible ? 'member-ad-hidden' : ''}}" wx:if="{{memberAdMounted}}" hidden="{{!memberAdVisible}}" unit-id="{{memberAdUnitId}}" data-version="{{memberAdVersion}}" bindload="showMemberAd" binderror="hideMemberAd" bindclose="closeMemberAd"></ad-custom>
+          </view>
+        </view>
+      </view>
     </view>
   </view>
   <view class="sheet-mask" wx:if="{{showPerspectiveSheet}}" bindtap="closePerspectiveSheet"><view class="bottom-sheet perspective-sheet" catchtap=""><view class="sheet-handle"></view><view class="sheet-title">以某位成员看家谱</view><input class="person-search" placeholder="输入姓名查找" value="{{perspectiveKeyword}}" bindinput="filterPerspectives"/><scroll-view class="perspective-list" scroll-y><view class="perspective-option" wx:for="{{perspectiveResults}}" wx:key="_id" data-id="{{item._id}}" bindtap="selectPerspective"><view class="small-avatar gender-avatar {{item.genderClass}}">{{item.initial}}</view><text class="perspective-name">{{item.name}}</text><text class="gender-badge {{item.genderClass}}">{{item.genderText}}</text></view></scroll-view></view></view>

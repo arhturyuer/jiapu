@@ -131,6 +131,14 @@ test('关于页使用正式版实际版本并按最新在前展示受控更新�
   const verifier = fs.readFileSync(path.join(root, 'deployment/verify-release-note.mjs'), 'utf8');
   assert.deepEqual(releaseInfo.validateReleaseNotes(releaseNotes), [
     {
+      version: '1.6.5',
+      summary: '启用开屏、家谱顶部和人物操作弹框广告，优化广告复用体验，家庭会员全家免广告。'
+    },
+    {
+      version: '1.6.4',
+      summary: '优化个人操作弹框广告预加载与重复打开体验，家庭会员全家免广告。'
+    },
+    {
       version: '1.6.2',
       summary: '家庭页新增待审核提醒，家谱成员可按自身权限分享长期有效、不限人数的邀请。'
     },

@@ -1,7 +1,8 @@
+const launchAd = require('../../utils/launch-ad');
 const app = getApp();
 const api = require('../../utils/api');
 
-Page({
+Page(launchAd.wrap({
   data: {
     token: '',
     loading: true,
@@ -78,4 +79,4 @@ Page({
   goHome: function () {
     wx.switchTab({ url: '/pages/tree/index' });
   }
-});
+}));

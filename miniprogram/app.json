@@ -1,5 +1,6 @@
 {
   "pages": [
+    "pages/launch-ad/index",
     "pages/tree/index",
     "pages/members/index",
     "pages/notification-entry/index",

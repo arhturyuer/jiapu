@@ -1,3 +1,4 @@
+const launchAd = require('../../utils/launch-ad');
 const app = getApp();
 const api = require('../../utils/api');
 const format = require('../../utils/format');
@@ -12,7 +13,7 @@ function decorateChanges(items) {
   });
 }
 
-Page({
+Page(launchAd.wrap({
   data: {
     familyId: '',
     reviewEntry: false,
@@ -150,4 +151,4 @@ Page({
       self.setData({ reviewingId: '' });
     });
   }
-});
+}));

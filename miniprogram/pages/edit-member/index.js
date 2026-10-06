@@ -1,3 +1,4 @@
+const launchAd = require('../../utils/launch-ad');
 const app = getApp();
 const api = require('../../utils/api');
 const privacy = require('../../utils/privacy');
@@ -32,7 +33,7 @@ function savedAvatarState(status) {
   return { state: '', text: '' };
 }
 
-Page({
+Page(launchAd.wrap({
   data: {
     personId: '',
     familyId: '',
@@ -300,4 +301,4 @@ Page({
       wx.showToast({ title: api.userMessage(error, '保存失败'), icon: 'none' });
     });
   }
-});
+}));

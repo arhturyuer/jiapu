@@ -1,7 +1,8 @@
+const launchAd = require('../../utils/launch-ad');
 const app = getApp();
 const api = require('../../utils/api');
 
-Page({
+Page(launchAd.wrap({
   data: {
     loading: true,
     error: '',
@@ -104,4 +105,4 @@ Page({
       ? '/pages/create-family/index?source=share_menu&opened=1'
       : '/pages/create-family/index?source=examples' });
   }
-});
+}));

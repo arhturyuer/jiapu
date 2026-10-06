@@ -1,3 +1,4 @@
+const launchAd = require('../../utils/launch-ad');
 const legal = require('../../config/legal');
 
 const CONTENT = {
@@ -38,11 +39,11 @@ const CONTENT = {
   }
 };
 
-Page({
+Page(launchAd.wrap({
   data: { legal: legal, content: CONTENT.privacy },
   onLoad: function (options) {
     const content = options.type === 'membership' ? CONTENT.membership : (options.type === 'terms' ? CONTENT.terms : CONTENT.privacy);
     this.setData({ content: content });
     wx.setNavigationBarTitle({ title: content.title });
   }
-});
+}));

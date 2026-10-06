@@ -1,3 +1,4 @@
+const launchAd = require('../../utils/launch-ad');
 const app = getApp();
 const api = require('../../utils/api');
 const kinship = require('../../utils/kinship');
@@ -13,7 +14,7 @@ function createFamilyUrl(slug, source) {
     + '&example=' + encodeURIComponent(slug);
 }
 
-Page({
+Page(launchAd.wrap({
   data: { slug: '', personId: '', shareSource: '', loading: true, error: '', person: null, relatives: [], openRelationId: '' },
   onLoad: function (options) {
     this.setData({ slug: options.slug || '', personId: options.id || '', shareSource: options.source === 'share_menu' ? 'share_menu' : '' });
@@ -63,4 +64,4 @@ Page({
   onRelationTouchCancel: function (event) { this.onRelationTouchEnd(event); },
   explainCreate: function () { wx.navigateTo({ url: createFamilyUrl(this.data.slug, this.data.shareSource) }); },
   viewFromPerson: function () { wx.redirectTo({ url: '/pages/example/index?slug=' + encodeURIComponent(this.data.slug) + '&personId=' + encodeURIComponent(this.data.personId) + (this.data.shareSource ? '&source=share_menu' : '') }); }
-});
+}));

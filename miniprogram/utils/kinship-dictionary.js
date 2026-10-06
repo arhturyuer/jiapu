@@ -14,7 +14,8 @@ function initialize() {
   data.tokens.forEach(function (token, index) { tokenCodes[token] = String.fromCharCode(65 + index); });
   let key = '';
   let label = '';
-  data.encoded.split('|').forEach(function (line) {
+  // Keys are uppercase, the label prefix is lowercase, and labels contain no ASCII.
+  data.encoded.match(/[A-Z]+[a-z][^A-Za-z]*/g).forEach(function (line) {
     const split = line.search(/[a-z]/);
     key = key.slice(0, line.charCodeAt(0) - 65) + line.slice(1, split);
     label = label.slice(0, line.charCodeAt(split) - 97) + line.slice(split + 1);

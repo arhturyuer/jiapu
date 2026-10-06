@@ -26,7 +26,10 @@
     </view></view>
 
     <view class="section-block"><view class="section-heading"><text class="section-title">帮助与反馈</text></view><view class="setting-list surface-card"><view class="setting-row" bindtap="showFeedbackGroup" hover-class="setting-row-active"><view><text class="setting-title">用户反馈群</text><text class="setting-desc">长按识别二维码，加入微信群反馈问题</text></view><text class="setting-arrow">›</text></view></view></view>
-    <ad class="banner-ad" wx:if="{{adVisible}}" unit-id="{{adUnitId}}" binderror="hideAd"></ad>
+    <view class="ad-placement {{adLoaded ? '' : 'ad-placement-loading'}}" wx:if="{{adVisible}}">
+      <ad class="banner-ad" wx:if="{{adVisible}}" unit-id="{{adUnitId}}" data-version="{{adVersion}}" bindload="showAd" binderror="hideAd"></ad>
+      <button class="ad-membership-link" wx:if="{{adVisible && adLoaded}}" bindtap="openAdMembership">开通家庭会员，全体家人免广告 ›</button>
+    </view>
   </block>
 
   <view class="section-block" wx:if="{{accountState === 'pending_delete'}}"><view class="section-heading"><text class="section-title">帮助与反馈</text></view><view class="setting-list surface-card"><view class="setting-row" bindtap="showFeedbackGroup" hover-class="setting-row-active"><view><text class="setting-title">用户反馈群</text><text class="setting-desc">长按识别二维码，加入微信群反馈问题</text></view><text class="setting-arrow">›</text></view></view></view>

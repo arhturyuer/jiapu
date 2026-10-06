@@ -1,8 +1,9 @@
+const launchAd = require('../../utils/launch-ad');
 const app = getApp();
 const api = require('../../utils/api');
 const privacy = require('../../utils/privacy');
 const formState = require('../../utils/form-state');
-const commerceConfig = require('../../config/commerce');
+const adAccess = require('../../utils/ad-access');
 const shareCard = require('../../utils/share-card');
 const environmentConfig = require('../../config/env');
 
@@ -42,7 +43,7 @@ function clearCachedAvatarUrl(assetId) {
   } catch (e) { /* ignore */ }
 }
 
-Page({
+Page(launchAd.wrap({
   data: {
     loading: true,
     error: '',
@@ -56,6 +57,7 @@ Page({
     savingProfile: false,
     hasNameChanges: false,
     adUnitId: '',
+    adLoaded: false, adFamilyId: '', adVersion: 0,
     adVisible: false,
     showTestReset: false,
     resettingTestAccount: false
@@ -66,10 +68,14 @@ Page({
     this.setData({ showTestReset: canResetTestAccount() });
     if (this.data.resettingTestAccount) return;
     this.loadPage();
+    this._adPageHidden = false;
+    adAccess.hide(this, false);
+    app.ensureLogin().then(() => adAccess.refresh(this, app, 'profile', app.getCurrentFamily())).catch(function () {});
     if (app.refreshPendingBadge) app.refreshPendingBadge().catch(function () {});
   },
 
-  onUnload: function () { this._unloaded = true; this._pageVersion = (this._pageVersion || 0) + 1; formState.clearLeaveAlert(this); },
+  onHide: function () { this._adPageHidden = true; adAccess.hide(this, false); },
+  onUnload: function () { this._adPageHidden = true; adAccess.hide(this, false); this._unloaded = true; this._pageVersion = (this._pageVersion || 0) + 1; formState.clearLeaveAlert(this); },
 
   loadPage: function (options) {
     const self = this;
@@ -87,15 +93,11 @@ Page({
         if (accountState === 'pending_delete') {
           return { pending: true, user: user, accountState: accountState, deletion: deletion };
         }
-        const currentFamily = app.getCurrentFamily();
-        const adUnitId = commerceConfig.resolveBanner(app.globalData.environment, 'profile');
         self._initialNickName = user.nickName || '';
         const cachedUrl = getCachedAvatarUrl(user.avatarAssetId);
         const pageData = {
           pending: false, user: user, accountState: accountState, deletion: deletion,
           nickName: user.nickName || '', avatarUrl: cachedUrl, avatarAssetId: user.avatarAssetId || '',
-          adUnitId: adUnitId,
-          adVisible: Boolean(currentFamily && !(currentFamily.membership && currentFamily.membership.active) && adUnitId)
         };
         if (!user.avatarAssetId) return pageData;
         return api.getMediaPresentation([user.avatarAssetId]).then(function (presentation) {
@@ -246,7 +248,9 @@ Page({
 
   showPrivacy: function () { wx.navigateTo({ url: '/pages/privacy/index' }); },
   showFeedbackGroup: function () { wx.navigateTo({ url: '/pages/feedback-group/index' }); },
-  hideAd: function () { this.setData({ adVisible: false }); },
+  hideAd: function (event) { adAccess.error(this, false, event); },
+  showAd: function (event) { adAccess.loaded(this, false, event); },
+  openAdMembership: function () { adAccess.openMembership(this, app, false); },
 
   onShareAppMessage: function () {
     const card = shareCard.create({ kind: 'discovery', variant: 'intro' });
@@ -262,4 +266,4 @@ Page({
   },
 
   showAbout: function () { wx.navigateTo({ url: '/pages/about/index' }); }
-});
+}));

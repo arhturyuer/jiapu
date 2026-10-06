@@ -1,3 +1,4 @@
+const launchAd = require('../../utils/launch-ad');
 const api = require('../../utils/api');
 const format = require('../../utils/format');
 
@@ -17,7 +18,7 @@ const ACTION_OPTIONS = [
   { key: 'change.review', label: '处理修改申请' }
 ];
 
-Page({
+Page(launchAd.wrap({
   data: {
     familyId: '', items: [], loading: true, loadingMore: false, hasMore: false, cursor: '', membershipRequired: false,
     action: '', actionIndex: 0, actionLabel: '全部变化', actionOptions: ACTION_OPTIONS,
@@ -52,4 +53,4 @@ Page({
   applyFilters: function () { this.load(true); },
   loadMore: function () { this.load(false); },
   openMembership: function () { wx.navigateTo({ url: '/pages/membership/index?familyId=' + this.data.familyId }); }
-});
+}));

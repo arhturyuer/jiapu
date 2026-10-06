@@ -10,18 +10,20 @@ const library = require(source);
 const tokenList = ['f', 'm', 's', 'd', 'h', 'w', 'ob', 'lb', 'xb', 'os', 'ls', 'xs', '0', '1', 's&o', 's&l', 'd&o', 'd&l', 'xb&o', 'xb&l', 'xs&o', 'xs&l', 'f&o', 'f&l', 'm&o', 'm&l'];
 const entries = [...library.data].filter(([key]) => key.split(',').every(token => tokenList.includes(token)))
   .map(([key, labels]) => [key.split(',').map(token => String.fromCharCode(65 + tokenList.indexOf(token))).join(''), labels[0]])
-  .sort((a, b) => a[0] < b[0] ? -1 : 1);
+  // Group labels first so their long Chinese prefixes are stored only once.
+  .sort((a, b) => a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : a[0] < b[0] ? -1 : 1);
 let previous = ['', ''];
 function commonPrefix(a, b) { let i = 0; while (i < a.length && i < b.length && a[i] === b[i]) i += 1; return i; }
 const encoded = entries.map(row => {
   const keyPrefix = commonPrefix(previous[0], row[0]);
   const labelPrefix = commonPrefix(previous[1], row[1]);
-  if (labelPrefix > 25) throw new Error('Relationship label prefix exceeds compact format');
-  if (row[1].includes('|')) throw new Error('Dictionary separator conflicts with a relationship label');
+  if (keyPrefix > 25 || labelPrefix > 25) throw new Error('Relationship prefix exceeds compact format');
+  // Uppercase key codes delimit records; lowercase codes delimit labels.
+  if (/[\x00-\x7f]/.test(row[1])) throw new Error('ASCII relationship label conflicts with compact format');
   const line = String.fromCharCode(65 + keyPrefix) + row[0].slice(keyPrefix) + String.fromCharCode(97 + labelPrefix) + row[1].slice(labelPrefix);
   previous = row;
   return line;
-}).join('|');
+}).join('');
 const output = path.resolve(__dirname, '../miniprogram/utils/kinship-data');
 fs.mkdirSync(output, { recursive: true });
 fs.copyFileSync(path.join(source, 'LICENSE'), path.join(output, 'LICENSE'));
@@ -33,6 +35,6 @@ fs.writeFileSync(path.join(output, 'source.json'), JSON.stringify({
   integrity: 'sha512-pclNuxR3ZSL1dVuEtpJmpMcbkU387vooAHCbWxBlf0SZA4rcrKJRz0QwSGx/nZbh3firPMqT9YPU+CWU7bHlJA==',
   sourceSha256: crypto.createHash('sha256').update(fs.readFileSync(path.join(source, 'dist/relationship.min.js'))).digest('hex'),
   entries: entries.length,
-  format: 'Front-coded token keys and preferred labels; ambiguous selectors are excluded. No upstream inference code is shipped.'
+  format: 'Label-sorted front-coded token keys and preferred labels without record separators; ambiguous selectors are excluded. No upstream inference code is shipped.'
 }, null, 2) + '\n');
 console.log('Exported ' + entries.length + ' exact relationship entries, ' + Buffer.byteLength(encoded) + ' encoded bytes');

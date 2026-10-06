@@ -208,14 +208,31 @@ test('广告在家庭、我的和成员弹框按配置显示，无 ID 或会员�
   const config = require('../miniprogram/config/commerce');
   assert.equal(config.resolveBanner('staging', 'family'), '');
   assert.equal(config.resolveBanner('staging', 'profile'), '');
-  assert.equal(config.resolveBanner('staging', 'memberSheet'), '');
+  assert.equal(config.resolveBanner('staging', 'memberSheet'), 'adunit-f0e7fed2bde51c0c');
+  assert.equal(config.resolveBanner('production', 'memberSheet'), 'adunit-f0e7fed2bde51c0c');
+  assert.equal(config.resolveBanner('unknown', 'memberSheet'), '');
+  assert.equal(config.resolveBanner('staging', 'treeTop'), 'adunit-48f60f50925b53d9');
+  assert.equal(config.resolveBanner('production', 'treeTop'), 'adunit-48f60f50925b53d9');
+  assert.equal(config.resolveBanner('production', 'family'), '');
+  assert.equal(config.resolveBanner('production', 'profile'), '');
+  assert.deepEqual(config.memberAdReusePlatforms, { staging: { ios: true, android: true }, production: { ios: true, android: true } });
+  assert.equal(config.resolveBanner('unknown', 'treeTop'), '');
   const members = fs.readFileSync(path.join(root, 'miniprogram/pages/members/index.wxml'), 'utf8');
   const profile = fs.readFileSync(path.join(root, 'miniprogram/pages/profile/index.wxml'), 'utf8');
   assert.match(members, /wx:if="\{\{adVisible\}\}"/);
   assert.match(profile, /wx:if="\{\{adVisible\}\}"/);
   ['tree', 'example'].forEach(function (name) {
     const source = fs.readFileSync(path.join(root, 'miniprogram/pages', name, 'index.wxml'), 'utf8');
-    assert.match(source, /<ad class="member-sheet-ad" wx:if="\{\{memberAdVisible\}\}"/);
+    assert.match(source, /member-sheet-ad-placement[^>]*wx:if="\{\{memberAdReserved \|\| memberAdMounted\}\}"[^>]*hidden="\{\{!memberAdReserved\}\}"/);
+    assert.match(source, /member-sheet-mask[^>]*wx:if="\{\{showMemberSheet \|\| memberAdMounted\}\}"[^>]*hidden="\{\{!showMemberSheet\}\}"/);
+    assert.match(source, /member-sheet-ad-content[^>]*style="width:\{\{memberAdWidth\}\}px;/);
+    assert.match(source, /<ad-custom[^>]*wx:if="\{\{memberAdMounted\}\}"[^>]*hidden="\{\{!memberAdVisible\}\}"/);
+    assert.match(source, /<ad-custom[^>]*bindload="showMemberAd"[^>]*binderror="hideMemberAd"[^>]*bindclose="closeMemberAd"/);
+    assert.match(source, /member-sheet-ad-placeholder" wx:if="\{\{!memberAdLoaded\}\}">广告位，收益用于运营开支/);
+    const probe = source.match(/member-ad-measure"[^>]*>[\s\S]*?<\/view>\s*<\/view>\s*<\/view>/)[0];
+    assert.match(probe, /member-sheet-ad-measure-slot/);
+    assert.doesNotMatch(probe, /<ad-custom/);
+    assert.match(source, /member-sheet-ad-header">\s*<button class="member-sheet-ad-close" aria-label="关闭广告" bindtap="dismissMemberAd">[\s\S]*<button class="member-sheet-membership-link" bindtap="openAdMembership">开会员，全家人免广告<\/button>/);
   });
   ['invite', 'edit-member', 'privacy', 'membership', 'legal'].forEach(function (name) {
     const source = fs.readFileSync(path.join(root, 'miniprogram/pages', name, 'index.wxml'), 'utf8');
@@ -223,14 +240,15 @@ test('广告在家庭、我的和成员弹框按配置显示，无 ID 或会员�
   });
 });
 
-test('会员状态只在家庭页展示且我的页仅保留免广告判断', function () {
+test('会员状态集中家庭页展示，我的页广告另有会员购买入口', function () {
   const profile = fs.readFileSync(path.join(root, 'miniprogram/pages/profile/index.wxml'), 'utf8');
   const profileSource = fs.readFileSync(path.join(root, 'miniprogram/pages/profile/index.js'), 'utf8');
   const members = fs.readFileSync(path.join(root, 'miniprogram/pages/members/index.wxml'), 'utf8');
   const display = require('../miniprogram/utils/membership-display');
   assert.doesNotMatch(profile, /current-family-membership|membershipTierText|bindtap="openMembership"/);
   assert.doesNotMatch(profileSource, /membershipDisplay|openMembership\s*:/);
-  assert.match(profileSource, /currentFamily[\s\S]*membership\.active[\s\S]*adVisible/);
+  assert.match(profileSource, /adAccess\.refresh\(this, app, 'profile', app\.getCurrentFamily\(\)\)/);
+  assert.match(profile, /adVisible && adLoaded[\s\S]*bindtap="openAdMembership"/);
   assert.match(members, /family-membership-badge[\s\S]*membershipTierText/);
   assert.deepEqual(display.fromFamily({ membership: { active: false } }), {
     active: false, tierText: '免费版', detailText: '升级后全体家人共享会员权益'

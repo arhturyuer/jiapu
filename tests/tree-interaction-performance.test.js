@@ -7,6 +7,179 @@ const memberActions = require('../miniprogram/utils/member-actions');
 const commerceConfig = require('../miniprogram/config/commerce');
 const shareCard = require('../miniprogram/utils/share-card');
 const api = require('../miniprogram/utils/api');
+const memberQuery = require('./helpers/member-ad-query');
+const previousMemberAdDebug = commerceConfig.memberAdDebugEnabled.staging;
+// 页面回归使用业务布局查询，不启用真机验收的额外边界诊断。
+test.before(function () { commerceConfig.memberAdDebugEnabled.staging = false; });
+test.after(function () { commerceConfig.memberAdDebugEnabled.staging = previousMemberAdDebug; });
+
+function topAdFixture(t) {
+  let family = { _id: 'free-family', status: 'active', currentRole: 'viewer', membership: { active: false } };
+  const visits = [];
+  const previousWx = global.wx;
+  t.after(function () { global.wx = previousWx; });
+  global.wx = { createSelectorQuery: memberQuery(), canIUse: function () { return true; }, navigateTo: function (options) { visits.push(options.url); } };
+  const app = {
+    globalData: { environment: 'staging' },
+    getCurrentFamily: function () { return family; },
+    setCurrentFamily: function (value) { family = value; },
+    applyFamilyUpdate: function (value) { family = value; },
+    invalidateFamilyData: function () {},
+    isCacheFresh: function () { return true; }
+  };
+  const page = createPage(app).page;
+  page.data.currentFamily = family;
+  page.data.loading = false;
+  const calls = [];
+  t.mock.method(api, 'call', function (action, payload) {
+    calls.push({ action: action, familyId: payload.familyId });
+    return Promise.resolve({ family: family });
+  });
+  return { app: app, page: page, calls: calls, visits: visits };
+}
+
+test('家谱顶部邀请引导优先，不请求广告；关闭引导后加载并进入当前家庭会员', async function (t) {
+  const { page, calls, visits } = topAdFixture(t);
+  page.data.showShareReminder = true;
+  await page.refreshTreeAd();
+  assert.equal(page.data.topAdVisible, false);
+  assert.equal(calls.length, 0);
+  await page.dismissShareReminder();
+  assert.equal(page.data.showShareReminder, false);
+  assert.equal(page.data.topAdVisible, true);
+  assert.equal(page.data.topAdUnitId, 'adunit-48f60f50925b53d9');
+  page.openTopAdMembership();
+  assert.equal(visits.length, 0);
+  page.adLoad({ currentTarget: { dataset: { version: page.data.topAdVersion } } });
+  page.openTopAdMembership();
+  assert.deepEqual(visits, ['/pages/membership/index?familyId=free-family']);
+  const closedEvent = { currentTarget: { dataset: { version: page.data.topAdVersion } } };
+  page.dismissTopAd();
+  assert.equal(page.data.topAdVisible, false);
+  assert.equal(page.data.topAdLoaded, false);
+  page.adLoad(closedEvent);
+  page.openTopAdMembership();
+  assert.equal(page.data.topAdLoaded, false);
+  assert.equal(visits.length, 1);
+  await page.refreshTreeAd();
+  assert.equal(page.data.topAdVisible, true);
+  page.adClose({ currentTarget: { dataset: { version: page.data.topAdVersion } } });
+  assert.equal(page.data.topAdVisible, false);
+});
+
+test('顶部广告按当前家谱权益刷新，会员返回、无家谱、未知权益和请求失败隐藏', async function (t) {
+  const { app, page } = topAdFixture(t);
+  page._hasLoaded = true;
+  await page.loadPage();
+  assert.equal(page.data.topAdVisible, true);
+  for (const membership of [{ active: true, lifetime: true }, { active: true, expiresAt: '2999-01-01' }, {}]) {
+    app.setCurrentFamily(Object.assign({}, page.data.currentFamily, { membership: membership }));
+    await page.loadPage();
+    assert.equal(page.data.topAdVisible, false);
+  }
+  app.setCurrentFamily(Object.assign({}, page.data.currentFamily, { membership: { active: false } }));
+  await page.refreshTreeAd();
+  assert.equal(page.data.topAdVisible, true);
+  page.adError({ currentTarget: { dataset: { version: page.data.topAdVersion } } });
+  assert.equal(page.data.topAdVisible, false);
+  t.mock.method(api, 'call', function () { return Promise.reject(new Error('fixture unavailable')); });
+  await page.refreshTreeAd();
+  assert.equal(page.data.topAdVisible, false);
+  page.data.currentFamily = null;
+  await page.refreshTreeAd();
+  assert.equal(page.data.topAdVisible, false);
+});
+
+test('production 顶部广告邀请优先，免费展示且会员三种角色隐藏', async function (t) {
+  const { app, page, calls } = topAdFixture(t);
+  app.globalData.environment = 'production';
+  page.data.showShareReminder = true;
+  await page.refreshTreeAd();
+  assert.equal(page.data.topAdVisible, false);
+  assert.equal(calls.length, 0);
+  page.data.showShareReminder = false;
+  await page.refreshTreeAd();
+  assert.equal(page.data.topAdVisible, true);
+  assert.equal(page.data.topAdUnitId, 'adunit-48f60f50925b53d9');
+  for (const role of ['admin', 'member', 'viewer']) {
+    const family = Object.assign({}, app.getCurrentFamily(), { currentRole: role,
+      membership: { active: true, lifetime: true } });
+    app.setCurrentFamily(family);
+    page.data.currentFamily = family;
+    await page.refreshTreeAd();
+    assert.equal(page.data.topAdVisible, false);
+  }
+});
+
+test('顶部广告未启用环境、基础库不支持及注销冷静期不读取会员或创建广告', async function (t) {
+  const unit = commerceConfig.bannerAdUnits.production.treeTop;
+  t.after(function () { commerceConfig.bannerAdUnits.production.treeTop = unit; });
+  commerceConfig.bannerAdUnits.production.treeTop = '';
+  const { app, page, calls } = topAdFixture(t);
+  for (const environment of ['production', 'unknown']) {
+    app.globalData.environment = environment;
+    await page.refreshTreeAd();
+    assert.equal(page.data.topAdVisible, false);
+  }
+  app.globalData.environment = 'staging';
+  global.wx.canIUse = function () { return false; };
+  await page.refreshTreeAd();
+  assert.equal(page.data.topAdVisible, false);
+  global.wx.canIUse = function () { return true; };
+  app.globalData.accountState = 'pending_delete';
+  await page.refreshTreeAd();
+  assert.equal(page.data.topAdVisible, false);
+  assert.equal(calls.length, 0);
+});
+
+test('顶部广告迟到结果不会覆盖邀请引导、切谱或离页，旧组件事件不影响新广告', async function (t) {
+  const { app, page } = topAdFixture(t);
+  let resolve;
+  t.mock.method(api, 'call', function () { return new Promise(function (yes) { resolve = yes; }); });
+  const family = page.data.currentFamily;
+  for (const invalidate of [
+    function () { page.data.showShareReminder = true; },
+    function () { app.setCurrentFamily(Object.assign({}, family, { _id: 'other' })); },
+    function () { page.onHide(); }
+  ]) {
+    page.data.showShareReminder = false;
+    page._adPageHidden = false;
+    app.setCurrentFamily(family);
+    const pending = page.refreshTreeAd();
+    invalidate();
+    resolve({ family: family });
+    await pending;
+    assert.equal(page.data.topAdVisible, false);
+  }
+  page._adPageHidden = false;
+  const pending = page.refreshTreeAd();
+  resolve({ family: family });
+  await pending;
+  const stale = { currentTarget: { dataset: { version: page.data.topAdVersion - 1 } } };
+  page.adLoad(stale);
+  page.adError(stale);
+  assert.equal(page.data.topAdVisible, true);
+  assert.equal(page.data.topAdLoaded, false);
+});
+
+test('顶部与人物弹框广告分别处理事件，顶部模板与邀请互斥且清屏横屏不渲染', async function (t) {
+  const { page } = topAdFixture(t);
+  const previousUnit = commerceConfig.bannerAdUnits.staging.memberSheet;
+  commerceConfig.bannerAdUnits.staging.memberSheet = 'adunit-test-member';
+  t.after(function () { commerceConfig.bannerAdUnits.staging.memberSheet = previousUnit; });
+  await page.refreshTreeAd();
+  const topEvent = { currentTarget: { dataset: { version: page.data.topAdVersion } } };
+  await page.openMemberActions({ currentTarget: { dataset: { id: 'parent' } } });
+  page.closeMemberSheet();
+  page.adLoad(topEvent);
+  assert.equal(page.data.topAdLoaded, true);
+  assert.equal(page.data.memberAdReserved, false);
+  assert.equal(page.data.memberAdVisible, false, '关闭人物弹框销毁原生广告，禁止隐藏视频');
+  const template = fs.readFileSync(path.join(__dirname, '../miniprogram/pages/tree/index.wxml'), 'utf8');
+  assert.match(template, /tree-share-reminder" wx:if="\{\{showShareReminder\}\}"[\s\S]*?<view class="tree-top-ad" wx:elif="\{\{topAdVisible && !isCleanScreen && !isLandscape\}\}"/);
+  assert.match(template, /<ad-custom[^>]*bindload="adLoad"[^>]*binderror="adError"[^>]*bindclose="adClose"/);
+  assert.match(template, /tree-top-ad-actions" wx:if="\{\{topAdLoaded\}\}"[\s\S]*tree-top-ad-close"[^>]*aria-label="关闭广告"[^>]*bindtap="dismissTopAd"[\s\S]*<icon type="cancel"[\s\S]*tree-top-ad-membership" bindtap="openTopAdMembership">开通会员，全家人免广告/);
+});
 
 function loadTreePage(app) {
   let definition = null;
@@ -51,11 +224,11 @@ function createPage(app) {
   return { page: page, setDataCalls: setDataCalls };
 }
 
-function loadExamplePage() {
+function loadExamplePage(app) {
   let definition = null;
   const previousPage = global.Page;
   const previousGetApp = global.getApp;
-  global.getApp = function () { return { getExample: function (slug) { return api.call('examples.get', { slug: slug }); } }; };
+  global.getApp = function () { return app || { getExample: function (slug) { return api.call('examples.get', { slug: slug }); } }; };
   global.Page = function (value) { definition = value; };
   const modulePath = require.resolve('../miniprogram/pages/example/index');
   delete require.cache[modulePath];
@@ -65,8 +238,8 @@ function loadExamplePage() {
   return definition;
 }
 
-function createExamplePage(data) {
-  const page = Object.assign({}, loadExamplePage());
+function createExamplePage(data, app) {
+  const page = Object.assign({}, loadExamplePage(app));
   page.data = Object.assign({}, page.data, data);
   page.setData = function (patch, callback) {
     Object.assign(page.data, patch);
@@ -160,7 +333,7 @@ test('真实与示例成员弹框直接展示亲属方向，资料只保留查�
     assert.match(template, /wx:for="\{\{selectedPerson\.relationOptions\}\}"/);
     assert.match(template, /bindtap="openMemberDetail"/);
     assert.doesNotMatch(template, /bindtap="openEditMember"/);
-    assert.match(template, /<ad class="member-sheet-ad" wx:if="\{\{memberAdVisible\}\}"/);
+    assert.match(template, /<ad-custom class="member-sheet-ad /);
   }
   assert.doesNotMatch(tree, /showRelationSheet/);
   assert.match(example, /data-type="\{\{item\.key\}\}" bindtap="explainCreate"/);
@@ -184,37 +357,218 @@ test('真实成员方向点击进入已有添加页，已隐藏方向不可触�
   }
 });
 
-test('成员弹框广告仅在已配置且未享有去广告权益时显示，错误后移除', function () {
+test('成员弹框广告刷新会员后才加载，真实与示例共用购买入口', async function (t) {
   const previousUnit = commerceConfig.bannerAdUnits.staging.memberSheet;
   const previousGetApp = global.getApp;
-  commerceConfig.bannerAdUnits.staging.memberSheet = 'adunit-test';
-  const app = { globalData: { environment: 'staging' } };
-  const page = createPage(app).page;
-  page.data.currentFamily = { _id: 'family' };
-  const example = createExamplePage({ rawPersons: page.data.rawPersons, rawRelations: page.data.rawRelations });
-  global.getApp = function () { return app; };
-  try {
-    page.openMemberActions({ currentTarget: { dataset: { id: 'parent' } } });
-    assert.equal(page.data.memberAdVisible, true);
-    page.hideMemberAd();
-    assert.equal(page.data.memberAdVisible, false);
-    page.data.currentFamily.membership = { active: true };
-    page.openMemberActions({ currentTarget: { dataset: { id: 'parent' } } });
-    assert.equal(page.data.memberAdVisible, false);
-    example.openMemberActions({ currentTarget: { dataset: { id: 'child' } } });
-    assert.equal(example.data.memberAdVisible, true);
-    assert.equal(example.data.selectedPerson.hasChildren, false);
-    example.hideMemberAd();
-    assert.equal(example.data.memberAdVisible, false);
-    app.getCurrentFamily = function () { return { membership: { active: true } }; };
-    example.openMemberActions({ currentTarget: { dataset: { id: 'child' } } });
-    assert.equal(example.data.memberAdVisible, false);
-    commerceConfig.bannerAdUnits.staging.memberSheet = '';
-    example.openMemberActions({ currentTarget: { dataset: { id: 'child' } } });
-    assert.equal(example.data.memberAdVisible, false);
-  } finally {
+  const previousWx = global.wx;
+  t.after(function () {
     commerceConfig.bannerAdUnits.staging.memberSheet = previousUnit;
     global.getApp = previousGetApp;
+    global.wx = previousWx;
+  });
+  let family = { _id: 'family', status: 'active', membership: { active: false } };
+  const app = { globalData: { environment: 'staging' }, getCurrentFamily: function () { return family; } };
+  const page = createPage(app).page;
+  page.data.currentFamily = family;
+  const example = createExamplePage({ rawPersons: page.data.rawPersons, rawRelations: page.data.rawRelations }, app);
+  global.getApp = function () { return app; };
+  const visits = [];
+  global.wx = { createSelectorQuery: memberQuery(), navigateTo: function (options) { visits.push(options.url); } };
+  t.mock.method(api, 'call', function (action, payload) {
+    assert.equal(action, 'membership.status');
+    assert.equal(payload.familyId, 'family');
+    return Promise.resolve({ family: family });
+  });
+  for (const item of [page, example]) {
+    const loading = item.openMemberActions({ currentTarget: { dataset: { id: 'parent' } } });
+    assert.equal(item.data.memberAdVisible, false);
+    assert.equal(item.data.memberAdReserved, false);
+    await loading;
+    assert.equal(item.data.memberAdVisible, true);
+    assert.equal(item.data.memberAdUnitId, 'adunit-f0e7fed2bde51c0c');
+    assert.equal(item.data.memberAdLoaded, false);
+    item.openAdMembership();
+    assert.equal(visits.length, item === page ? 1 : 3);
+    await item.openMemberActions({ currentTarget: { dataset: { id: 'parent' } } });
+    item.showMemberAd({ currentTarget: { dataset: { version: item.data.memberAdVersion } } });
+    assert.equal(item.data.memberAdLoaded, true);
+    assert.equal(item.data.memberAdReserved, true);
+    item.openAdMembership();
+    await item.openMemberActions({ currentTarget: { dataset: { id: 'parent' } } });
+    const loadedEvent = { currentTarget: { dataset: { version: item.data.memberAdVersion } } };
+    item.closeMemberAd(loadedEvent);
+    assert.equal(item.data.memberAdVisible, false);
+    assert.equal(item.data.memberAdReserved, true);
+    item.showMemberAd(loadedEvent);
+    assert.equal(item.data.memberAdLoaded, false);
+    await item.openMemberActions({ currentTarget: { dataset: { id: 'parent' } } });
+    item.closeMemberAd(loadedEvent);
+    assert.equal(item.data.memberAdVisible, true);
+    item.hideMemberAd({ currentTarget: { dataset: { version: item.data.memberAdVersion } } });
+    assert.equal(item.data.memberAdVisible, false);
+    family = Object.assign({}, family, { membership: { active: true, lifetime: true } });
+    await item.openMemberActions({ currentTarget: { dataset: { id: 'parent' } } });
+    assert.equal(item.data.memberAdVisible, false);
+    assert.equal(item.data.memberAdReserved, false);
+    family = Object.assign({}, family, { membership: { active: false } });
+  }
+  assert.deepEqual(visits, Array(4).fill('/pages/membership/index?familyId=family'));
+  family = null;
+  await example.openMemberActions({ currentTarget: { dataset: { id: 'child' } } });
+  assert.equal(example.data.memberAdVisible, false);
+  assert.equal(example.data.selectedPerson.hasChildren, false);
+});
+
+test('人物原生模板广告在未启用环境、不支持组件及注销冷静期不查询权益', async function (t) {
+  const { app, page, calls } = topAdFixture(t);
+  const example = createExamplePage({ rawPersons: page.data.rawPersons, rawRelations: page.data.rawRelations }, app);
+  const previousGetApp = global.getApp;
+  const previousProductionUnit = commerceConfig.bannerAdUnits.production.memberSheet;
+  commerceConfig.bannerAdUnits.production.memberSheet = '';
+  t.after(function () {
+    global.getApp = previousGetApp;
+    commerceConfig.bannerAdUnits.production.memberSheet = previousProductionUnit;
+  });
+  global.getApp = function () { return app; };
+  for (const item of [page, example]) {
+    for (const environment of ['production', 'unknown']) {
+      app.globalData.environment = environment;
+      await item.openMemberActions({ currentTarget: { dataset: { id: 'parent' } } });
+      assert.equal(item.data.memberAdVisible, false);
+      assert.equal(item.data.memberAdReserved, false);
+    }
+    app.globalData.environment = 'staging';
+    global.wx.canIUse = function () { return false; };
+    await item.openMemberActions({ currentTarget: { dataset: { id: 'parent' } } });
+    assert.equal(item.data.memberAdVisible, false);
+    assert.equal(item.data.memberAdReserved, false);
+    global.wx.canIUse = function () { return true; };
+    app.globalData.accountState = 'pending_delete';
+    await item.openMemberActions({ currentTarget: { dataset: { id: 'parent' } } });
+    assert.equal(item.data.memberAdVisible, false);
+    assert.equal(item.data.memberAdReserved, false);
+    app.globalData.accountState = '';
+  }
+  assert.equal(calls.length, 0);
+});
+
+test('真实与示例提前预加载数据，可见时创建广告，关闭/重复打开不保留隐藏实例', async function (t) {
+  const { app, page, calls } = topAdFixture(t);
+  const example = createExamplePage({ loading: false, example: { slug: 'fixture' }, rawPersons: page.data.rawPersons, rawRelations: page.data.rawRelations }, app);
+  const previousGetApp = global.getApp;
+  t.after(function () { global.getApp = previousGetApp; });
+  global.getApp = function () { return app; };
+  const preloads = [];
+  global.wx.preloadAd = function (units) {
+    assert.equal(page.data.memberAdVisible, false);
+    assert.equal(example.data.memberAdVisible, false);
+    preloads.push(units);
+  };
+  for (const item of [page, example]) {
+    const count = calls.length;
+    await item.preloadMemberAd();
+    assert.equal(calls.length, count + 1);
+    assert.equal(item.data.showMemberSheet, false);
+    assert.equal(item.data.memberAdReserved, false);
+    assert.equal(item.data.memberAdVisible, false);
+    assert.ok(['sizing', 'waiting-visible'].includes(item.data.memberAdPreloadState));
+    assert.equal(item._memberAdCache.dataPreloadState, 'requested');
+    let oldVersion = item.data.memberAdVersion;
+    item.showMemberAd({ currentTarget: { dataset: { version: oldVersion } } });
+    assert.equal(item.data.memberAdLoaded, false);
+    for (const id of ['parent', 'child']) {
+      await item.openMemberActions({ currentTarget: { dataset: { id: id } } });
+      assert.equal(calls.length, count + 1, '重新打开复用会员权益');
+      assert.equal(item.data.memberAdVisible, true);
+      assert.equal(item.data.memberAdWidth, 320);
+      const version = item.data.memberAdVersion;
+      item.showMemberAd({ currentTarget: { dataset: { version: version } } });
+      assert.equal(item.data.memberAdLoaded, true);
+      item.closeMemberSheet();
+      assert.ok(item.data.memberAdVersion > version, '关闭使旧组件事件失效');
+      assert.equal(item.data.memberAdVisible, false);
+      assert.equal(item.data.memberAdLoaded, false);
+      assert.equal(item.data.memberAdReserved, false);
+      item.showMemberAd({ currentTarget: { dataset: { version: version } } });
+      item.hideMemberAd({ currentTarget: { dataset: { version: version } } });
+      assert.ok(['sizing', 'waiting-visible'].includes(item.data.memberAdPreloadState));
+      oldVersion = version;
+    }
+    await item.openMemberActions({ currentTarget: { dataset: { id: 'parent' } } });
+    assert.ok(item.data.memberAdVersion > oldVersion);
+    const version = item.data.memberAdVersion;
+    await item.openMemberActions({ currentTarget: { dataset: { id: 'child' } } });
+    assert.equal(item.data.memberAdVersion, version, '同一可见弹框内保持同宽组件');
+    item.dismissMemberAd();
+    assert.equal(item.data.showMemberSheet, true);
+    assert.equal(item.data.memberAdReserved, false);
+    assert.equal(item.data.memberAdVisible, false);
+    await item.openMemberActions({ currentTarget: { dataset: { id: 'child' } } });
+    assert.equal(item.data.memberAdReserved, true);
+    assert.equal(item.data.memberAdVisible, true);
+    assert.ok(item.data.memberAdVersion > version);
+    assert.equal(calls.length, count + 1);
+    item.closeMemberSheet();
+  }
+  assert.deepEqual(preloads, [[{ unitId: 'adunit-f0e7fed2bde51c0c', type: 'custom' }]], '两页共享 SDK 广告位注册，不重复预加载');
+  const styles = fs.readFileSync(path.join(__dirname, '../miniprogram/app.wxss'), 'utf8');
+  assert.match(styles, /\.member-sheet-ad-header\s*\{[^}]*min-height:64rpx/);
+  assert.match(styles, /\.member-sheet-ad-slot\s*\{[^}]*min-height:200rpx/);
+  assert.doesNotMatch(styles, /member-sheet-mask\.is-preloading|member-sheet-ad-placement\.is-hidden/);
+});
+
+test('快速点击立即开弹框，未知权益不显示模块；确认免费后加载前可购买', async function (t) {
+  const { app, page, visits } = topAdFixture(t);
+  const example = createExamplePage({ loading: false, example: { slug: 'fixture' }, rawPersons: page.data.rawPersons, rawRelations: page.data.rawRelations }, app);
+  const previousGetApp = global.getApp;
+  t.after(function () { global.getApp = previousGetApp; });
+  global.getApp = function () { return app; };
+  let resolve;
+  let count = 0;
+  t.mock.method(api, 'call', function () { count += 1; return new Promise(function (yes) { resolve = yes; }); });
+  const family = app.getCurrentFamily();
+  for (const item of [page, example]) {
+    const initial = visits.length;
+    const previousCount = count;
+    const preparing = item.preloadMemberAd();
+    const request = item.openMemberActions({ currentTarget: { dataset: { id: 'parent' } } });
+    assert.equal(item.data.showMemberSheet, true);
+    assert.equal(item.data.memberAdReserved, false);
+    assert.equal(item.data.memberAdVisible, false);
+    item.openAdMembership();
+    assert.equal(visits.length, initial);
+    item.closeMemberSheet();
+    resolve({ family: family });
+    await Promise.all([preparing, request]);
+    assert.equal(item.data.memberAdWidth, 320);
+    assert.equal(item.data.memberAdMounted, false);
+    await item.openMemberActions({ currentTarget: { dataset: { id: 'child' } } });
+    assert.equal(item.data.memberAdReserved, true);
+    assert.equal(item.data.memberAdVisible, true);
+    assert.equal(count, previousCount + 1);
+    app.setCurrentFamily(Object.assign({}, family, { _id: 'other' }));
+    item.openAdMembership();
+    assert.equal(visits.length, initial, '切谱后旧模块不能购买');
+    app.setCurrentFamily(family);
+    item.openAdMembership();
+    assert.equal(visits.length, initial + 1);
+    assert.equal(item.data.memberAdMounted, false);
+    assert.equal(item.data.showMemberSheet, false);
+  }
+});
+
+test('真实与示例通过折叠分支或重绘关闭人物弹框时同步销毁广告', async function (t) {
+  const { app, page } = topAdFixture(t);
+  const example = createExamplePage({ loading: false, example: { slug: 'fixture' }, rawPersons: page.data.rawPersons, rawRelations: page.data.rawRelations }, app);
+  for (const item of [page, example]) {
+    await item.openMemberActions({ currentTarget: { dataset: { id: 'parent' } } });
+    const version = item.data.memberAdVersion;
+    item.toggleSelectedBranch();
+    assert.equal(item.data.showMemberSheet, false);
+    assert.equal(item.data.memberAdVisible, false);
+    assert.equal(item.data.memberAdReserved, false);
+    item.showMemberAd({ currentTarget: { dataset: { version: version } } });
+    assert.equal(item.data.memberAdLoaded, false);
   }
 });
 
@@ -620,4 +974,40 @@ test('方向流光只使用 transform 和 opacity，不触发布局属性动画'
       assert.equal(page.data.isCleanScreen, false);
     } finally { global.wx = previousWx; }
   });
+});
+
+test('通过平台验收的真实与示例弹框关闭保留就绪实例，换人物重开不闪隐藏模块', async function (t) {
+  const { app, page } = topAdFixture(t);
+  const previousReuse = commerceConfig.memberAdReusePlatforms.staging.ios;
+  const previousGetApp = global.getApp;
+  t.after(function () {
+    commerceConfig.memberAdReusePlatforms.staging.ios = previousReuse;
+    global.getApp = previousGetApp;
+  });
+  commerceConfig.memberAdReusePlatforms.staging.ios = true;
+  global.wx.getDeviceInfo = function () { return { platform: 'ios' }; };
+  global.getApp = function () { return app; };
+  const example = createExamplePage({ loading: false, example: { slug: 'fixture' }, rawPersons: page.data.rawPersons, rawRelations: page.data.rawRelations }, app);
+  for (const item of [page, example]) {
+    await item.preloadMemberAd();
+    assert.equal(item.data.memberAdWidth, 320);
+    await item.openMemberActions({ currentTarget: { dataset: { id: 'parent' } } });
+    const version = item.data.memberAdVersion;
+    item.showMemberAd({ currentTarget: { dataset: { version: version } } });
+    item.closeMemberSheet();
+    assert.equal(item.data.memberAdMounted, true);
+    assert.equal(item.data.memberAdLoaded, true);
+    assert.equal(item.data.memberAdVisible, false);
+    const setData = item.setData;
+    const patches = [];
+    item.setData = function (patch, callback) { patches.push(patch); setData.call(this, patch, callback); };
+    await item.openMemberActions({ currentTarget: { dataset: { id: 'child' } } });
+    assert.equal(item.data.selectedPersonId, 'child');
+    assert.equal(item.data.memberAdLoaded, true);
+    assert.equal(item.data.memberAdVersion, version);
+    assert.equal(item.data.memberAdReserved, true);
+    assert.equal(patches.some(function (patch) { return patch.memberAdReserved === false; }), false);
+    item.onHide();
+    assert.equal(item.data.memberAdMounted, false, '离页始终清理实例');
+  }
 });

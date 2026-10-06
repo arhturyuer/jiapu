@@ -1,6 +1,7 @@
+const launchAd = require('../../utils/launch-ad');
 const releaseInfo = require('../../utils/release-info');
 
-Page({
+Page(launchAd.wrap({
   data: {
     currentVersion: '',
     releaseNotes: []
@@ -9,4 +10,4 @@ Page({
   onShow: function () {
     this.setData(releaseInfo.getAboutReleaseInfo(typeof wx === 'undefined' ? null : wx));
   }
-});
+}));

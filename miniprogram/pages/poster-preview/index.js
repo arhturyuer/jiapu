@@ -1,3 +1,4 @@
+const launchAd = require('../../utils/launch-ad');
 const api = require('../../utils/api');
 const posterSession = require('../../utils/poster-session');
 const privacy = require('../../utils/privacy');
@@ -57,7 +58,7 @@ function requestMiniProgramAlbumPermission() {
   });
 }
 
-Page({
+Page(launchAd.wrap({
   data: {
     filePath: '',
     familyName: '',
@@ -221,4 +222,4 @@ Page({
     }
     wx.switchTab({ url: '/pages/tree/index' });
   }
-});
+}));

@@ -7,5 +7,5 @@
   "integrity": "sha512-pclNuxR3ZSL1dVuEtpJmpMcbkU387vooAHCbWxBlf0SZA4rcrKJRz0QwSGx/nZbh3firPMqT9YPU+CWU7bHlJA==",
   "sourceSha256": "03d1c64039d396e821185d2e5120973d0c41255e8fc981580bb85089f7cafddf",
   "entries": 76186,
-  "format": "Front-coded token keys and preferred labels; ambiguous selectors are excluded. No upstream inference code is shipped."
+  "format": "Label-sorted front-coded token keys and preferred labels without record separators; ambiguous selectors are excluded. No upstream inference code is shipped."
 }

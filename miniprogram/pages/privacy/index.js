@@ -1,3 +1,4 @@
+const launchAd = require('../../utils/launch-ad');
 const app = getApp();
 const api = require('../../utils/api');
 const legal = require('../../config/legal');
@@ -25,7 +26,7 @@ function deletionExecuteText(deletion) {
   return deletion && deletion.executeAt ? format.dateText(deletion.executeAt) : '';
 }
 
-Page({
+Page(launchAd.wrap({
   data: {
     loading: true, error: '', legal: legal, accountState: 'active', deletion: null,
     reports: [], reportCursor: '', hasMoreReports: false, exporting: false, exportTask: null, exportFileReady: false,
@@ -230,4 +231,4 @@ Page({
       self.setData({ reports: self.data.reports.concat(decorateReports(result.items)), reportCursor: result.nextCursor || '', hasMoreReports: Boolean(result.hasMore) });
     }).catch(function (error) { wx.showToast({ title: api.userMessage(error, '举报记录加载失败'), icon: 'none' }); });
   }
-});
+}));

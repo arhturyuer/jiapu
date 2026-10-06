@@ -8,6 +8,62 @@
   background: #F7F4EC;
 }
 
+.tree-top-ad {
+  position: absolute;
+  top: 128rpx;
+  right: 24rpx;
+  left: 24rpx;
+  z-index: 24;
+}
+
+.tree-top-ad-template {
+  display: block;
+  width: 100%;
+}
+
+.tree-top-ad-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  background: #F7F4EC;
+}
+
+.tree-top-ad-close,
+.tree-top-ad-membership {
+  min-height: 64rpx;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  background: transparent;
+  border-radius: 12rpx;
+}
+
+.tree-top-ad-close {
+  flex: none;
+  width: 64rpx;
+  min-width: 64rpx;
+  padding: 0;
+  margin-left: 0;
+  margin-right: auto;
+  justify-content: flex-start;
+}
+
+.tree-top-ad-membership {
+  width: auto;
+  margin-left: auto;
+  padding: 8rpx 4rpx;
+  justify-content: flex-end;
+  color: #245C4A;
+  font-size: 24rpx;
+  line-height: 1.5;
+}
+
+.tree-top-ad-close::after,
+.tree-top-ad-membership::after {
+  border: none;
+}
+
 .empty-action {
   width: 360rpx;
 }
@@ -579,15 +635,16 @@
 }
 
 .person-sheet {
+  height: 80vh;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-y: auto;
 }
 
 .person-sheet-content {
-  flex: 1 1 auto;
+  flex: none;
   min-height: 0;
-  overflow-y: auto;
+  overflow-y: visible;
   padding-bottom: 24rpx;
 }
 
@@ -625,7 +682,6 @@
 .member-sheet-ad {
   display: block;
   width: 100%;
-  margin-top: 16rpx;
   flex: none;
 }
 
@@ -969,7 +1025,7 @@
 }
 
 .tree-page.is-landscape .person-sheet {
-  overflow: hidden;
+  overflow-y: auto;
 }
 
 .tree-page.is-landscape .member-relation-section {

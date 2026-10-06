@@ -318,3 +318,15 @@ image {
 .safe-bottom {
   padding-bottom: env(safe-area-inset-bottom);
 }
+
+.ad-placement-loading { height:0; overflow:hidden; }
+.ad-membership-link { width:100%; min-height:88rpx; margin:0; padding:16rpx; display:flex; align-items:center; justify-content:center; color:#245C4A; background:#EEF6F1; border-radius:16rpx; font-size:26rpx; line-height:1.5; }
+.member-sheet-ad-placement { flex:none; width:100%; padding:0 16rpx 16rpx; background:#F7F4EC; border:2rpx solid #E3E6E2; border-radius:22rpx; }
+.member-sheet-ad-header { min-height:64rpx; display:flex; align-items:center; justify-content:space-between; gap:16rpx; border-bottom:2rpx solid #E3E6E2; }
+.member-sheet-ad-close { flex:none; width:64rpx; min-width:64rpx; min-height:64rpx; margin:0 auto 0 0; padding:0; display:flex; align-items:center; justify-content:flex-start; background:transparent; border-radius:0; }
+.member-sheet-membership-link { width:auto; min-height:64rpx; margin:0 0 0 auto; padding:10rpx 0; display:flex; align-items:center; justify-content:flex-end; color:#245C4A; background:transparent; border-radius:0; font-size:26rpx; line-height:1.5; white-space:nowrap; }
+.member-sheet-ad-close::after,.member-sheet-membership-link::after { border:0; }
+.member-sheet-ad-slot { position:relative; width:100%; min-height:200rpx; margin-top:16rpx; }
+.member-sheet-ad-placeholder { position:absolute; inset:0; min-height:200rpx; display:flex; align-items:center; justify-content:center; padding:16rpx; color:#65706A; font-size:24rpx; line-height:1.5; text-align:center; pointer-events:none; }
+.member-ad-hidden { display:none !important; }
+.member-ad-measure { visibility:hidden; pointer-events:none; z-index:-1; }

@@ -1,3 +1,4 @@
+const launchAd = require('../../utils/launch-ad');
 const app = getApp();
 const api = require('../../utils/api');
 const graphLayout = require('../../utils/graph-layout');
@@ -8,7 +9,7 @@ const graphCleanScreen = require('../../utils/graph-clean-screen');
 const shareCard = require('../../utils/share-card');
 const personGender = require('../../utils/person-gender');
 const memberActions = require('../../utils/member-actions');
-const commerceConfig = require('../../config/commerce');
+const adAccess = require('../../utils/ad-access');
 const exampleDisplayPreference = require('../../utils/example-display-preference');
 const examplePosterCode = require('../../utils/example-poster-code');
 const treePosterFlow = require('../../utils/tree-poster-flow');
@@ -23,7 +24,7 @@ function decodedScene(value) {
   try { return decodeURIComponent(value || ''); } catch (error) { return ''; }
 }
 
-Page(graphGesturePage.wrap({
+Page(launchAd.wrap(graphGesturePage.wrap({
   data: {
     selectedKinship: null,
     exampleTabs: [], selectedExampleTabId: '', tabsError: '',
@@ -32,7 +33,7 @@ Page(graphGesturePage.wrap({
     isCleanScreen: false,
     pageOrientation: 'portrait', isLandscape: false, orientationChanging: false,
     collapsedPersonIds: [], hiddenBranchCount: 0, canExpandAll: false, nameLayout: 'horizontal', showChildRankBadge: false, showGenderBadge: false, showGenderColors: true, autoCollapseEnabled: true, viewMode: 'full', viewpointId: '', viewpointName: '',
-    selectedPersonId: '', selectedPerson: null, showMemberSheet: false, memberAdUnitId: '', memberAdVisible: false, showPerspectiveSheet: false, perspectiveKeyword: '', perspectiveResults: [],
+    selectedPersonId: '', selectedPerson: null, showMemberSheet: false, memberAdUnitId: '', memberAdVisible: false, memberAdMounted: false, memberAdLoaded: false, memberAdReserved: false, memberAdPreloadState: 'idle', memberAdWidth: 0, memberAdLayoutPending: false, memberAdFamilyId: '', memberAdVersion: 0, showPerspectiveSheet: false, perspectiveKeyword: '', perspectiveResults: [],
     posterGenerating: false,
     shareCard: shareCard.create({ kind: 'example' })
   },
@@ -49,6 +50,8 @@ Page(graphGesturePage.wrap({
   },
   onShow: function () {
     this._hidden = false;
+    this._adPageHidden = false;
+    adAccess.hide(this, true);
     if (app.recordExampleVisit && this.data.example && !this.data.loading && !this.data.error) app.recordExampleVisit(this.data.slug);
     this.resetPageOrientation();
     const tabsPromise = this._reloadTabsOnShow ? this.loadExampleTabs() : null;
@@ -62,9 +65,12 @@ Page(graphGesturePage.wrap({
     } else if (!this.data.loading && !this.data.error) this.applyDisplayPreference();
     this._reloadTabsOnShow = false;
     this._reloadOnShow = false;
+    this.preloadMemberAd();
     this.syncPageOrientationSoon();
   },
   onHide: function () {
+    this._adPageHidden = true;
+    adAccess.hide(this, true);
     this._hidden = true;
     this._reloadOnShow = this.data.loading || this._renderPending;
     this._loadRequestId = (this._loadRequestId || 0) + 1;
@@ -74,9 +80,20 @@ Page(graphGesturePage.wrap({
     this.resetPageOrientation();
   },
   onPullDownRefresh: function () { const tabsPromise = this.loadExampleTabs({ force: true }); this.loadExample({ force: true, tabsPromise: tabsPromise }).then(function () { wx.stopPullDownRefresh(); }); },
-  onUnload: function () { this._unloaded = true; this._tabsRequestId = (this._tabsRequestId || 0) + 1; this._loadRequestId = (this._loadRequestId || 0) + 1; treePosterFlow.cancel(this); if (this._orientationTimer) clearTimeout(this._orientationTimer); if (this._perspectiveFilterTimer) clearTimeout(this._perspectiveFilterTimer); this.resetPageOrientation(); },
+  onUnload: function () {
+    this._adPageHidden = true;
+    adAccess.hide(this, true);
+    this._unloaded = true;
+    this._tabsRequestId = (this._tabsRequestId || 0) + 1;
+    this._loadRequestId = (this._loadRequestId || 0) + 1;
+    treePosterFlow.cancel(this);
+    if (this._orientationTimer) clearTimeout(this._orientationTimer);
+    if (this._perspectiveFilterTimer) clearTimeout(this._perspectiveFilterTimer);
+    this.resetPageOrientation();
+  },
 
   loadExample: function (options) {
+    adAccess.hide(this, true);
     graphGesturePage.invalidate(this);
     const self = this;
     const config = options || {};
@@ -132,6 +149,7 @@ Page(graphGesturePage.wrap({
         if (self.createSelectorQuery || wx.createSelectorQuery) self.measureGraphViewport(self.getWindowSize(), render);
         else render(self.getGraphViewport());
         self.prepareExampleShare();
+        self.preloadMemberAd();
         if (['example_share', 'example_poster'].includes(self._shareSource) && !self._shareOpenRecorded) {
           self._shareOpenRecorded = true;
           api.call('share.record', { stage: 'opened', kind: 'example', slug: example.slug }).catch(function () {});
@@ -248,6 +266,8 @@ Page(graphGesturePage.wrap({
   },
   renderGraph: function (mode, viewpointId, renderOptions) {
     const optionsValue = renderOptions || {};
+    if (optionsValue.statePatch && optionsValue.statePatch.showMemberSheet === false
+      && (this.data.memberAdVisible || this.data.memberAdReserved || this.data.memberAdLayoutPending)) adAccess.closeMember(this);
     const collapsedIds = optionsValue.collapsedPersonIds || this.data.collapsedPersonIds;
     const selectedPersonId = Object.prototype.hasOwnProperty.call(optionsValue, 'selectedPersonId') ? optionsValue.selectedPersonId : this.data.selectedPersonId;
     const nameLayout = optionsValue.nameLayout === 'vertical' ? 'vertical' : optionsValue.nameLayout === 'horizontal' ? 'horizontal' : this.data.nameLayout;
@@ -341,6 +361,7 @@ Page(graphGesturePage.wrap({
     const self = this;
     this.setData({ pageOrientation: target || actual, isLandscape: actual === 'landscape', orientationChanging: Boolean(target && !settled), graphScaleMin: minimumScale }, function () {
       if (resizeSequence !== self._orientationResizeSequence) return;
+      adAccess.resizeMember(self, app);
       const measure = function () {
         self.measureGraphViewport({ windowWidth: width, windowHeight: height }, function (nextViewport) {
           if (resizeSequence !== self._orientationResizeSequence) return;
@@ -394,6 +415,10 @@ Page(graphGesturePage.wrap({
       }
     });
   },
+  preloadMemberAd: function () {
+    if (this.data.loading || this.data.error || !this.data.example) return Promise.resolve();
+    return adAccess.preloadMember(this, app, app.getCurrentFamily ? app.getCurrentFamily() : null);
+  },
   showPerson: function (event) {
     const personId = event.currentTarget.dataset.id;
     const person = this.data.rawPersons.find(function (item) { return item._id === personId; });
@@ -406,10 +431,10 @@ Page(graphGesturePage.wrap({
     const person = this.data.rawPersons.find(function (item) { return item._id === personId; });
     const app = typeof getApp === 'function' ? getApp() : {};
     const family = app.getCurrentFamily ? app.getCurrentFamily() : null;
-    const memberAdUnitId = commerceConfig.resolveBanner(app.globalData && app.globalData.environment, 'memberSheet');
     if (person) this.setData({ selectedKinship: this.data.viewMode === 'perspective' ? kinship.memberKinshipCard(this._lastLayout && this._lastLayout.kinshipDetails, personId, this.data.viewpointName, this.data.rawPersons) : null,
       selectedPersonId: personId, selectedPerson: this.decorateSelectedPerson(person), showMemberSheet: true,
-      memberAdUnitId: memberAdUnitId, memberAdVisible: Boolean(memberAdUnitId && !(family && family.membership && family.membership.active)) });
+      memberAdReserved: adAccess.reserveMemberSpace(app, family, this) });
+    if (person) return adAccess.openMember(this, app, family);
   },
   decorateSelectedPerson: function (person) {
     const node = (this._lastLayout && this._lastLayout.nodes || []).find(function (item) { return item._id === person._id; });
@@ -417,9 +442,13 @@ Page(graphGesturePage.wrap({
       isCollapsed: this.data.collapsedPersonIds.indexOf(person._id) >= 0
     });
   },
-  hideMemberAd: function () { this.setData({ memberAdVisible: false }); },
+  hideMemberAd: function (event) { adAccess.error(this, true, event); },
+  closeMemberAd: function (event) { adAccess.error(this, true, event); },
+  dismissMemberAd: function () { adAccess.dismissMember(this); },
+  showMemberAd: function (event) { adAccess.loaded(this, true, event); },
+  openAdMembership: function () { adAccess.openMembership(this, app, true); },
   clearGraphSelection: function () { if (this.data.selectedPersonId && !this.data.showMemberSheet) this.renderGraph(this.data.viewMode, this.data.viewpointId, { preserveViewport: true, selectedPersonId: '', statePatch: { selectedPersonId: '', selectedPerson: null } }); },
-  closeMemberSheet: function () { this.setData({ showMemberSheet: false, selectedKinship: null }); },
+  closeMemberSheet: function () { adAccess.closeMember(this); this.setData({ showMemberSheet: false, selectedKinship: null }); },
   openPerspectiveSheet: function () { if (this.data.loading || this.data.error) return; this.setData({ showPerspectiveSheet: true, perspectiveKeyword: '', perspectiveResults: this.data.rawPersons }); },
   closePerspectiveSheet: function () { this.setData({ showPerspectiveSheet: false }); },
   filterPerspectives: function (event) { const keyword = (event.detail.value || '').trim(); this.setData({ perspectiveKeyword: keyword }); if (this._perspectiveFilterTimer) clearTimeout(this._perspectiveFilterTimer); const self = this; this._perspectiveFilterTimer = setTimeout(function () { self._perspectiveFilterTimer = null; self.setData({ perspectiveResults: self.data.rawPersons.filter(function (person) { return !keyword || person.name.indexOf(keyword) >= 0; }) }); }, 120); },
@@ -433,7 +462,7 @@ Page(graphGesturePage.wrap({
   expandAllBranches: function () { if (this.data.autoCollapseEnabled && this.data.rawPersons.length > MAX_INTERACTIVE_NODES) return wx.showToast({ title: '家谱较大，请按分支展开', icon: 'none' }); this.renderGraph(this.data.viewMode, this.data.viewpointId, { collapsedPersonIds: [], statePatch: { collapsedPersonIds: [] } }); },
   expandBranch: function (event) { const id = event.currentTarget.dataset.id; let collapsed = this.data.collapsedPersonIds.filter(function (item) { return item !== id; }); if (this.data.autoCollapseEnabled && this.data.rawPersons.length > MAX_INTERACTIVE_NODES) collapsed = graphLayout.suggestCollapsedIds(this.data.rawPersons, this.data.rawRelations, { limit: MAX_INTERACTIVE_NODES, focusId: id }); this.renderGraph(this.data.viewMode, this.data.viewpointId, { collapsedPersonIds: collapsed, statePatch: { collapsedPersonIds: collapsed } }); },
   toggleSelectedBranch: function () { const person = this.data.selectedPerson; if (!person) return; const collapsed = this.data.collapsedPersonIds.slice(); const index = collapsed.indexOf(person._id); if (index >= 0) collapsed.splice(index, 1); else collapsed.push(person._id); this.renderGraph(this.data.viewMode, this.data.viewpointId, { collapsedPersonIds: collapsed, selectedPersonId: '', statePatch: { collapsedPersonIds: collapsed, selectedPersonId: '', selectedPerson: null, showMemberSheet: false } }); },
-  openMemberDetail: function () { if (this.data.selectedPerson) wx.navigateTo({ url: exampleDetailUrl(this.data.slug, this.data.selectedPerson._id, this._shareSource) }); },
+  openMemberDetail: function () { if (this.data.selectedPerson) { const personId = this.data.selectedPerson._id; this.closeMemberSheet(); wx.navigateTo({ url: exampleDetailUrl(this.data.slug, personId, this._shareSource) }); } },
   explainCreate: function () { const self = this; wx.showModal({ title: '在自己的家谱中继续', content: '创建自己的家谱后，你可以添加亲属、编辑资料、管理关系并邀请家人共同维护。', confirmText: '去创建', success: function (result) { if (result.confirm) self.createFamily(); } }); },
   createFamily: function () {
     wx.navigateTo({ url: this._shareSource === 'share_menu'
@@ -465,4 +494,4 @@ Page(graphGesturePage.wrap({
       success: function () { api.call('share.record', { stage: 'sent', kind: 'example', slug: slug }).catch(function () {}); }
     };
   }
-}));
+})));

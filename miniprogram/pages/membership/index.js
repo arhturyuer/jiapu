@@ -1,3 +1,4 @@
+const launchAd = require('../../utils/launch-ad');
 const app = getApp();
 const api = require('../../utils/api');
 const format = require('../../utils/format');
@@ -47,7 +48,7 @@ function clientPaymentResult(result) {
   };
 }
 
-Page({
+Page(launchAd.wrap({
   data: { loading: true, families: [], familyIndex: 0, family: null, products: [], selectedProductId: 'youpu_vip_365d', membership: null, membershipText: '', agreed: false, paying: false, paymentState: '', paymentMessage: '', paymentMode: 'mock', orders: [], orderCursor: '', hasMoreOrders: false, loadingOrders: false, loadingMoreOrders: false, refreshingOrderId: '' },
   onLoad: function (options) { this.initialFamilyId = options.familyId || ''; this._stopped = false; },
   onShow: function () {
@@ -215,4 +216,4 @@ Page({
       else self._pollTimer = setTimeout(function () { self.pollOrder(attempt + 1); }, 1800);
     });
   }
-});
+}));

@@ -1,3 +1,4 @@
+const launchAd = require('../../utils/launch-ad');
 const app = getApp();
 const api = require('../../utils/api');
 const privacy = require('../../utils/privacy');
@@ -21,7 +22,7 @@ function defaultGender(type, anchorGender) {
   return fixedGender(type) || (type === 'spouse' ? personGender.opposite(anchorGender) : '');
 }
 
-Page({
+Page(launchAd.wrap({
   data: {
     familyId: '', anchorId: '', anchorName: '', anchorGender: 'unknown', relationType: '', relationLabel: '', relationOptions: RELATION_OPTIONS,
     entryMode: 'new', loadingContext: true, contextError: '', existingKeyword: '', existingResults: [],
@@ -170,4 +171,4 @@ Page({
     return request.then(function (data) { self._submitRequestId = ''; if (!data.pending && app.invalidateFamilyData) app.invalidateFamilyData(self.data.familyId); if (data.pending && app.refreshPendingBadge) app.refreshPendingBadge({ force: true }).catch(function () {}); self.clearDirty(); wx.showToast({ title: data.pending ? '已提交管理员审核' : '关系已保存', icon: data.pending ? 'none' : 'success', duration: 1600 }); if (continueAdding) return self.resetForNext(); setTimeout(function () { wx.navigateBack(); }, 600); return data; }).catch(function (error) { if (error.code !== 'CLOUD_FUNCTION_TIMEOUT' && error.code !== 'CLOUD_CALL_FAILED') self._submitRequestId = ''; if (self.data.entryMode === 'new' && self._pendingAvatarMedia) self.setData({ avatarState: 'uploaded', avatarStateText: '头像已上传，再次保存时将直接重试绑定' }); wx.showToast({ title: api.userMessage(error, '添加失败'), icon: 'none' }); }).then(function (data) { self.setData({ submitting: false, uploading: false, submitStage: '' }); return data; });
   },
   resetForNext: function () { this._pendingAvatarMedia = null; this._selectedAvatarSize = 0; this._drafts = { new: {}, existing: {} }; this._genderTouched = false; this._lifeStatusTouched = false; this.setData({ entryMode: 'new', name: '', gender: defaultGender(this.data.relationType, this.data.anchorGender), lifeStatus: 'living', birthDraft: personDate.emptyDraft(), deathDraft: personDate.emptyDraft(), birthPlace: '', bio: '', avatar: '', selectedAvatarPath: '', avatarAssetId: '', avatarState: '', avatarStateText: '', selectedExistingId: '', selectedExistingPerson: null, existingKeyword: '', duplicateSuggestions: [], showMoreFields: false }); return this.loadRelationContext(); }
-});
+}));

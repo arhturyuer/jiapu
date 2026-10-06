@@ -1,7 +1,7 @@
 <view class="loading-panel" wx:if="{{loading}}"><view class="loading-dot"></view><text>正在加载会员方案…</text></view>
 <view class="membership-page page-shell" wx:else>
   <view class="purchase-family surface-card"><text class="eyebrow">正在为这份家谱购买</text><picker range="{{families}}" range-key="name" value="{{familyIndex}}" bindchange="changeFamily"><view class="family-picker"><text>{{family.name}}</text><text>切换 ›</text></view></picker><text class="scope-copy">全体有效家人共享 · 多份家谱分别付费 · 不可转移</text><text class="current-status">{{membershipText}}</text></view>
-  <view class="benefit-grid"><view><text>无广告</text><text>家庭与我的页清爽使用</text></view><view><text>完整历史</text><text>按时间、操作人和变化类型查询</text></view><view><text>家庭备份</text><text>管理员领取完整家庭资料与照片</text></view></view>
+  <view class="benefit-grid"><view><text>无广告</text><text>开屏、家庭、我的与人物弹框无广告</text></view><view><text>完整历史</text><text>按时间、操作人和变化类型查询</text></view><view><text>家庭备份</text><text>管理员领取完整家庭资料与照片</text></view></view>
   <view class="section-heading"><text class="section-title">选择会员期限</text><text class="muted-text">一次购买，不自动续费</text></view>
   <view class="product-card {{selectedProductId === item.productId ? 'selected' : ''}}" wx:for="{{products}}" wx:key="productId" data-id="{{item.productId}}" bindtap="selectProduct"><view><text class="product-name">{{item.name}}</text><text class="product-desc">{{item.lifetime ? '家谱未永久删除且服务持续运营期间有效' : '固定期限，从当前到期时间继续累加'}}</text></view><view class="price"><text>{{item.priceText}}</text><text wx:if="{{item.recommended}}">推荐</text></view></view>
   <view class="agreement" bindtap="toggleAgreement"><text class="check {{agreed ? 'checked' : ''}}">{{agreed ? '✓' : ''}}</text><text>我已阅读并同意</text><text class="rule-link" catchtap="openRules">《家庭会员与退款说明》</text></view>

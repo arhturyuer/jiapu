@@ -8,6 +8,7 @@ function pageAt(name, app) {
   let definition;
   const previousGetApp = global.getApp;
   const previousPage = global.Page;
+  if (!app.getCurrentFamily) app.getCurrentFamily = function () { return null; };
   global.getApp = function () { return app; };
   global.Page = function (value) { definition = value; };
   const modulePath = require.resolve('../miniprogram/pages/' + name + '/index');

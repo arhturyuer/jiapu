@@ -1,9 +1,10 @@
+const launchAd = require('../../utils/launch-ad');
 const app = getApp();
 const api = require('../../utils/api');
 const fileTransfer = require('../../utils/file-transfer');
 
 function sizeText(bytes) { const size = Number(bytes) || 0; return size >= 1048576 ? (size / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.ceil(size / 1024)) + ' KB'; }
-Page({
+Page(launchAd.wrap({
   data: { familyId: '', family: null, isAdmin: false, membershipActive: false, loading: true, creating: false, task: null, parts: [], privacyExpanded: false, downloadingPartIndex: -1, sharingPartIndex: -1, readyPartIndex: -1, downloadProgress: 0 },
   onLoad: function (options) { this.setData({ familyId: options.familyId || '' }); },
   onShow: function () { this._stopped = false; this.loadPage(); },
@@ -123,4 +124,4 @@ Page({
   togglePrivacy: function () { this.setData({ privacyExpanded: !this.data.privacyExpanded }); },
   openMembership: function () { wx.navigateTo({ url: '/pages/membership/index?familyId=' + this.data.familyId }); },
   openHistory: function () { wx.navigateTo({ url: '/pages/activity/index?familyId=' + this.data.familyId }); }
-});
+}));

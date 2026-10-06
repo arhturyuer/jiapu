@@ -1,10 +1,11 @@
+const launchAd = require('../../utils/launch-ad');
 const app = getApp();
 const api = require('../../utils/api');
 const kinship = require('../../utils/kinship');
 const personGender = require('../../utils/person-gender');
 const personDate = require('../../utils/person-date');
 
-Page({
+Page(launchAd.wrap({
   data: {
     personId: '',
     loading: true,
@@ -234,4 +235,4 @@ Page({
       wx.showToast({ title: api.userMessage(error, '删除失败'), icon: 'none' });
     });
   }
-});
+}));

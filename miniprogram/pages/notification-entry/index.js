@@ -1,6 +1,7 @@
+const launchAd = require('../../utils/launch-ad');
 const app = getApp();
 
-Page({
+Page(launchAd.wrap({
   data: { message: '正在打开家谱…' },
   onLoad: function (options) {
     const familyId = options.familyId || '';
@@ -16,4 +17,4 @@ Page({
     }).catch(function () { self.setData({ message: '这份家谱已无法访问，请从家庭页查看。' }); });
   },
   goFamily: function () { wx.switchTab({ url: '/pages/members/index' }); }
-});
+}));

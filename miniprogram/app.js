@@ -1,5 +1,6 @@
 const api = require('./utils/api');
 const environmentConfig = require('./config/env');
+const launchAd = require('./utils/launch-ad');
 const LOGIN_CACHE_TTL = 60 * 1000;
 const BUSINESS_CACHE_TTL = 60 * 60 * 1000;
 
@@ -34,7 +35,7 @@ App({
     loggedIn: false
   },
 
-  onLaunch: function () {
+  onLaunch: function (options) {
     const runtime = environmentConfig.resolveRuntimeEnvironment(wx);
     this.globalData.environment = runtime.active;
     this.globalData.runtimeVersion = runtime.runtimeVersion;
@@ -63,6 +64,7 @@ App({
     });
 
     this.restoreLocalState();
+    launchAd.begin(this, options);
     this.ensureLogin().catch(function () {});
   },
 

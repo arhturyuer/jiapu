@@ -1,9 +1,10 @@
+const launchAd = require('../../utils/launch-ad');
 const app = getApp();
 const api = require('../../utils/api');
 const format = require('../../utils/format');
 const shareInvite = require('../../utils/share-invite');
 const shareCard = require('../../utils/share-card');
-const commerceConfig = require('../../config/commerce');
+const adAccess = require('../../utils/ad-access');
 const membershipDisplay = require('../../utils/membership-display');
 const subscribeNotifications = require('../../utils/subscribe-notifications');
 
@@ -30,7 +31,7 @@ function reconcileCurrentFamily(families) {
   return next;
 }
 
-Page({
+Page(launchAd.wrap({
   data: {
     loading: true,
     familyList: [],
@@ -54,13 +55,18 @@ Page({
     membershipTierText: '免费版',
     membershipDetailText: '升级后全体家人共享会员权益',
     adUnitId: '',
+    adLoaded: false, adFamilyId: '', adVersion: 0,
     adVisible: false
   },
 
   onShow: function () {
-    this.loadDashboard({ refreshDashboard: true });
+    this._adPageHidden = false;
+    adAccess.hide(this, false);
     this.loadNotificationTemplates();
+    return this.loadDashboard({ refreshDashboard: true });
   },
+  onHide: function () { this._adPageHidden = true; adAccess.hide(this, false); },
+  onUnload: function () { this._adPageHidden = true; adAccess.hide(this, false); },
 
   loadNotificationTemplates: function () {
     const self = this;
@@ -89,6 +95,7 @@ Page({
   loadDashboard: function (options) {
     const self = this;
     const config = options || {};
+    adAccess.hide(this, false);
     const requestId = this._loadRequestId = (this._loadRequestId || 0) + 1;
     const hasContent = this._hasLoaded && !this.data.loading;
     const currentFamily = app.getCurrentFamily();
@@ -96,7 +103,7 @@ Page({
     const currentFamilyId = currentFamily && currentFamily._id;
     const sameFamily = displayedFamilyId === currentFamilyId;
     if (!config.force && !config.refreshDashboard && hasContent && sameFamily && app.isCacheFresh('familyPages', true) && (!currentFamily || app.isCacheFresh('dashboard', currentFamily._id))) {
-      return Promise.resolve();
+      return adAccess.refresh(this, app, 'family', currentFamily);
     }
     if (!hasContent) this.setData({ loading: true });
     return app.ensureLogin().then(function () {
@@ -145,8 +152,7 @@ Page({
         membershipActive: membershipPresentation.active,
         membershipTierText: membershipPresentation.tierText,
         membershipDetailText: membershipPresentation.detailText,
-        adUnitId: commerceConfig.resolveBanner(app.globalData.environment, 'family'),
-        adVisible: Boolean(commerceConfig.resolveBanner(app.globalData.environment, 'family') && !(data.family.membership && data.family.membership.active))
+        adVisible: false
       });
       shareCard.createAndRender(self, 'members-share-card', { kind: 'discovery' }).then(function (card) {
         self.setData({ systemShareCard: card });
@@ -154,6 +160,7 @@ Page({
       app.setCurrentFamily(data.family);
       if (app.setPendingBadgeCount) app.setPendingBadgeCount(data.family._id, data.family.currentRole === 'viewer' ? 0 : data.stats.pendingCount);
       self._hasLoaded = true;
+      return adAccess.refresh(self, app, 'family', data.family);
     }).catch(function (error) {
       if (requestId !== self._loadRequestId) return;
       if (!hasContent) {
@@ -229,7 +236,9 @@ Page({
   openMembership: function () { if (this.data.currentFamily) wx.navigateTo({ url: '/pages/membership/index?familyId=' + this.data.currentFamily._id }); },
   openActivity: function () { if (this.data.currentFamily) wx.navigateTo({ url: '/pages/activity/index?familyId=' + this.data.currentFamily._id }); },
   openFamilyBackup: function () { if (this.data.currentFamily) wx.navigateTo({ url: '/pages/family-backup/index?familyId=' + this.data.currentFamily._id }); },
-  hideAd: function () { this.setData({ adVisible: false }); },
+  hideAd: function (event) { adAccess.error(this, false, event); },
+  showAd: function (event) { adAccess.loaded(this, false, event); },
+  openAdMembership: function () { adAccess.openMembership(this, app, false); },
 
   reviewChange: function (event) {
     const self = this;
@@ -382,4 +391,4 @@ Page({
   },
 
   stopEvent: function () {}
-});
+}));

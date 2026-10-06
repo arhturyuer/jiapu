@@ -52,6 +52,16 @@
       <view class="tree-share-reminder-actions"><button class="tree-share-reminder-invite" bindtap="startShare">邀请家人</button><button class="tree-share-reminder-dismiss" bindtap="dismissShareReminder">暂不分享</button></view>
     </view>
 
+    <view class="tree-top-ad" wx:elif="{{topAdVisible && !isCleanScreen && !isLandscape}}">
+      <ad-custom class="tree-top-ad-template" unit-id="{{topAdUnitId}}" data-version="{{topAdVersion}}" bindload="adLoad" binderror="adError" bindclose="adClose"></ad-custom>
+      <view class="tree-top-ad-actions" wx:if="{{topAdLoaded}}">
+        <button class="tree-top-ad-close" aria-label="关闭广告" bindtap="dismissTopAd">
+          <icon type="cancel" size="16" color="#65706A" />
+        </button>
+        <button class="tree-top-ad-membership" bindtap="openTopAdMembership">开通会员，全家人免广告</button>
+      </view>
+    </view>
+
     <view class="graph-empty" wx:if="{{nodes.length === 0}}">
       <text class="graph-empty-title">家谱还是空的</text>
       <text class="muted-text">先添加第一位家庭成员</text>
@@ -147,7 +157,15 @@
     </view>
   </view>
 
-  <view class="sheet-mask" wx:if="{{showMemberSheet}}" bindtap="closeMemberSheet">
+  <view class="sheet-mask member-sheet-mask member-ad-measure" aria-hidden="true">
+    <view class="bottom-sheet person-sheet">
+      <view class="member-sheet-ad-placement">
+        <view class="member-sheet-ad-slot member-sheet-ad-measure-slot"></view>
+      </view>
+    </view>
+  </view>
+
+  <view class="sheet-mask member-sheet-mask {{!showMemberSheet ? 'member-ad-hidden' : ''}}" wx:if="{{showMemberSheet || memberAdMounted}}" hidden="{{!showMemberSheet}}" bindtap="closeMemberSheet">
     <view class="bottom-sheet person-sheet" catchtap="stopEvent">
       <view class="person-sheet-content">
         <view class="sheet-handle"></view>
@@ -190,7 +208,18 @@
           </view>
         </view>
       </view>
-      <ad class="member-sheet-ad" wx:if="{{memberAdVisible}}" unit-id="{{memberAdUnitId}}" binderror="hideMemberAd"></ad>
+      <view class="member-sheet-ad-placement {{!memberAdReserved ? 'member-ad-hidden' : ''}}" wx:if="{{memberAdReserved || memberAdMounted}}" hidden="{{!memberAdReserved}}">
+        <view class="member-sheet-ad-header">
+          <button class="member-sheet-ad-close" aria-label="关闭广告" bindtap="dismissMemberAd"><icon type="cancel" size="16" color="#65706A" /></button>
+          <button class="member-sheet-membership-link" bindtap="openAdMembership">开会员，全家人免广告</button>
+        </view>
+        <view class="member-sheet-ad-slot member-sheet-ad-visible-slot">
+          <view class="member-sheet-ad-placeholder" wx:if="{{!memberAdLoaded}}">广告位，收益用于运营开支</view>
+          <view class="member-sheet-ad-content" style="width:{{memberAdWidth}}px;">
+            <ad-custom class="member-sheet-ad {{!memberAdVisible ? 'member-ad-hidden' : ''}}" wx:if="{{memberAdMounted}}" hidden="{{!memberAdVisible}}" unit-id="{{memberAdUnitId}}" data-version="{{memberAdVersion}}" bindload="showMemberAd" binderror="hideMemberAd" bindclose="closeMemberAd"></ad-custom>
+          </view>
+        </view>
+      </view>
     </view>
   </view>
 

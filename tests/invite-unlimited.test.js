@@ -42,6 +42,7 @@ test('新版邀请管理区分长期邀请、历史限次邀请和失效状态',
   const context = {
     getApp: function () { return {}; },
     require: function (name) {
+      if (name === '../../utils/launch-ad') return { wrap: function (definition) { return definition; } };
       if (name === '../../utils/format') return { roleText: function () { return '共同补全'; } };
       return {};
     },
@@ -83,6 +84,7 @@ test('管理员撤销邀请后清理本机卡片', async function () {
     vm.runInNewContext(manageSource, {
       getApp: function () { return app; },
       require: function (name) {
+        if (name === '../../utils/launch-ad') return { wrap: function (definition) { return definition; } };
         if (name === '../../utils/share-invite') return shareInvite;
         if (name === '../../utils/api') return { call: function (action, event) { revokedId = event.invitationId; return Promise.resolve({ revoked: true }); } };
         return {};

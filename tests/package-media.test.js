@@ -6,7 +6,7 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const miniprogramRoot = path.join(root, 'miniprogram');
 const mediaExtensions = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.mp3', '.wav', '.aac', '.m4a', '.ogg']);
-const maxMediaBytes = 200 * 1024;
+const maxMediaBytes = 200000;
 
 function mediaFiles(directory) {
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap(function (entry) {
@@ -36,6 +36,24 @@ test('代码包内每个图片和音频资源均不超过微信质量扫描的 2
     return fs.statSync(filePath).size > maxMediaBytes;
   });
   assert.deepEqual(oversized, []);
+});
+
+test('代码包内图片和音频总量保守控制在 200000 字节内', function () {
+  const total = mediaFiles(miniprogramRoot).reduce(function (bytes, filePath) {
+    return bytes + fs.statSync(filePath).size;
+  }, 0);
+  assert.ok(total <= maxMediaBytes, '图片和音频总量为 ' + total + ' 字节');
+});
+
+test('当前单主包源码总量低于 1500000 字节，编译包另由开发者工具核验', function () {
+  function totalBytes(directory) {
+    return fs.readdirSync(directory, { withFileTypes: true }).reduce(function (bytes, entry) {
+      const target = path.join(directory, entry.name);
+      return bytes + (entry.isDirectory() ? totalBytes(target) : fs.statSync(target).size);
+    }, 0);
+  }
+  const total = totalBytes(miniprogramRoot);
+  assert.ok(total < 1500000, '主包源码总量为 ' + total + ' 字节');
 });
 
 test('分享卡品牌兜底图为 5:4 的轻量 JPEG', function () {

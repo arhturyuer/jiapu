@@ -1,8 +1,9 @@
+const launchAd = require('../../utils/launch-ad');
 const app = getApp();
 const api = require('../../utils/api');
 const personGender = require('../../utils/person-gender');
 
-Page({
+Page(launchAd.wrap({
   data: {
     step: 1,
     startName: '',
@@ -130,4 +131,4 @@ Page({
       self.setData({ submitting: false });
     });
   }
-});
+}));

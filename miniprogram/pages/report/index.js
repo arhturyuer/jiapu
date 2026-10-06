@@ -1,6 +1,7 @@
+const launchAd = require('../../utils/launch-ad');
 const api = require('../../utils/api');
 
-Page({
+Page(launchAd.wrap({
   data: {
     familyId: '',
     targetType: '',
@@ -61,4 +62,4 @@ Page({
       self.setData({ submitting: false });
     });
   }
-});
+}));

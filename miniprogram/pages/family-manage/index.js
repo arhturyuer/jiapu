@@ -1,3 +1,4 @@
+const launchAd = require('../../utils/launch-ad');
 const app = getApp();
 const api = require('../../utils/api');
 const format = require('../../utils/format');
@@ -21,7 +22,7 @@ function decorateInvitations(items) {
   });
 }
 
-Page({
+Page(launchAd.wrap({
   data: {
     familyId: '',
     focusSection: '',
@@ -308,4 +309,4 @@ Page({
       wx.showToast({ title: api.userMessage(error, '退出失败'), icon: 'none' });
     });
   }
-});
+}));

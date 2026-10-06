@@ -1,3 +1,4 @@
+const launchAd = require('../../utils/launch-ad');
 const app = getApp();
 const api = require('../../utils/api');
 const exampleDisplayPreference = require('../../utils/example-display-preference');
@@ -13,7 +14,7 @@ function normalizedPreference(value) {
   };
 }
 
-Page({
+Page(launchAd.wrap({
   data: {
     loading: true,
     error: '',
@@ -143,4 +144,4 @@ Page({
       previousPage.applyDisplayPreference(preference);
     }
   }
-});
+}));

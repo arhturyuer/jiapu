@@ -1,6 +1,7 @@
+const launchAd = require('../../utils/launch-ad');
 const api = require('../../utils/api');
 
-Page({
+Page(launchAd.wrap({
   data: { loading: true, error: '', available: false, qrCodeUrl: '' },
 
   onShow: function () { this.loadFeedbackGroup(); },
@@ -19,4 +20,4 @@ Page({
     if (!this.data.qrCodeUrl) return;
     wx.previewImage({ current: this.data.qrCodeUrl, urls: [this.data.qrCodeUrl], showmenu: true });
   }
-});
+}));

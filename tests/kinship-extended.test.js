@@ -2,15 +2,33 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const kinship = require('../miniprogram/utils/kinship');
+const dictionaryLookup = require('../miniprogram/utils/kinship-dictionary');
 const cases = require('./fixtures/kinship-cases');
 
-test('称谓词表单字符分隔保持全部条目并控制主包体积', () => {
+test('称谓词表无损压缩保留全部条目和查询结果并控制主包体积', () => {
   const dictionaryPath = path.join(__dirname, '../miniprogram/utils/kinship-data/dictionary.js');
   const dictionary = require(dictionaryPath);
-  assert.equal(dictionary.encoded.split('|').length, dictionary.count);
+  const records = dictionary.encoded.match(/[A-Z]+[a-z][^A-Za-z]*/g);
+  assert.equal(records.join(''), dictionary.encoded);
+  assert.equal(records.length, dictionary.count);
   assert.equal(dictionary.count, 76186);
-  assert.ok(fs.statSync(dictionaryPath).size < 1000000);
+  assert.ok(fs.statSync(dictionaryPath).size < 530000);
+  let key = '';
+  let label = '';
+  const entries = records.map(function (line) {
+    const split = line.search(/[a-z]/);
+    key = key.slice(0, line.charCodeAt(0) - 65) + line.slice(1, split);
+    label = label.slice(0, line.charCodeAt(split) - 97) + line.slice(split + 1);
+    const tokens = Array.from(key, code => dictionary.tokens[code.charCodeAt(0) - 65]);
+    const sex = tokens[0] === '0' ? 'female' : tokens[0] === '1' ? 'male' : 'unknown';
+    assert.equal(dictionaryLookup.lookup(sex === 'unknown' ? tokens : tokens.slice(1), sex), label);
+    return [key, label];
+  }).sort((a, b) => a[0] < b[0] ? -1 : 1);
+  // Fingerprint of all original 76,186 key/label pairs before this encoding change.
+  assert.equal(crypto.createHash('sha256').update(JSON.stringify(entries)).digest('hex'),
+    'c381bcbde507608001a79f126f9bd6963f58dbc052666354f00a6efe8d291235');
 });
 function fixture(steps, genders, dates) {
   const persons = [...genders].map((gender, index) => ({ _id: 'p' + index, name: '成员' + index, gender: { M: 'male', F: 'female', '?': 'unknown' }[gender], birthDate: (dates || {})[index] || '', status: 'active' }));

@@ -1,0 +1,23 @@
+<view class="launch-page" wx:if="{{startupVisible}}" style="min-height:{{windowHeight}}px">
+  <view class="launch-safe-top" wx:if="{{adVisible}}" style="height:{{safeTop}}px"></view>
+  <view class="launch-content" style="min-height:{{adVisible ? contentHeight : windowHeight}}px">
+    <view class="launch-template" style="width:{{templateWidth}}px" wx:if="{{adVisible}}">
+      <ad-custom class="launch-native-ad" unit-id="{{adUnitId}}" bindload="adLoad" binderror="adError" bindclose="adClose"></ad-custom>
+    </view>
+    <view class="launch-brand-stage" wx:if="{{!adVisible}}" style="height:{{windowHeight}}px">
+      <view class="launch-brand-space-top" style="min-height:{{safeTop}}px"></view>
+      <view class="launch-status">
+        <image class="launch-logo" src="{{brandLogo}}" mode="aspectFit" aria-hidden="true"></image>
+        <text class="launch-brand">{{brandSlogan}}</text>
+        <button class="launch-retry" wx:if="{{retrying}}" bindtap="finish" disabled="{{returning}}">重新进入</button>
+      </view>
+      <view class="launch-brand-space-bottom" style="min-height:{{safeBottom}}px"></view>
+    </view>
+  </view>
+  <view class="launch-actions" wx:if="{{adVisible && loaded && !returning}}" style="padding-bottom:{{safeBottom}}px">
+    <view class="launch-action-buttons">
+      <button class="launch-skip" bindtap="finish" disabled="{{returning}}">跳过 · {{seconds}} 秒</button>
+      <button class="launch-membership" bindtap="openMembership">开通家庭会员，全体家人免广告</button>
+    </view>
+  </view>
+</view>

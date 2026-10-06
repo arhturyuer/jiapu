@@ -1,3 +1,4 @@
+const launchAd = require('../../utils/launch-ad');
 const app = getApp();
 const api = require('../../utils/api');
 const graphLayout = require('../../utils/graph-layout');
@@ -40,7 +41,7 @@ function decoratePersons(persons) {
   });
 }
 
-Page({
+Page(launchAd.wrap({
   data: {
     familyId: '',
     family: null,
@@ -192,4 +193,4 @@ Page({
     app.openFullGraph(this.data.family);
     wx.switchTab({ url: '/pages/tree/index' });
   }
-});
+}));
