@@ -90,7 +90,7 @@ manifest.envId = envId;
 for (const fn of manifest.functions || []) {
   if (fn.name === 'youpuJobs') Object.assign(fn.envVariables, {
     BOOTSTRAP_SECRET: bootstrapSecret,
-    JOB_DISPATCH_SECRET: bootstrapSecret
+    JOB_DISPATCH_SECRET: bootstrapSecret, JOB_FUNCTION_NAMESPACE: envId
   }, notificationVariables);
   if (fn.name === 'youpuUserApi') Object.assign(fn.envVariables, {
     JOB_DISPATCH_SECRET: bootstrapSecret, JOB_FUNCTION_NAMESPACE: envId,

@@ -39,6 +39,8 @@ const collections = [
   'profile_sync_tasks',
   'rate_limits',
   'export_tasks',
+  'family_copy_tasks',
+  'family_copy_chunks',
   'payment_orders',
   'payment_events',
   'membership_grants',

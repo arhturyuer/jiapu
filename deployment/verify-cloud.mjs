@@ -15,6 +15,7 @@ assertDeploymentTarget(envId, '云端配置验证');
 
 const root = resolve(import.meta.dirname, '..');
 const pnpm = process.env.PNPM_BIN || 'pnpm';
+const localCli = process.env.TCB_BIN || '';
 const generatedStagingManifest = resolve(root, 'deployment/cloudbaserc.staging.local.json');
 const manifestPath = process.env.DEPLOYMENT_TARGET === 'staging' && existsSync(generatedStagingManifest)
   ? generatedStagingManifest
@@ -27,7 +28,7 @@ const productionDefinitions = process.env.DEPLOYMENT_TARGET === 'production' && 
 const actualProductionVariables = new Map();
 const productionPaymentEnvironmentKeys = {
   youpuUserApi: ['CONTENT_MODERATION_MODE', 'JOB_DISPATCH_SECRET', 'JOB_FUNCTION_NAMESPACE', 'PAYMENT_MODE', 'VP_APP_ID', 'VP_APP_SECRET', 'VP_OFFER_ID', 'VP_APP_KEY', 'VP_INTERNAL_NOTIFY_SECRET'],
-  youpuJobs: ['BOOTSTRAP_SECRET', 'JOB_DISPATCH_SECRET'],
+  youpuJobs: ['BOOTSTRAP_SECRET', 'JOB_DISPATCH_SECRET', 'JOB_FUNCTION_NAMESPACE'],
   youpuPaymentNotify: ['VP_INTERNAL_NOTIFY_SECRET'],
   youpuPaymentNotifyV2: ['VP_INTERNAL_NOTIFY_SECRET']
 };
@@ -40,9 +41,10 @@ const expectedFunctions = manifest.functions.map(function (item) {
 });
 
 function callCli(args) {
-  const result = spawnSync(pnpm, [
+  const cliArguments = localCli ? args : [
     '--package=@cloudbase/cli@latest', 'dlx', 'tcb'
-  ].concat(args), {
+  ].concat(args);
+  const result = spawnSync(localCli || pnpm, cliArguments, {
     cwd: root,
     encoding: 'utf8',
     env: process.env,

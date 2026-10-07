@@ -3,6 +3,8 @@ const crypto = require('crypto');
 const archiver = require('archiver');
 const { PassThrough } = require('stream');
 const subscriptionNotification = require('./subscription-notification');
+const familyCopy = require('./family-copy');
+const jobDispatcher = require('./job-dispatcher');
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
@@ -28,6 +30,8 @@ const COLLECTIONS = [
   'idempotency_records',
   'rate_limits',
   'export_tasks',
+  'family_copy_tasks',
+  'family_copy_chunks',
   'payment_orders',
   'payment_events',
   'membership_grants',
@@ -70,7 +74,7 @@ function assertAuthorized(event) {
   const isKnownTimer = triggerName === 'youpu-retention-maintenance';
   const isTimer = event && (event.Type === 'Timer' || event.type === 'Timer' || isKnownTimer);
   if (isKnownTimer && isTimer && !hasUserIdentity) return;
-  const isTaskDispatch = event && ['task.account-export', 'task.family-backup', 'task.notification'].includes(event.action || event.type);
+  const isTaskDispatch = event && ['task.account-export', 'task.family-backup', 'task.notification', 'task.family-copy'].includes(event.action || event.type);
   if (isTaskDispatch && !hasUserIdentity && dispatchSecret && event.internalSecret === dispatchSecret) return;
   if (!expected || expected === 'CHANGE_BEFORE_DEPLOY' || event.secret !== expected) {
     const error = new Error('后台任务鉴权失败');
@@ -105,7 +109,7 @@ async function ensureCollections(event) {
   }
   await db.collection('system_config').doc('schema').set({
     data: {
-      version: 10,
+      version: 11,
       graphPersonLimit: 500,
       archiveRetentionDays: 30,
       deletionCoolingDays: 7,
@@ -135,7 +139,8 @@ async function ensureCollections(event) {
       initialOperator = operatorId;
     }
   }
-  return { created: created, existing: existing, initialOperator: initialOperator };
+  const schemaResult = await db.collection('system_config').doc('schema').get();
+  return { created: created, existing: existing, initialOperator: initialOperator, schemaVersion: schemaResult.data.version };
 }
 
 async function updateMany(collectionName, where, data, limit) {
@@ -909,8 +914,11 @@ async function recoverPendingNotifications() {
   return (result.data || []).length;
 }
 
+const familyCopyWorker = familyCopy.createWorker({ db, cloud, dispatchJob: jobDispatcher.dispatchJob, environmentId: process.env.TCB_ENV || process.env.SCF_NAMESPACE || process.env.JOB_FUNCTION_NAMESPACE });
+
 async function retentionRun() {
   return {
+    familyCopies: await familyCopyWorker.maintenance(),
     pendingNotifications: await recoverPendingNotifications(),
     recoveredDeletions: await recoverStaleDeletions(),
     deletions: await processDeletions(),
@@ -1016,6 +1024,10 @@ exports.main = async function (event) {
     if (!data && action === 'task.family-backup') {
       resolvedAction = action;
       data = await processFamilyBackupTask(String(request.taskId || '').trim().slice(0, 80));
+    }
+    if (!data && action === 'task.family-copy') {
+      resolvedAction = action;
+      data = await familyCopyWorker.process(String(request.taskId || '').trim().slice(0, 80));
     }
     if (!data && action === 'task.notification') {
       resolvedAction = action;

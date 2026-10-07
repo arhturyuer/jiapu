@@ -1,4 +1,11 @@
 const MESSAGE_BY_CODE = {
+  COPY_NAME_INVALID: '请填写 40 字以内的家谱名称',
+  COPY_REQUEST_CHANGED: '提交内容已变化，请重新打开复制页',
+  COPY_IN_PROGRESS: '你已有一份家谱正在复制，请稍后查看',
+  COPY_DAILY_LIMIT: '今天已发起 3 次复制，请明天再试',
+  COPY_NOT_FOUND: '复制记录已无法查看，请重新打开页面',
+  COPY_SOURCE_INVALID: '只能复制已加入的真实家谱',
+
   CLOUD_CALL_FAILED: '网络不稳定，请检查后重试',
   CLOUD_FUNCTION_TIMEOUT: '等待时间较长，请稍后重试',
   UNAUTHENTICATED: '登录状态已更新，请重新打开页面',

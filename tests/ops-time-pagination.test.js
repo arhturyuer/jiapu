@@ -83,7 +83,7 @@ test('运营后台展示前后翻页和业务时间列', function () {
 });
 
 test('时间游标所需索引已加入清单且不覆盖旧索引', function () {
-  assert.equal(indexes.schemaVersion, 10);
+  assert.equal(indexes.schemaVersion, 11);
   for (const collection of ['users', 'families', 'reports', 'moderation_tasks', 'account_deletion_requests', 'audit_logs', 'operators']) {
     assert.ok(indexes.indexes[collection].some(function (item) {
       return item.fields[0].order === 'desc' && item.fields[item.fields.length - 1].field === '_id' && item.fields[item.fields.length - 1].order === 'desc';

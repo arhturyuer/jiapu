@@ -111,6 +111,10 @@ Page(launchAd.wrap({
     this.setData(change);
   },
 
+  copyFamily: function () {
+    wx.navigateTo({ url: '/pages/family-copy/index?familyId=' + encodeURIComponent(this.data.familyId) });
+  },
+
   reportFamily: function () {
     const family = this.data.family;
     if (!family) return;

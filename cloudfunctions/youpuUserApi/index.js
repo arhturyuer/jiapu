@@ -7,6 +7,7 @@ const jobDispatcher = require('./job-dispatcher');
 const subscriptionNotification = require('./subscription-notification');
 const stagingAccountReset = require('./staging-account-reset');
 const analytics = require('./analytics');
+const familyCopy = require('./family-copy');
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
@@ -19,6 +20,8 @@ const GRAPH_RELATION_LIMIT = 2000;
 const MODERATION_CONFIG_ID = 'moderation';
 const ACTIVE_ROLES = domain.ACTIVE_ROLES;
 const RATE_LIMITS = {
+  // Copy quota is charged atomically with task creation, in Beijing calendar days.
+  'family.copy.create': { max: 3, windowMs: 24 * 60 * 60 * 1000, transactional: true },
   'analytics.track': { max: 300, windowMs: 60 * 60 * 1000 },
   'auth.updateProfile': { max: 20, windowMs: 60 * 60 * 1000 },
   'auth.updateAvatar': { max: 20, windowMs: 60 * 60 * 1000 },
@@ -55,6 +58,7 @@ const MUTATION_TYPES = new Set([
   'payment.mockComplete',
   'payment.mockRefund',
   'family.backup.create',
+  'family.copy.create',
   'family.create',
   'family.update',
   'family.archive',
@@ -228,6 +232,11 @@ async function inspectPrivateUpload(fileId) {
 }
 
 const testAccounts = stagingAccountReset.createService({ db, command: _, assert, hash, randomToken, listAll });
+
+const familyCopyService = familyCopy.createService({
+  db, assert, getOpenid, requireActiveUser, requireMembership, membershipId, mutate, moderateText,
+  dispatchJob: jobDispatcher.dispatchJob
+});
 
 function userId(openid) {
   return testAccounts.currentUserId(openid, 'u_' + hash(openid, 32));
@@ -471,7 +480,7 @@ function idempotencyId(openid, type, requestId) {
 
 async function enforceRateLimit(openid, action) {
   const policy = RATE_LIMITS[action];
-  if (!policy) return;
+  if (!policy || policy.transactional) return;
   const windowStart = Math.floor(Date.now() / policy.windowMs) * policy.windowMs;
   const id = 'rate_' + hash([openid, action, windowStart].join(':'), 40);
   await db.runTransaction(async function (transaction) {
@@ -768,6 +777,9 @@ async function moderateText(openid, values) {
 }
 
 async function audit(scope, data) {
+  if (data.familyId && ['family.update', 'person.create_related', 'person.update', 'person.delete', 'relation.link_existing', 'relation.remove', 'relation.reorder_children', 'change.approve'].includes(data.action)) {
+    await scope.collection('families').doc(data.familyId).update({ data: { contentRevision: _.inc(1) } });
+  }
   await scope.collection('audit_logs').add({
     data: {
       familyId: data.familyId || '',
@@ -3803,6 +3815,8 @@ const handlers = {
   'payment.listMine': paymentListMine,
   'payment.mockComplete': paymentMockComplete,
   'payment.mockRefund': paymentMockRefund,
+  'family.copy.create': familyCopyService.create,
+  'family.copy.status': familyCopyService.status,
   'family.create': familyCreate,
   'family.list': familyList,
   'family.update': familyUpdate,

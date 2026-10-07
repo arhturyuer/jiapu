@@ -21,6 +21,7 @@
     "pages/privacy/index",
     "pages/feedback-group/index",
     "pages/family-manage/index",
+    "pages/family-copy/index",
     "pages/report/index",
     "pages/legal/index",
     "pages/about/index"

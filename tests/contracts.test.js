@@ -131,6 +131,10 @@ test('关于页使用正式版实际版本并按最新在前展示受控更新�
   const verifier = fs.readFileSync(path.join(root, 'deployment/verify-release-note.mjs'), 'utf8');
   assert.deepEqual(releaseInfo.validateReleaseNotes(releaseNotes), [
     {
+      version: '1.6.6',
+      summary: '新增复制家谱，可创建由自己管理的独立副本，并查看复制进度与补充缺失头像。'
+    },
+    {
       version: '1.6.5',
       summary: '启用开屏、家谱顶部和人物操作弹框广告，优化广告复用体验，家庭会员全家免广告。'
     },

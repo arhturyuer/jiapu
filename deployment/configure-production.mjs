@@ -83,7 +83,8 @@ const notificationVariables = productionNotificationConfig(userVariables, jobsVa
 Object.assign(userDefinition.envVariables, notificationVariables);
 jobsDefinition.envVariables = Object.assign({}, notificationVariables, {
   BOOTSTRAP_SECRET: bootstrapSecret,
-  JOB_DISPATCH_SECRET: dispatchSecret
+  JOB_DISPATCH_SECRET: dispatchSecret,
+  JOB_FUNCTION_NAMESPACE: PRODUCTION_ENV_ID
 });
 
 const manifest = {

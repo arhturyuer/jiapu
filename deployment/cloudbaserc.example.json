@@ -46,6 +46,7 @@
       "memorySize": 512,
       "installDependency": true,
       "envVariables": {
+        "JOB_FUNCTION_NAMESPACE": "REPLACE_WITH_ENV_ID",
         "BOOTSTRAP_SECRET": "REPLACE_WITH_A_RANDOM_SECRET",
         "JOB_DISPATCH_SECRET": "REPLACE_WITH_A_RANDOM_SECRET"
       },

@@ -1,0 +1,29 @@
+<view class="loading-panel" wx:if="{{loading}}"><view class="loading-dot"></view><text>正在读取家谱与复制状态...</text></view>
+<view class="page-shell" wx:elif="{{error}}"><view class="empty-panel"><text class="empty-title">暂时无法复制</text><text class="empty-description">{{error}}</text><button class="secondary-button" bindtap="loadPage">重新加载</button></view></view>
+<view class="page-shell copy-page" wx:else>
+  <view class="surface-card copy-card" wx:if="{{family}}">
+    <text class="card-title">{{family.name}}</text><text class="copy-note">{{family.personCount}} 位人物 · {{family.relationCount}} 条关系</text>
+    <text class="field-label">新家谱名称</text><input class="field-input" maxlength="40" value="{{name}}" disabled="{{running || submitting || uncertain}}" bindinput="inputName" />
+  </view>
+  <view class="surface-card copy-card">
+    <text class="card-title">创建一份独立家谱</text>
+    <text class="copy-note">复制人物资料、亲属关系、子女排行和可正常展示的头像。你将成为新家谱的创建者和唯一管理员，两份家谱分别维护。</text>
+    <text class="copy-note">原家谱会员权益和共同维护人员不会复制。邀请、待审核申请、已删除资料和原历史记录也不包含。</text>
+    <text class="copy-note">免费使用，每人每天（北京时间）最多发起 3 次，同时只能复制一份。网络重试不重复计次；失败后重新发起会占用一次额度。</text>
+    <text class="copy-note">开始处理时读取资料，之后原谱的普通编辑不会同步。暂时不可用或复制失败的头像使用默认头像，并在完成后列出。</text>
+  </view>
+  <view class="surface-card copy-card task-card" wx:if="{{task}}">
+    <text class="card-title">{{task.status === 'completed' ? '新家谱已创建' : task.status === 'failed' ? '复制未完成' : task.stageText}}</text>
+    <block wx:if="{{running}}"><text class="copy-note" wx:if="{{task.stage !== 'snapshot'}}">人物 {{task.personsDone}}/{{task.personCount}} · 关系 {{task.relationsDone}}/{{task.relationCount}}</text><text class="copy-note" wx:if="{{task.stage !== 'snapshot'}}">头像 {{task.avatarsDone}}/{{task.avatarCount}}</text><text class="copy-note">可以离开，稍后回来查看</text></block>
+    <text class="copy-note" wx:if="{{task.status === 'failed'}}">{{task.failureText}}</text>
+    <block wx:if="{{task.status === 'completed'}}">
+      <text class="copy-note">{{task.personCount}} 位人物 · {{task.relationCount}} 条关系</text>
+      <button class="primary-button" wx:if="{{task.family}}" loading="{{opening}}" disabled="{{opening}}" bindtap="openCopy">打开新家谱</button>
+      <text class="copy-note" wx:else>新家谱已无法访问，请在家庭页确认。</text>
+      <text class="missing-title" wx:if="{{task.missingAvatars.length}}">{{task.missingAvatars.length}} 位人物需要补充头像</text>
+      <view class="missing-row" wx:for="{{task.missingAvatars}}" wx:key="personId"><view><text class="person-name">{{item.name}}</text><text class="copy-note">{{item.reasonText}}</text></view><button class="secondary-button" data-person-id="{{item.personId}}" disabled="{{opening}}" bindtap="openCopy">补充头像</button></view>
+    </block>
+  </view>
+  <view class="surface-card copy-card" wx:if="{{taskError}}"><text class="copy-note">{{taskError}}</text><button class="secondary-button" bindtap="refreshTask">重新读取状态</button></view>
+  <button class="primary-button start-button" wx:if="{{family && !running}}" loading="{{submitting}}" disabled="{{submitting || running || taskError}}" bindtap="createCopy">{{uncertain ? '继续确认' : task && task.status === 'failed' ? '重新发起复制' : task && task.status === 'completed' ? '再复制一份' : '开始复制'}}</button>
+</view>

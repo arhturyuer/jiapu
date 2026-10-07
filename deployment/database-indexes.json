@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 10,
+  "schemaVersion": 11,
   "indexes": {
     "users": [
       { "name": "openid_unique", "unique": true, "sparse": true, "fields": [{ "field": "openid", "order": "asc" }] },
@@ -93,6 +93,14 @@
     ],
     "rate_limits": [
       { "name": "expires", "fields": [{ "field": "expiresAt", "order": "asc" }] }
+    ],
+    "family_copy_tasks": [
+      { "name": "actor_source_created", "fields": [{ "field": "userId", "order": "asc" }, { "field": "sourceFamilyId", "order": "asc" }, { "field": "createdAt", "order": "desc" }, { "field": "_id", "order": "desc" }] },
+      { "name": "status_id", "fields": [{ "field": "status", "order": "asc" }, { "field": "_id", "order": "asc" }] },
+      { "name": "cleanup_id", "fields": [{ "field": "cleanupPending", "order": "asc" }, { "field": "_id", "order": "asc" }] }
+    ],
+    "family_copy_chunks": [
+      { "name": "task_id", "fields": [{ "field": "taskId", "order": "asc" }, { "field": "_id", "order": "asc" }] }
     ],
     "export_tasks": [
       { "name": "status_id", "fields": [{ "field": "status", "order": "asc" }, { "field": "_id", "order": "asc" }] },

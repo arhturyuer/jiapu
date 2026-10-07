@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "archiver": "7.0.1",
+    "tencentcloud-sdk-nodejs-scf": "4.0.389",
     "ws": "8.18.3",
     "wx-server-sdk": "4.0.2"
   }
