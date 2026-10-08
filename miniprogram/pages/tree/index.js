@@ -1,3 +1,4 @@
+const pdfEntry = require('../../utils/pdf-entry');
 const launchAd = require('../../utils/launch-ad');
 const app = getApp();
 const api = require('../../utils/api');
@@ -639,6 +640,8 @@ Page(launchAd.wrap(graphGesturePage.wrap({
     if (!family) return;
     wx.navigateTo({ url: '/pages/display-settings/index?familyId=' + encodeURIComponent(family._id) });
   },
+
+  openPdfExport: function () { pdfEntry.open(this, 'family'); },
 
   generatePoster: function () {
     const family = this.data.currentFamily;

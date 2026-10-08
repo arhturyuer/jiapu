@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { execFileSync } from 'node:child_process';
 
 import { randomBytes } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
@@ -6,8 +7,10 @@ import { chmodSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { assertDeploymentTarget, PRODUCTION_ENV_ID } from './target-guard.mjs';
 import { productionNotificationConfig } from './production-notification-config.mjs';
+import { verifyJobsPackage } from './jobs-package.mjs';
 
 const root = resolve(import.meta.dirname, '..');
+execFileSync(process.execPath, [resolve(root, 'scripts/package-pdf-layout.mjs'), '--check'], { stdio: 'inherit' });
 const destination = resolve(root, 'deployment/cloudbaserc.production.local.json');
 const cli = process.env.TCB_BIN || 'tcb';
 
@@ -72,6 +75,7 @@ const example = JSON.parse(readFileSync(resolve(root, 'deployment/cloudbaserc.ex
 const definitions = new Map((example.functions || []).map(function (item) { return [item.name, item]; }));
 const userDefinition = structuredClone(definitions.get('youpuUserApi'));
 const jobsDefinition = structuredClone(definitions.get('youpuJobs'));
+jobsDefinition.dir = verifyJobsPackage(root); jobsDefinition.installDependency = false;
 if (!userDefinition || !jobsDefinition) fail('部署清单缺少 youpuUserApi 或 youpuJobs。');
 
 userDefinition.envVariables = Object.fromEntries(userVariables);

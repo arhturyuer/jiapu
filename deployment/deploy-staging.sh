@@ -21,6 +21,7 @@ export DEPLOYMENT_TARGET=staging
 "${NODE_BIN}" -e "import('./deployment/target-guard.mjs').then(m => m.assertDeploymentTarget(process.argv[1], 'staging 部署'))" "${STAGING_ENV_ID:-}"
 
 run_functions() {
+  "${NODE_BIN}" "${PROJECT_PATH}/deployment/build-jobs.mjs"
   "${NODE_BIN}" "${PROJECT_PATH}/deployment/configure-staging.mjs"
   "${TCB_BIN}" --config-file "${PROJECT_PATH}/deployment/cloudbaserc.staging.local.json" \
     -e "${STAGING_ENV_ID}" fn deploy --all --force

@@ -8,6 +8,7 @@ const subscriptionNotification = require('./subscription-notification');
 const stagingAccountReset = require('./staging-account-reset');
 const analytics = require('./analytics');
 const familyCopy = require('./family-copy');
+const pdfExport = require('./pdf-export');
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
@@ -20,6 +21,7 @@ const GRAPH_RELATION_LIMIT = 2000;
 const MODERATION_CONFIG_ID = 'moderation';
 const ACTIVE_ROLES = domain.ACTIVE_ROLES;
 const RATE_LIMITS = {
+  'pdf.create': { max: 20, windowMs: 24 * 60 * 60 * 1000, transactional: true },
   // Copy quota is charged atomically with task creation, in Beijing calendar days.
   'family.copy.create': { max: 3, windowMs: 24 * 60 * 60 * 1000, transactional: true },
   'analytics.track': { max: 300, windowMs: 60 * 60 * 1000 },
@@ -45,6 +47,7 @@ const RATE_LIMITS = {
   'media.prepare': { max: 100, windowMs: 24 * 60 * 60 * 1000 }
 };
 const MUTATION_TYPES = new Set([
+  'pdf.create',
   'analytics.track',
   'auth.updateProfile',
   'auth.updateAvatar',
@@ -236,6 +239,18 @@ const testAccounts = stagingAccountReset.createService({ db, command: _, assert,
 const familyCopyService = familyCopy.createService({
   db, assert, getOpenid, requireActiveUser, requireMembership, membershipId, mutate, moderateText,
   dispatchJob: jobDispatcher.dispatchJob
+});
+
+const pdfService = pdfExport.createService({
+  db, cloud, assert, getOpenid, requireActiveUser, requireMembership, mutate,
+  entitlement: commerce.entitlementFromFamily, dispatchJob: jobDispatcher.dispatchJob,
+  posterCode: async task => {
+    const envVersion = process.env.STAGING_ACCOUNT_RESET_ENABLED === '1' ? 'develop' : 'release';
+    if (task.source === 'example') return examplesGetMiniCode({ slug: task.slug, viewMode: 'full', envVersion });
+    const invitation = await inviteCreatePoster({ familyId: task.familyId, viewMode: 'full', requestId: task._id + '-code' });
+    const code = await inviteGetMiniCode({ invitationId: invitation.invitationId, token: invitation.token, envVersion });
+    return Object.assign(code, { invitationId: invitation.invitationId });
+  }
 });
 
 function userId(openid) {
@@ -3225,7 +3240,8 @@ async function membershipCatalog() {
       autoRenew: false,
       transferable: false,
       freeHistoryLimit: 20,
-      backupCooldownDays: 7
+      backupCooldownDays: 7,
+      pdfExport: true, pdfDailyLimit: 20
     },
     paymentMode: paymentMode()
   };
@@ -3815,6 +3831,9 @@ const handlers = {
   'payment.listMine': paymentListMine,
   'payment.mockComplete': paymentMockComplete,
   'payment.mockRefund': paymentMockRefund,
+  'pdf.create': pdfService.create,
+  'pdf.status': pdfService.status,
+  'pdf.downloadUrl': pdfService.downloadUrl,
   'family.copy.create': familyCopyService.create,
   'family.copy.status': familyCopyService.status,
   'family.create': familyCreate,

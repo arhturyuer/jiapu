@@ -1,4 +1,10 @@
 const MESSAGE_BY_CODE = {
+  PDF_IN_PROGRESS: '已有 PDF 正在生成，请稍后查看',
+  PDF_DAILY_LIMIT: '今天已生成 20 次 PDF，请明天再试',
+  PDF_NOT_FOUND: 'PDF 任务已无法查看，请重新生成',
+  PDF_REQUEST_CHANGED: '生成参数已改变，请重新发起',
+  PDF_EXPIRED: 'PDF 已过期或尚未完成，请重新查看任务',
+  PDF_DOWNLOAD_FAILED: 'PDF 下载失败，请重试',
   COPY_NAME_INVALID: '请填写 40 字以内的家谱名称',
   COPY_REQUEST_CHANGED: '提交内容已变化，请重新打开复制页',
   COPY_IN_PROGRESS: '你已有一份家谱正在复制，请稍后查看',

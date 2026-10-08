@@ -36,6 +36,7 @@ try {
     run(node, ['--check', resolve(root, file)]);
   }
   run(node, [resolve(root, 'scripts/check-docs.mjs')]);
+  run(node, [resolve(root, 'scripts/package-pdf-layout.mjs'), '--check']);
   const tests = files.filter(function (file) { return /^tests\/[^/]+\.test\.js$/.test(file); });
   if (!tests.length) throw new Error('未找到自动化测试，已阻止空检查通过。');
   run(node, ['--test', ...tests.map(function (file) { return resolve(root, file); })]);

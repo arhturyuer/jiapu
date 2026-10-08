@@ -23,11 +23,17 @@ if [[ ! -x "${WECHAT_CLI}" ]]; then
   exit 3
 fi
 
+node "${PROJECT_PATH}/deployment/build-jobs.mjs"
+node "${PROJECT_PATH}/deployment/configure-production.mjs"
+
 "${WECHAT_CLI}" cloud functions deploy \
   --env "${ENV_ID}" \
-  --names youpuUserApi youpuOpsApi youpuJobs youpuPaymentNotify \
+  --names youpuUserApi youpuOpsApi youpuPaymentNotify \
   --remote-npm-install \
   --project "${PROJECT_PATH}"
+
+tcb --config-file "${PROJECT_PATH}/deployment/cloudbaserc.production.local.json" \
+  -e "${ENV_ID}" fn deploy youpuJobs --force
 
 # The original production notifier was created on an immutable Node.js 16
 # runtime.  Production delivery now targets V2 (Node.js 20); update its code

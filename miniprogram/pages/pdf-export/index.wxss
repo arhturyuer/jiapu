@@ -1,0 +1,8 @@
+.pdf-page { padding: 32rpx; padding-bottom: calc(48rpx + env(safe-area-inset-bottom)); }
+.pdf-title { display: block; font-size: 36rpx; font-weight: 600; margin-bottom: 28rpx; color: #202824; }
+.pdf-card { padding: 28rpx; margin-bottom: 24rpx; border: 2rpx solid transparent; }
+.pdf-card.selected { border-color: #245C4A; }
+.pdf-heading { display: block; font-size: 32rpx; font-weight: 600; color: #245C4A; margin-bottom: 16rpx; }
+.pdf-note { display: block; font-size: 26rpx; line-height: 1.65; color: #65706A; margin-bottom: 20rpx; }
+.pdf-actions { display: flex; gap: 20rpx; }
+.pdf-actions button { flex: 1; margin: 0; font-size: 28rpx; }

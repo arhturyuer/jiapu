@@ -4,6 +4,7 @@ const archiver = require('archiver');
 const { PassThrough } = require('stream');
 const subscriptionNotification = require('./subscription-notification');
 const familyCopy = require('./family-copy');
+const pdfExport = require('./pdf-export');
 const jobDispatcher = require('./job-dispatcher');
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
@@ -74,7 +75,7 @@ function assertAuthorized(event) {
   const isKnownTimer = triggerName === 'youpu-retention-maintenance';
   const isTimer = event && (event.Type === 'Timer' || event.type === 'Timer' || isKnownTimer);
   if (isKnownTimer && isTimer && !hasUserIdentity) return;
-  const isTaskDispatch = event && ['task.account-export', 'task.family-backup', 'task.notification', 'task.family-copy'].includes(event.action || event.type);
+  const isTaskDispatch = event && ['task.account-export', 'task.family-backup', 'task.notification', 'task.family-copy', 'task.pdf-export'].includes(event.action || event.type);
   if (isTaskDispatch && !hasUserIdentity && dispatchSecret && event.internalSecret === dispatchSecret) return;
   if (!expected || expected === 'CHANGE_BEFORE_DEPLOY' || event.secret !== expected) {
     const error = new Error('后台任务鉴权失败');
@@ -611,7 +612,7 @@ async function claimExportTask(taskId, kind) {
     const task = result.data;
     if (!task || task.status !== 'pending') return null;
     if (kind === 'family_backup' && task.kind !== 'family_backup') return null;
-    if (kind === 'account_export' && task.kind === 'family_backup') return null;
+    if (kind === 'account_export' && task.kind && task.kind !== 'account_export') return null;
     await transaction.collection('export_tasks').doc(taskId).update({
       data: {
         status: 'processing',
@@ -914,11 +915,13 @@ async function recoverPendingNotifications() {
   return (result.data || []).length;
 }
 
+const pdfWorker = pdfExport.createWorker({ db, cloud });
 const familyCopyWorker = familyCopy.createWorker({ db, cloud, dispatchJob: jobDispatcher.dispatchJob, environmentId: process.env.TCB_ENV || process.env.SCF_NAMESPACE || process.env.JOB_FUNCTION_NAMESPACE });
 
 async function retentionRun() {
   return {
     familyCopies: await familyCopyWorker.maintenance(),
+    pdfExports: await pdfWorker.maintenance(),
     pendingNotifications: await recoverPendingNotifications(),
     recoveredDeletions: await recoverStaleDeletions(),
     deletions: await processDeletions(),
@@ -1024,6 +1027,10 @@ exports.main = async function (event) {
     if (!data && action === 'task.family-backup') {
       resolvedAction = action;
       data = await processFamilyBackupTask(String(request.taskId || '').trim().slice(0, 80));
+    }
+    if (!data && action === 'task.pdf-export') {
+      resolvedAction = action;
+      data = await pdfWorker.process(String(request.taskId || '').trim().slice(0, 80));
     }
     if (!data && action === 'task.family-copy') {
       resolvedAction = action;

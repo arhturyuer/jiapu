@@ -79,6 +79,9 @@ for (const expected of expectedFunctions) {
   if (actual.Status !== 'Active' || actual.AvailableStatus !== 'Available') {
     throw new Error(expected.name + ' 当前不可用');
   }
+  if (expected.name === 'youpuJobs' && expected.installDependency === false && actual.InstallDependency !== 'FALSE' && actual.InstallDependency !== false) {
+    throw new Error('youpuJobs 必须使用完整 Linux 部署依赖，不能重新启用云端自动安装');
+  }
 
   const actualEnvKeys = new Set(((actual.Environment || {}).Variables || []).map(function (item) { return item.Key; }));
   const expectedEnvKeys = expectedEnvironmentKeys(expected);

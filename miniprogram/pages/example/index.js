@@ -1,3 +1,4 @@
+const pdfEntry = require('../../utils/pdf-entry');
 const launchAd = require('../../utils/launch-ad');
 const app = getApp();
 const api = require('../../utils/api');
@@ -387,6 +388,8 @@ Page(launchAd.wrap(graphGesturePage.wrap({
     const slug = this.displayPreferenceSlug();
     if (slug) wx.navigateTo({ url: '/pages/display-settings/index?exampleSlug=' + encodeURIComponent(slug) });
   },
+  openPdfExport: function () { pdfEntry.open(this, 'example'); },
+
   generatePoster: function () {
     const example = this.data.example;
     if (!example || this.data.posterGenerating || !this.data.nodes.length) return;

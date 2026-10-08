@@ -39,12 +39,12 @@
     },
     {
       "name": "youpuJobs",
-      "dir": "cloudfunctions/youpuJobs",
+      "dir": "deployment/build/youpuJobs",
       "handler": "index.main",
       "runtime": "Nodejs20.19",
       "timeout": 900,
       "memorySize": 512,
-      "installDependency": true,
+      "installDependency": false,
       "envVariables": {
         "JOB_FUNCTION_NAMESPACE": "REPLACE_WITH_ENV_ID",
         "BOOTSTRAP_SECRET": "REPLACE_WITH_A_RANDOM_SECRET",

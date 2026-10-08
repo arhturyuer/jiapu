@@ -1,3 +1,4 @@
+const { genderColors } = require('./tree-poster-style');
 const TARGET_SCALE = 1.25;
 const MIN_SCALE = 0.75;
 const MAX_SIDE = 8192;
@@ -68,12 +69,6 @@ function centerText(ctx, value, x, y, maxWidth) {
   ctx.fillText(truncate(ctx, value, maxWidth), x, y);
 }
 
-function genderColors(node, showGenderColors) {
-  if (!showGenderColors) return { surface: '#FFFEFA', border: '#D8DED9', avatar: '#E4EFEA', text: '#245C4A', badge: '#65706A' };
-  if (node.gender === 'male') return { surface: '#E6EFF5', border: '#416B89', avatar: '#E6EFF5', text: '#416B89', badge: '#416B89' };
-  if (node.gender === 'female') return { surface: '#F5E7EB', border: '#985565', avatar: '#F5E7EB', text: '#985565', badge: '#985565' };
-  return { surface: '#FFFEFA', border: '#D8DED9', avatar: '#E4EFEA', text: '#245C4A', badge: '#65706A' };
-}
 
 function drawLines(ctx, layout, sizing) {
   ctx.lineCap = 'round';

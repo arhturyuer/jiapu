@@ -1,10 +1,13 @@
 #!/usr/bin/env node
+import { execFileSync } from 'node:child_process';
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { PRODUCTION_ENV_ID } from './target-guard.mjs';
+import { verifyJobsPackage } from './jobs-package.mjs';
 
 const root = resolve(import.meta.dirname, '..');
+execFileSync(process.execPath, [resolve(root, 'scripts/package-pdf-layout.mjs'), '--check'], { stdio: 'inherit' });
 const source = resolve(root, 'deployment/staging.local.env');
 const destination = resolve(root, 'miniprogram/config/env.local.js');
 const cloudbaseConfig = resolve(root, 'deployment/cloudbaserc.staging.local.json');
@@ -88,10 +91,13 @@ writeFileSync(destination, [
 const manifest = JSON.parse(readFileSync(resolve(root, 'deployment/cloudbaserc.example.json'), 'utf8'));
 manifest.envId = envId;
 for (const fn of manifest.functions || []) {
-  if (fn.name === 'youpuJobs') Object.assign(fn.envVariables, {
+  if (fn.name === 'youpuJobs') {
+    fn.dir = verifyJobsPackage(root); fn.installDependency = false;
+    Object.assign(fn.envVariables, {
     BOOTSTRAP_SECRET: bootstrapSecret,
     JOB_DISPATCH_SECRET: bootstrapSecret, JOB_FUNCTION_NAMESPACE: envId
-  }, notificationVariables);
+    }, notificationVariables);
+  }
   if (fn.name === 'youpuUserApi') Object.assign(fn.envVariables, {
     JOB_DISPATCH_SECRET: bootstrapSecret, JOB_FUNCTION_NAMESPACE: envId,
     STAGING_ACCOUNT_RESET_ENABLED: '1', STAGING_ACCOUNT_RESET_ENV: envId,

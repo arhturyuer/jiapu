@@ -18,6 +18,7 @@
     "pages/change-list/index",
     "pages/invite/index",
     "pages/poster-preview/index",
+    "pages/pdf-export/index",
     "pages/privacy/index",
     "pages/feedback-group/index",
     "pages/family-manage/index",

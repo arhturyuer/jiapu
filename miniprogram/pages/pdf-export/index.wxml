@@ -1,0 +1,31 @@
+<view class="pdf-page">
+<view class="surface-card pdf-card" wx:if="{{loading}}"><text>正在读取家谱</text></view>
+<view class="surface-card pdf-card" wx:elif="{{error}}"><text class="pdf-note">{{error}}</text><button class="secondary-button" bindtap="load">重试</button></view>
+<block wx:else>
+<text class="pdf-title">{{name}}·导出</text>
+<view class="surface-card pdf-card {{format === 'poster' ? 'selected' : ''}}" data-format="poster" bindtap="chooseFormat" aria-role="button" aria-label="选择家谱树大图">
+<text class="pdf-heading">家谱树大图</text>
+<text class="pdf-note">完整家谱生成一页PDF，文字和关系线可放大打印，比例自适应。</text>
+<text class="pdf-note">沿用家谱图片的样式与显示设置。</text>
+</view>
+<view class="surface-card pdf-card {{format === 'book' ? 'selected' : ''}}" data-format="book" bindtap="chooseFormat" aria-role="button" aria-label="选择家谱书">
+<text class="pdf-heading">家谱书</text>
+<text class="pdf-note">打印装订成册，大字阅读、双面左装订，含导览、世系图、完整人物资料和姓名索引。</text>
+<text class="pdf-note">完整收录现有资料。</text>
+</view>
+<text class="pdf-note">{{source === 'example' ? '官方已发布示例免费导出。' : '家庭会员全体家人可用。'}}每人每天合计可生成20次。</text>
+<button class="primary-button" wx:if="{{membershipRequired}}" bindtap="openMembership">开通家庭会员</button>
+<view class="surface-card pdf-card" wx:if="{{task}}">
+<text class="pdf-heading">{{task.format === 'poster' ? '家谱树大图' : '家谱书'}} · {{task.status === 'completed' ? '生成完成' : task.status === 'failed' ? '生成失败' : task.status === 'expired' ? '文件已过期' : '正在生成'}}</text>
+<block wx:if="{{running}}"><progress percent="{{task.progress}}" activeColor="#245C4A" /><text class="pdf-note">可以离开，稍后回来查看</text></block>
+<text class="pdf-note" wx:if="{{task.status === 'failed'}}">{{task.failureMessage}}</text>
+<block wx:if="{{task.status === 'completed'}}">
+<text class="pdf-note">{{task.personCount}} 位成员 · {{task.relationCount}} 条关系 · {{task.pageCount}} 页</text>
+<text class="pdf-note" wx:if="{{task.unavailableMediaCount}}">{{task.unavailableMediaCount}} 位成员的头像暂不可用，已使用占位。</text>
+<view class="pdf-actions"><button class="secondary-button" data-action="preview" loading="{{opening}}" disabled="{{opening}}" bindtap="openFile">预览 PDF</button><button class="primary-button" data-action="share" disabled="{{opening}}" bindtap="openFile">转发文件</button></view>
+</block>
+</view>
+<view wx:if="{{taskError}}"><text class="pdf-note">{{taskError}}</text><button class="secondary-button" wx:if="{{!uncertain}}" bindtap="refreshTask">重新读取状态</button></view>
+<button class="primary-button" wx:if="{{!membershipRequired && !running}}" loading="{{submitting}}" disabled="{{submitting || opening}}" bindtap="generate">{{uncertain ? '继续确认' : task && task.status === 'failed' && task.format === format ? '重试生成' : '生成 PDF'}}</button>
+</block>
+</view>

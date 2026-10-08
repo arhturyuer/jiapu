@@ -10,3 +10,7 @@ deployment/*.local.json
 deployment/cloudbaserc.staging.local.json
 miniprogram/config/env.local.js
 deployment/backups/
+
+tmp/pdfs/
+output/pdf/
+deployment/build/
