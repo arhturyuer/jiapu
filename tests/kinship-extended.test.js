@@ -145,3 +145,18 @@ test('缓存复用并感知原地资料、关系、视角变化', () => {
   relations[1].status = 'deleted';
   assert.equal(cache(persons, relations, 'p0').p2.label, '暂未建立关系');
 });
+
+test('词表 LZW 编码支持字典重置且逐字无损还原，不依赖小程序压缩 API', () => {
+  const codec = require('../scripts/dictionary-codec');
+  let seed = 7;
+  const text = Array.from({ length: 250000 }, () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return String.fromCharCode(65 + (seed >>> 24));
+  }).join('') + '族谱称谓中文';
+  const packed = codec.pack(text);
+  assert.equal(codec.unpack(packed.packed, packed.alphabet), text);
+  const bytes = Buffer.from(packed.packed, 'base64');
+  let reset = false;
+  for (let i = 0; i < bytes.length; i += 2) if (bytes.readUInt16LE(i) === 0) reset = true;
+  assert.equal(reset, true);
+});

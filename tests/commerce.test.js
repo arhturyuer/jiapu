@@ -192,16 +192,17 @@ test('个人订单记录按付款人和家谱分页，会员页可恢复待确�
   assert.match(api, /async function paymentListMine\(event\)/);
   assert.match(api, /const where = \{ payerUserId: user\._id \}/);
   assert.match(api, /if \(familyId\) where\.familyId = familyId/);
-  assert.match(api, /\.orderBy\('createdAt', 'desc'\)\s*\.skip\(offset\)\s*\.limit\(pageSize \+ 1\)/);
+  assert.match(api, /\.orderBy\('createdAt', 'desc'\)/);
+  assert.match(api, /await query\s*\.skip\(offset\)\s*\.limit\(pageSize \+ 1\)/);
   assert.match(api, /hasMore: rows\.length > pageSize/);
   assert.match(api, /nextCursor: rows\.length > pageSize \? String\(offset \+ items\.length\) : ''/);
   assert.match(page, /payment\.listMine/);
-  assert.match(page, /refreshLatestPendingOrder/);
+  assert.match(page, /reconcileBackground/);
   assert.match(page, /refreshOrderById/);
   assert.match(page, /loadMoreOrders/);
   assert.match(template, /购买记录/);
-  assert.match(template, /仅显示你的付款订单/);
-  assert.match(template, /刷新状态/);
+  assert.match(page, /paidOnly: true/); assert.doesNotMatch(template, /pending-orders/);
+  assert.match(template, /刷新支付状态/);
 });
 
 test('广告在家庭、我的和成员弹框按配置显示，无 ID 或会员状态下隐藏', function () {

@@ -19,7 +19,7 @@ test('页面注册、文件和 WXML 事件处理器保持一致', function () {
     const template = fs.readFileSync(base + '.wxml', 'utf8');
     const handlers = new Set(Array.from(template.matchAll(/(?:bind|catch)(?:tap|input|change|submit|confirm|blur)="([A-Za-z0-9_]+)"/g)).map(function (match) { return match[1]; }));
     handlers.forEach(function (handler) {
-      assert.match(source, new RegExp('\\b' + handler + '\\s*:\\s*function\\b'), pagePath + ' 缺少事件处理器 ' + handler);
+      assert.match(source, new RegExp('\\b' + handler + '\\s*:\\s*(?:async\\s+)?function\\b'), pagePath + ' 缺少事件处理器 ' + handler);
     });
   });
 });
@@ -130,6 +130,7 @@ test('关于页使用正式版实际版本并按最新在前展示受控更新�
   const uploadScript = fs.readFileSync(path.join(root, 'deployment/upload-miniprogram.sh'), 'utf8');
   const verifier = fs.readFileSync(path.join(root, 'deployment/verify-release-note.mjs'), 'utf8');
   assert.deepEqual(releaseInfo.validateReleaseNotes(releaseNotes), [
+    { version: '1.6.8', summary: '优化家庭会员购买页与权益展示，购买按钮固定底部，未付款订单不再阻挡购买，完善支付恢复与客服入口。' },
     {
       version: '1.6.7',
       summary: '新增家谱树大图与家谱书 PDF 导出，支持全谱打印、双面装订和长期查看码，家庭会员全体家人可用。'

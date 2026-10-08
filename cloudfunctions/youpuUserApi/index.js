@@ -3226,6 +3226,7 @@ function publicOrder(order) {
     refundedAt: order.refundedAt || null,
     updatedAt: order.updatedAt || null,
     reconcileStatus: order.reconcileStatus || '',
+    clientPaymentReturnedSuccess: Boolean(order.clientPaymentCompletedAt && Number(order.clientResultCode) === 0),
     reconcileMessage: cleanText(order.reconcileMessage, 160)
   };
 }
@@ -3382,6 +3383,17 @@ async function paymentClientCompleted(event) {
 async function paymentCreateOrder(event) {
   const openid = getOpenid();
   const user = await requireActiveUser(openid);
+  const requestId = cleanText(event.requestId, 80);
+  assert(requestId, 'REQUEST_ID_REQUIRED', '请求缺少幂等标识，请刷新页面后重试');
+  const existing = await maybeGet(db, 'idempotency_records', idempotencyId(openid, 'payment.createOrder', requestId));
+  if (existing && existing.status === 'completed') {
+    const result = existing.result || {};
+    const order = await mustGet(db, 'payment_orders', result.order && result.order.orderId, 'PAYMENT_ORDER_NOT_FOUND', '原订单不存在，请联系客服查单');
+    assert(order.payerUserId === user._id, 'NO_PERMISSION', '不能处理其他用户的订单');
+    assert(order.familyId === event.familyId && order.productId === event.productId, 'PAYMENT_REQUEST_MISMATCH', '原购买请求与当前选择不一致');
+    return Object.assign({}, result, { order: publicOrder(order) });
+  }
+  assert(event.recoveryOnly !== true, 'PAYMENT_CREATION_PENDING', '原购买请求尚未查询到结果，请稍后核验或联系客服');
   const access = await requireMembership(event.familyId, ACTIVE_ROLES, db, openid);
   const item = commerce.product(event.productId);
   assert(item, 'PAYMENT_PRODUCT_INVALID', '所选会员商品不存在或已下架');
@@ -3413,7 +3425,7 @@ async function paymentCreateOrder(event) {
     paySig: commerce.paySignature('requestVirtualPayment', signData, appKey),
     signature: commerce.userSignature(signData, session.sessionKey)
   };
-  return mutate('payment.createOrder', event, openid, async function (transaction) {
+  const created = await mutate('payment.createOrder', event, openid, async function (transaction) {
     await transaction.collection('payment_orders').doc(orderId).set({
       data: {
         familyId: access.family._id,
@@ -3436,6 +3448,8 @@ async function paymentCreateOrder(event) {
     });
     return { order: publicOrder(Object.assign({ _id: orderId }, item, { productName: item.name, familyId: access.family._id, familyName: access.family.name, status: 'pending' })), payData: payData, mock: !profile.external };
   });
+  assert(created.order && created.order.familyId === event.familyId && created.order.productId === event.productId, 'PAYMENT_REQUEST_MISMATCH', '原购买请求与当前选择不一致');
+  return created;
 }
 
 async function fulfillOrderTransaction(transaction, order, wxOrderId, paidAt) {
@@ -3575,7 +3589,7 @@ async function paymentReconcileNow(event) {
         reconcileStatus: expired ? 'closed_unpaid' : 'not_paid',
         lastQueriedAt: db.serverDate(), updatedAt: db.serverDate()
       } });
-      return { order: publicOrder(Object.assign({}, latest, { status: expired ? 'closed' : 'pending' })), reconciled: false };
+      return { order: publicOrder(Object.assign({}, latest, { status: expired ? 'closed' : 'pending', closeReason: expired ? 'payment_timeout' : '', reconcileStatus: expired ? 'closed_unpaid' : 'not_paid', lastQueriedAt: new Date(), updatedAt: new Date() })), reconciled: false };
     });
   }
 
@@ -3606,12 +3620,19 @@ async function paymentListMine(event) {
   const familyId = cleanText(event && event.familyId, 80);
   const pageSize = Math.max(1, Math.min(Math.floor(Number(event && event.pageSize) || 10), 50));
   const requestedOffset = Number(event && event.cursor);
-  const offset = Number.isFinite(requestedOffset) ? Math.max(0, Math.min(Math.floor(requestedOffset), 10000)) : 0;
+  const unresolvedOnly = event && event.unresolvedOnly === true;
+  const paidOnly = event && event.paidOnly === true;
+  assert(!(unresolvedOnly && paidOnly), 'INVALID_INPUT', '购买记录筛选参数不能同时使用');
+  const offset = Number.isFinite(requestedOffset) ? Math.max(0, Math.min(Math.floor(requestedOffset), unresolvedOnly ? Number.MAX_SAFE_INTEGER : 10000)) : 0;
   const where = { payerUserId: user._id };
   if (familyId) where.familyId = familyId;
-  const result = await db.collection('payment_orders')
-    .where(where)
-    .orderBy('createdAt', 'desc')
+  const conditions = unresolvedOnly ? _.and([where, _.or([
+    { status: 'pending' },
+    { status: 'closed', closeReason: 'payment_timeout', reconcileStatus: _.neq('closed_unpaid') }
+  ])]) : paidOnly ? Object.assign({}, where, { status: _.in(['fulfilled', 'refunded']) }) : where;
+  let query = db.collection('payment_orders').where(conditions).orderBy('createdAt', 'desc');
+  if (unresolvedOnly || paidOnly) query = query.orderBy('_id', 'desc');
+  const result = await query
     .skip(offset)
     .limit(pageSize + 1)
     .get();

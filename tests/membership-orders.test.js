@@ -23,6 +23,7 @@ function createPage(definition) {
     Object.assign(page.data, patch);
     if (callback) callback();
   };
+  page.onLoad({});
   return page;
 }
 
@@ -71,11 +72,11 @@ test('会员页首次加载会读取当前家谱订单并自动确认最近待�
     page.onLoad({ familyId: 'family-1' });
     await page.onShow();
 
-    assert.deepEqual(calls.find(function (call) { return call.type === 'payment.listMine'; }).payload, { familyId: 'family-1', pageSize: 10, cursor: '' });
+    assert.deepEqual(calls.find(function (call) { return call.type === 'payment.listMine'; }).payload, { familyId: 'family-1', paidOnly: true, pageSize: 10, cursor: '' });
     assert.equal(calls.filter(function (call) { return call.type === 'payment.getOrder'; }).length, 1);
     assert.equal(page.data.orders[0].status, 'fulfilled');
     assert.equal(page.data.membership.active, true);
-    assert.equal(page.data.paymentState, 'success');
+    assert.equal(page.data.paymentState, ''); assert.equal(page.data.recordsExpanded, true);
     assert.deepEqual(invalidated, ['family-1']);
   } finally {
     api.call = previousCall;
@@ -91,17 +92,17 @@ test('待确认订单手动刷新会保留未完成状态，网络失败会给�
   const page = createPage(loadPage(app));
   page.setData({
     families: [{ _id: 'family-1', name: '赵氏家谱' }], familyIndex: 0,
-    family: { _id: 'family-1' }, orders: [Object.assign(order('pending'), { canRefresh: true })]
+    family: { _id: 'family-1' }, orders: []
   });
+  page._operation = { orderId: 'order-1', clientOutcome: 'success' };
   try {
     api.call = function () { return Promise.resolve({ order: order('pending') }); };
     await page.refreshOrderById('order-1', false);
-    assert.equal(page.data.orders[0].status, 'pending');
-    assert.deepEqual(wxState.notices, ['订单仍在确认中，请稍后再试']);
+    assert.equal(page.data.orders.length, 0); assert.equal(page.data.paymentState, 'confirming'); assert.equal(page.data.showPaymentRefresh, true);
 
     api.call = function () { return Promise.reject(new Error('网络异常')); };
     await page.refreshOrderById('order-1', false);
-    assert.deepEqual(wxState.notices, ['订单仍在确认中，请稍后再试', '订单状态刷新失败']);
+    assert.match(page.data.paymentMessage, /可刷新或联系客服/); assert.deepEqual(wxState.notices, []);
     assert.equal(page.data.refreshingOrderId, '');
   } finally {
     api.call = previousCall;
@@ -117,7 +118,7 @@ test('沙箱待确认订单会主动调用服务端查单，而不是只读取�
   const calls = [];
   page.setData({
     paymentMode: 'sandbox', families: [{ _id: 'family-1', name: '赵氏家谱' }], familyIndex: 0,
-    family: { _id: 'family-1' }, orders: [Object.assign(order('pending'), { canRefresh: true })]
+    family: { _id: 'family-1' }, orders: []
   });
   try {
     api.call = function (type) {
@@ -141,7 +142,7 @@ test('测试环境暂未找到订单时，会员页停止轮询并使用安全�
     paymentMode: 'sandbox', families: [{ _id: 'family-1', name: '赵氏家谱' }], familyIndex: 0,
     family: { _id: 'family-1' }, paying: true
   });
-  page._orderId = 'order-1';
+  page._operation = { orderId: 'order-1', clientOutcome: 'success' };
   try {
     api.call = function () { return Promise.resolve({ order: Object.assign(order('pending'), {
       reconcileStatus: 'query_not_found', reconcileMessage: '微信沙箱未找到该订单，请核对配置'
@@ -149,7 +150,7 @@ test('测试环境暂未找到订单时，会员页停止轮询并使用安全�
     await page.pollOrder(0);
     assert.equal(page.data.paying, false);
     assert.equal(page.data.paymentState, 'confirming');
-    assert.equal(page.data.paymentMessage, '订单暂未查询到结果，请确认微信购买流程已完成，稍后再刷新状态');
+    assert.equal(page.data.paymentMessage, '支付状态正在确认，可刷新查看');
     assert.doesNotMatch(page.data.paymentMessage, /沙箱|配置|reconcile/i);
   } finally {
     api.call = previousCall;
@@ -168,7 +169,7 @@ test('iOS 不会在 staging 测试环境创建支付订单，页面只展示用�
     showToast: function () {}
   };
   const page = createPage(loadPage({ invalidateFamilyData: function () {} }));
-  page.setData({ paymentMode: 'sandbox', agreed: true, family: { _id: 'family-1' }, paying: false });
+  page.setData({ paymentMode: 'sandbox', family: { _id: 'family-1' }, paying: false, canBuy: true });
   try {
     api.call = function () { throw new Error('iOS 沙箱不应调用服务端创建订单'); };
     page.startPayment();

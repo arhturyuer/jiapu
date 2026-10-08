@@ -110,6 +110,8 @@
       ,{ "name": "kind_status_started", "fields": [{ "field": "kind", "order": "asc" }, { "field": "status", "order": "asc" }, { "field": "startedAt", "order": "asc" }] }
     ],
     "payment_orders": [
+      { "name": "payer_family_status_created_id", "fields": [{ "field": "payerUserId", "order": "asc" }, { "field": "familyId", "order": "asc" }, { "field": "status", "order": "asc" }, { "field": "createdAt", "order": "desc" }, { "field": "_id", "order": "desc" }] },
+      { "name": "payer_status_created_id", "fields": [{ "field": "payerUserId", "order": "asc" }, { "field": "status", "order": "asc" }, { "field": "createdAt", "order": "desc" }, { "field": "_id", "order": "desc" }] },
       { "name": "wx_order_unique", "unique": true, "sparse": true, "fields": [{ "field": "wxOrderId", "order": "asc" }] },
       { "name": "payer_created", "fields": [{ "field": "payerUserId", "order": "asc" }, { "field": "createdAt", "order": "desc" }] },
       { "name": "family_status_created", "fields": [{ "field": "familyId", "order": "asc" }, { "field": "status", "order": "asc" }, { "field": "createdAt", "order": "desc" }] },
