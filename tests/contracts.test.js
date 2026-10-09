@@ -130,6 +130,7 @@ test('关于页使用正式版实际版本并按最新在前展示受控更新�
   const uploadScript = fs.readFileSync(path.join(root, 'deployment/upload-miniprogram.sh'), 'utf8');
   const verifier = fs.readFileSync(path.join(root, 'deployment/verify-release-note.mjs'), 'utf8');
   assert.deepEqual(releaseInfo.validateReleaseNotes(releaseNotes), [
+    { version: '1.6.10', summary: '新增添加到我的小程序引导，优化我的页反馈群二维码及成员表单固定保存底栏。' },
     { version: '1.6.9', summary: '新增家庭会员兑换码，支持后台批量生成与管理，会员页可兑换并区分购买和兑换记录。' },
     { version: '1.6.8', summary: '优化家庭会员购买页与权益展示，购买按钮固定底部，未付款订单不再阻挡购买，完善支付恢复与客服入口。' },
     {
@@ -400,7 +401,10 @@ test('用户反馈群二维码由运营后台受控替换并在小程序双入�
   const admin = fs.readFileSync(path.join(root, 'admin/src/components/FeedbackGroupManager.vue'), 'utf8');
   const jobs = fs.readFileSync(path.join(root, 'cloudfunctions/youpuJobs/index.js'), 'utf8');
   assert.ok(app.pages.includes('pages/feedback-group/index'));
-  [profile, privacy].forEach(function (template) { assert.match(template, /showFeedbackGroup[\s\S]*用户反馈群/); });
+  assert.match(privacy, /showFeedbackGroup[\s\S]*用户反馈群/);
+  assert.match(profile, /用户反馈群[\s\S]*长按识别二维码，进群交流、反馈问题/);
+  assert.match(profile, /show-menu-by-longpress="{{true}}"/);
+  assert.doesNotMatch(profile, /showFeedbackGroup/);
   assert.match(feedbackPage, /长按识别二维码/);
   assert.match(feedbackPage, /show-menu-by-longpress="{{true}}"/);
   assert.match(feedbackPage, /反馈群暂未开放/);

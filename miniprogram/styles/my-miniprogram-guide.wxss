@@ -1,0 +1,41 @@
+.my-miniprogram-guide {
+  position: fixed;
+  z-index: 30;
+  box-sizing: border-box;
+  padding: 12px 12px 16px 16px;
+  background: #E4EFEA;
+  border: 1px solid #B9D2C5;
+  border-radius: 16px;
+  box-shadow: 0 6px 20px rgba(36, 92, 74, .12);
+}
+.my-miniprogram-guide-arrow {
+  position: absolute;
+  top: -6px;
+  width: 10px;
+  height: 10px;
+  background: #E4EFEA;
+  border-top: 1px solid #B9D2C5;
+  border-left: 1px solid #B9D2C5;
+  transform: translateX(-50%) rotate(45deg);
+}
+.my-miniprogram-guide-header { display: flex; align-items: flex-start; gap: 8px; }
+.my-miniprogram-guide-title { display: block; flex: 1; min-width: 0; padding-top: 6px; color: #245C4A; font-size: 15px; line-height: 1.5; font-weight: 600; overflow-wrap: break-word; }
+.my-miniprogram-guide-steps { display: block; margin-top: 6px; color: #53655C; font-size: 12px; line-height: 1.5; }
+button.my-miniprogram-guide-close {
+  position: static;
+  flex: 0 0 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 44px;
+  min-width: 44px;
+  max-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  line-height: 1;
+}
+button.my-miniprogram-guide-close::after { border: 0; }

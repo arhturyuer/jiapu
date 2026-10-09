@@ -1,0 +1,10 @@
+<template name="myMiniProgramGuide">
+  <view class="my-miniprogram-guide" wx:if="{{showMyMiniProgramGuide}}" style="{{myMiniProgramGuideStyle}}" catchtap="stopEvent">
+    <view class="my-miniprogram-guide-arrow" style="{{myMiniProgramGuideArrowStyle}}"></view>
+    <view class="my-miniprogram-guide-header">
+      <text class="my-miniprogram-guide-title">添加到我的小程序，下次找家谱更方便</text>
+      <button class="my-miniprogram-guide-close" size="mini" aria-label="关闭添加到我的小程序提示" bindtap="dismissMyMiniProgramGuide"><icon type="cancel" size="18" color="#65706A" /></button>
+    </view>
+    <text class="my-miniprogram-guide-steps">右上角 ··· → 添加到我的小程序</text>
+  </view>
+</template>

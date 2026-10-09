@@ -17,10 +17,11 @@ const shareCard = require('../../utils/share-card');
 const posterInvite = require('../../utils/poster-invite');
 const treePosterFlow = require('../../utils/tree-poster-flow');
 const subscribeNotifications = require('../../utils/subscribe-notifications');
+const myMiniProgramGuide = require('../../utils/my-miniprogram-guide');
 
 const MAX_INTERACTIVE_NODES = 80;
 
-Page(launchAd.wrap(graphGesturePage.wrap({
+Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap({
   data: {
     selectedKinship: null,
     loading: true,
@@ -114,13 +115,19 @@ Page(launchAd.wrap(graphGesturePage.wrap({
   },
 
   requestNotifications: function (options) {
+    const self = this;
     const silent = options && options.silent === true;
-    subscribeNotifications.request(this.data.notificationTemplates, this.data.currentRole === 'admin').then(function (result) {
+    this._myMiniProgramNotificationsActive = true;
+    return subscribeNotifications.request(this.data.notificationTemplates, this.data.currentRole === 'admin').then(function (result) {
+      self._myMiniProgramNotificationsActive = false;
       if (!silent) subscribeNotifications.showResult(result);
+    }, function () {
+      self._myMiniProgramNotificationsActive = false;
     });
   },
 
   onHide: function () {
+    this.cancelNewFamilyTour();
     this._adPageHidden = true;
     adAccess.hide(this, true);
     adAccess.hide(this, 'treeTop');
@@ -132,6 +139,7 @@ Page(launchAd.wrap(graphGesturePage.wrap({
   },
 
   onUnload: function () {
+    this.cancelNewFamilyTour();
     this._adPageHidden = true;
     adAccess.hide(this, true);
     adAccess.hide(this, 'treeTop');
@@ -152,6 +160,9 @@ Page(launchAd.wrap(graphGesturePage.wrap({
 
   loadPage: function (pendingView, options) {
     const self = this;
+    this._myMiniProgramGraphScope = '';
+    this._myMiniProgramGraphFamilyId = '';
+    this.cancelNewFamilyTour();
     adAccess.hide(this, 'treeTop');
     adAccess.hide(this, true);
     const config = options || {};
@@ -164,6 +175,11 @@ Page(launchAd.wrap(graphGesturePage.wrap({
     const currentFamily = app.getCurrentFamily();
     const graphIsFresh = currentFamily && app.isCacheFresh('graph', currentFamily._id);
     if (!config.force && !pendingView && hasContent && familyIsFresh && currentFamily && graphIsFresh) {
+      if (renderedFamilyId === currentFamily._id) {
+        this._myMiniProgramGraphScope = myMiniProgramGuide.scope(app);
+        this._myMiniProgramGraphFamilyId = currentFamily._id;
+      }
+      this.showNewFamilyTour(currentFamily._id, requestId);
       return Promise.all([this.refreshTreeAd(), this.preloadMemberAd()]);
     }
     if (!hasContent) this.setData({ loading: true, loadError: '' });
@@ -196,6 +212,7 @@ Page(launchAd.wrap(graphGesturePage.wrap({
         self._hasLoaded = true;
         return null;
       }
+      const graphScope = myMiniProgramGuide.scope(app);
       return app.getGraph(currentFamily._id, config).then(function (data) {
         if (requestId !== self._loadRequestId) return null;
         const persons = (data.persons || []).map(function (person) {
@@ -258,18 +275,12 @@ Page(launchAd.wrap(graphGesturePage.wrap({
           preserveViewport: Boolean(hasContent && renderedFamilyId === data.family._id && !pendingView && !returnFocus)
         });
         self._hasLoaded = true;
-        const tourKey = 'youpu_new_family_tour_' + data.family._id;
-        if (wx.getStorageSync(tourKey)) {
-          wx.removeStorageSync(tourKey);
-          setTimeout(function () {
-            wx.showModal({
-              title: '这是你的第一张家谱',
-              content: '拖动和缩放查看关系；点击一位家人可以查看资料、添加亲属。完成后到“家庭”页邀请家人一起补全。',
-              confirmText: '开始看看',
-              showCancel: false
-            });
-          }, 280);
+        if (graphScope === myMiniProgramGuide.scope(app)) {
+          self._myMiniProgramGraphScope = graphScope;
+          self._myMiniProgramGraphFamilyId = data.family._id;
         }
+        self.showNewFamilyTour(data.family._id, requestId);
+        if (self._myMiniProgramGuide) self._myMiniProgramGuide.sync();
         const familyId = data.family._id;
         return api.getMediaUrls(persons.map(function (person) { return person.avatarAssetId; })).then(function (urls) {
           if (requestId !== self._loadRequestId) return data;
@@ -296,6 +307,31 @@ Page(launchAd.wrap(graphGesturePage.wrap({
     });
   },
 
+  showNewFamilyTour: function (familyId, requestId) {
+    const self = this;
+    const tourKey = 'youpu_new_family_tour_' + familyId;
+    if (!wx.getStorageSync(tourKey)) return;
+    this._myMiniProgramTourActive = true;
+    this._newFamilyTourTimer = setTimeout(function () {
+      self._newFamilyTourTimer = null;
+      if (self._pageHidden || requestId !== self._loadRequestId) return;
+      wx.removeStorageSync(tourKey);
+      wx.showModal({
+        title: '这是你的第一张家谱',
+        content: '拖动和缩放查看关系；点击一位家人可以查看资料、添加亲属。完成后到“家庭”页邀请家人一起补全。',
+        confirmText: '开始看看',
+        showCancel: false,
+        complete: function () { if (requestId === self._loadRequestId) self._myMiniProgramTourActive = false; }
+      });
+    }, 280);
+  },
+
+  cancelNewFamilyTour: function () {
+    if (this._newFamilyTourTimer) clearTimeout(this._newFamilyTourTimer);
+    this._newFamilyTourTimer = null;
+    this._myMiniProgramTourActive = false;
+  },
+
   preloadMemberAd: function () {
     if (this.data.loading || this.data.loadError || this.data.accountPending) return Promise.resolve();
     return adAccess.preloadMember(this, app, this.data.currentFamily);
@@ -314,6 +350,7 @@ Page(launchAd.wrap(graphGesturePage.wrap({
   adError: function (event) { adAccess.error(this, 'treeTop', event); },
   adClose: function (event) { adAccess.error(this, 'treeTop', event); },
   dismissTopAd: function () { adAccess.hide(this, 'treeTop'); },
+  dismissMyMiniProgramGuide: function () { if (this._myMiniProgramGuide) this._myMiniProgramGuide.dismiss(); },
   openTopAdMembership: function () { adAccess.openMembership(this, app, 'treeTop'); },
 
   shouldShowShareReminder: function (family) {
@@ -1229,4 +1266,4 @@ Page(launchAd.wrap(graphGesturePage.wrap({
   },
 
   stopEvent: function () {}
-})));
+}))));

@@ -1,3 +1,4 @@
+@import "../../styles/my-miniprogram-guide.wxss";
 @import "../../templates/kinship-card.wxss";
 @import "../../styles/poster-export.wxss";
 @import "../../styles/graph-clean-screen.wxss";

@@ -9,6 +9,7 @@ const CODE_BASE64 = '/9j/2wBDAAMCAgMCAgMDAwMEAwMEBQgFBQQEBQoHBwYIDAoMDAsKCwsNDhI
 function check(condition, code) { if (!condition) throw Object.assign(new Error(code), { code }); }
 function harness(role = 'viewer', render, posterCode) {
   const db = createDatabase(); const files = new Map(); let actor = 'actor'; const calls = [];
+  db.now = new Date();
   db.put('users', actor, { status: 'active' });
   db.put('families', 'family', { name: '虚构家谱', status: 'active', proLifetime: true, contentRevision: 0 });
   db.put('family_memberships', 'member', { familyId: 'family', userId: actor, role, status: 'active' });

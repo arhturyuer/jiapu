@@ -1,3 +1,4 @@
+<import src="../../templates/my-miniprogram-guide.wxml" />
 <view class="loading-panel" wx:if="{{loading}}"><view class="loading-dot"></view><text>正在加载我的资料…</text></view>
 <view class="page-shell" wx:elif="{{error}}"><view class="empty-panel"><view class="empty-mark">!</view><text class="empty-title">暂时无法打开我的页面</text><text class="empty-description">{{error}}</text><button class="primary-button empty-action" bindtap="loadPage">重新加载</button></view></view>
 <view class="profile-page page-shell" wx:else>
@@ -23,16 +24,36 @@
       <view class="setting-row" bindtap="showPrivacy" hover-class="setting-row-active"><view><text class="setting-title">隐私与账户</text><text class="setting-desc">管理授权、个人数据和账户状态</text></view><text class="setting-arrow">›</text></view>
       <view class="setting-row" bindtap="showAbout" hover-class="setting-row-active"><view><text class="setting-title">关于有谱</text><text class="setting-desc">产品理念与版本信息</text></view><text class="setting-arrow">›</text></view>
       <view class="setting-row setting-share-row" hover-class="setting-row-active"><view class="setting-share-copy"><text class="setting-title">分享有谱</text><text class="setting-desc">向朋友推荐有谱家谱小程序</text></view><text class="setting-arrow">›</text><button class="setting-share-hit" open-type="share" hover-class="setting-row-active" aria-label="分享有谱家谱"></button></view>
+      <view class="setting-row" bindtap="showMyMiniProgramHelp" hover-class="setting-row-active"><view><text class="setting-title">添加到我的小程序</text><text class="setting-desc">下次找家谱更方便</text></view><text class="setting-arrow">›</text></view>
     </view></view>
 
-    <view class="section-block"><view class="section-heading"><text class="section-title">帮助与反馈</text></view><view class="setting-list surface-card"><view class="setting-row" bindtap="showFeedbackGroup" hover-class="setting-row-active"><view><text class="setting-title">用户反馈群</text><text class="setting-desc">长按识别二维码，加入微信群反馈问题</text></view><text class="setting-arrow">›</text></view></view></view>
-    <view class="ad-placement {{adLoaded ? '' : 'ad-placement-loading'}}" wx:if="{{adVisible}}">
-      <ad class="banner-ad" wx:if="{{adVisible}}" unit-id="{{adUnitId}}" data-version="{{adVersion}}" bindload="showAd" binderror="hideAd"></ad>
-      <button class="ad-membership-link" wx:if="{{adVisible && adLoaded}}" bindtap="openAdMembership">开通家庭会员，全体家人免广告 ›</button>
-    </view>
   </block>
 
-  <view class="section-block" wx:if="{{accountState === 'pending_delete'}}"><view class="section-heading"><text class="section-title">帮助与反馈</text></view><view class="setting-list surface-card"><view class="setting-row" bindtap="showFeedbackGroup" hover-class="setting-row-active"><view><text class="setting-title">用户反馈群</text><text class="setting-desc">长按识别二维码，加入微信群反馈问题</text></view><text class="setting-arrow">›</text></view></view></view>
+  <view class="section-block">
+    <view class="section-heading"><text class="section-title">帮助与反馈</text></view>
+    <view class="feedback-card surface-card">
+      <view class="feedback-copy">
+        <text class="setting-title">用户反馈群</text>
+        <text class="setting-desc" wx:if="{{feedbackError}}">{{feedbackError}}</text>
+        <text class="setting-desc" wx:elif="{{!feedbackLoading && !feedbackAvailable}}">反馈群暂未开放</text>
+        <text class="setting-desc" wx:else>长按识别二维码，进群交流、反馈问题</text>
+      </view>
+      <view class="feedback-qr-slot">
+        <text class="feedback-status" wx:if="{{feedbackLoading}}">正在加载二维码…</text>
+        <view class="feedback-fallback" wx:elif="{{feedbackError}}">
+          <button class="feedback-action" bindtap="loadFeedbackGroup">重新加载</button>
+        </view>
+        <image class="feedback-qr-image" wx:elif="{{feedbackAvailable}}" src="{{feedbackQrCodeUrl}}" mode="aspectFit" show-menu-by-longpress="{{true}}" bindtap="previewFeedbackQrCode" binderror="feedbackQrError" data-version="{{feedbackVersion}}" data-url="{{feedbackQrCodeUrl}}" aria-label="用户反馈群二维码，长按识别或点击放大"></image>
+        <view class="feedback-fallback" wx:else>
+          <button class="feedback-action" open-type="contact">联系微信客服</button>
+        </view>
+      </view>
+    </view>
+  </view>
+  <view class="ad-placement {{adLoaded ? '' : 'ad-placement-loading'}}" wx:if="{{accountState !== 'pending_delete' && adVisible}}">
+    <ad class="banner-ad" wx:if="{{adVisible}}" unit-id="{{adUnitId}}" data-version="{{adVersion}}" bindload="showAd" binderror="hideAd"></ad>
+    <button class="ad-membership-link" wx:if="{{adVisible && adLoaded}}" bindtap="openAdMembership">开通家庭会员，全体家人免广告 ›</button>
+  </view>
   <view class="section-block" wx:if="{{showTestReset}}">
     <view class="section-heading"><text class="section-title">开发版测试工具</text></view>
     <view class="test-reset-card surface-card">
@@ -42,3 +63,4 @@
     </view>
   </view>
 </view>
+<template is="myMiniProgramGuide" data="{{showMyMiniProgramGuide: showMyMiniProgramGuide, myMiniProgramGuideStyle: myMiniProgramGuideStyle, myMiniProgramGuideArrowStyle: myMiniProgramGuideArrowStyle}}" />

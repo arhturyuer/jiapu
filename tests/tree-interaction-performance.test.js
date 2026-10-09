@@ -18,7 +18,7 @@ function topAdFixture(t) {
   const visits = [];
   const previousWx = global.wx;
   t.after(function () { global.wx = previousWx; });
-  global.wx = { createSelectorQuery: memberQuery(), canIUse: function () { return true; }, navigateTo: function (options) { visits.push(options.url); } };
+  global.wx = { getStorageSync: function () { return ''; }, createSelectorQuery: memberQuery(), canIUse: function () { return true; }, navigateTo: function (options) { visits.push(options.url); } };
   const app = {
     globalData: { environment: 'staging' },
     getCurrentFamily: function () { return family; },
@@ -176,7 +176,7 @@ test('顶部与人物弹框广告分别处理事件，顶部模板与邀请互�
   assert.equal(page.data.memberAdReserved, false);
   assert.equal(page.data.memberAdVisible, false, '关闭人物弹框销毁原生广告，禁止隐藏视频');
   const template = fs.readFileSync(path.join(__dirname, '../miniprogram/pages/tree/index.wxml'), 'utf8');
-  assert.match(template, /tree-share-reminder" wx:if="\{\{showShareReminder\}\}"[\s\S]*?<view class="tree-top-ad" wx:elif="\{\{topAdVisible && !isCleanScreen && !isLandscape\}\}"/);
+  assert.match(template, /tree-share-reminder" wx:if="\{\{showShareReminder && !showMyMiniProgramGuide\}\}"[\s\S]*?<view class="tree-top-ad" wx:elif="\{\{topAdVisible && !showMyMiniProgramGuide && !isCleanScreen && !isLandscape\}\}"/);
   assert.match(template, /<ad-custom[^>]*bindload="adLoad"[^>]*binderror="adError"[^>]*bindclose="adClose"/);
   assert.match(template, /tree-top-ad-actions" wx:if="\{\{topAdLoaded\}\}"[\s\S]*tree-top-ad-close"[^>]*aria-label="关闭广告"[^>]*bindtap="dismissTopAd"[\s\S]*<icon type="cancel"[\s\S]*tree-top-ad-membership" bindtap="openTopAdMembership">开通会员，全家人免广告/);
 });

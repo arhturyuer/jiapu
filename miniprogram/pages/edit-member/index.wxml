@@ -34,5 +34,7 @@
     <textarea class="field-textarea" placeholder="记录值得被家人记住的事" value="{{bio}}" data-field="bio" bindinput="inputField" maxlength="500"></textarea>
   </view>
   <text class="permission-note" wx:if="{{currentRole !== 'admin'}}">姓名、性别和人物状态的修改需要管理员确认。</text>
-  <button class="primary-button submit-button" loading="{{submitting}}" disabled="{{!name || !hasFormChanges || uploading || savingAvatar || submitting}}" bindtap="submit">{{submitting ? '保存中…' : hasFormChanges ? '保存其他资料' : '其他资料未修改'}}</button>
+  <view class="submit-actions">
+    <button class="primary-button submit-button" loading="{{submitting}}" disabled="{{!name || !hasFormChanges || uploading || savingAvatar || submitting}}" bindtap="submit">{{submitting ? '保存中…' : hasFormChanges ? '保存其他资料' : '其他资料未修改'}}</button>
+  </view>
 </view>

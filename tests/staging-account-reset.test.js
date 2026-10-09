@@ -220,6 +220,8 @@ test('我的页仅独立 staging develop 显示入口，隐藏版本点击也不
   for (const version of ['trial', 'release', '', 'unknown']) {
     const h = pageHarness(t, version);
     h.page.loadPage = () => Promise.resolve();
+    h.page.loadFeedbackGroup = () => Promise.resolve();
+    h.app.ensureLogin = () => Promise.resolve();
     h.app.refreshPendingBadge = () => Promise.resolve();
     h.page.onShow();
     assert.equal(h.page.data.showTestReset, false);
@@ -230,6 +232,8 @@ test('我的页仅独立 staging develop 显示入口，隐藏版本点击也不
   }
   const h = pageHarness(t);
   h.page.loadPage = () => Promise.resolve(); h.app.refreshPendingBadge = () => Promise.resolve();
+  h.page.loadFeedbackGroup = () => Promise.resolve();
+  h.app.ensureLogin = () => Promise.resolve();
   h.page.onShow(); assert.equal(h.page.data.showTestReset, true);
   h.app.globalData.env = 'different'; h.page.onShow(); assert.equal(h.page.data.showTestReset, false);
 });

@@ -1,3 +1,4 @@
+@import "../../styles/my-miniprogram-guide.wxss";
 .profile-page { padding-bottom: calc(56rpx + env(safe-area-inset-bottom)); }
 .profile-card { position: relative; min-height: 208rpx; padding: 32rpx; }
 .avatar-btn { position: absolute; top: 32rpx; left: 32rpx; width: 144rpx; height: 144rpx; margin: 0; padding: 0; border-radius: 44rpx; overflow: hidden; background: transparent; }
@@ -14,6 +15,15 @@
 .setting-share-copy { flex: 1; min-width: 0; }
 .setting-share-hit { position: absolute; left: 0; top: 0; z-index: 2; width: 100%; height: 100%; min-width: 100%; min-height: 100%; margin: 0; padding: 0; color: transparent; background: transparent; transform: scale(8); transform-origin: center center; }
 .setting-share-hit::after { border: none; }
+.feedback-card { display: flex; align-items: center; gap: 20rpx; padding: 8rpx 24rpx; }
+.feedback-copy { flex: 1; min-width: 0; }
+.feedback-copy .setting-desc { white-space: normal; overflow-wrap: break-word; }
+.feedback-qr-slot { display: flex; align-items: center; justify-content: center; flex: 0 0 120rpx; width: 120rpx; height: 120rpx; }
+.feedback-qr-image { display: block; width: 120rpx; height: 120rpx; background: #fff; }
+.feedback-fallback { width: 100%; text-align: center; }
+.feedback-status { display: block; color: #65706A; font-size: 24rpx; line-height: 1.4; text-align: center; }
+.feedback-action { min-height: 88rpx; margin: 4rpx 0 0; padding: 12rpx 0; color: #245C4A; background: transparent; font-size: 24rpx; line-height: 1.4; }
+.feedback-action::after { border: none; }
 .pending-card { padding: 32rpx; display: flex; flex-direction: column; gap: 18rpx; border-color: #E7B66E; }.pending-title { color: #8A5A16; font-size: 36rpx; font-weight: 650; }.pending-desc { color: #765E3A; font-size: 28rpx; line-height: 1.65; }.contact-button,.text-button { min-height: 88rpx; color: #245C4A; background: transparent; font-size: 30rpx; text-decoration: underline; }
 .empty-action { width: 100%; margin: 0; }
 .banner-ad { margin-top:40rpx; }

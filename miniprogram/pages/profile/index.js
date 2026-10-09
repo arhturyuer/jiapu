@@ -6,6 +6,7 @@ const formState = require('../../utils/form-state');
 const adAccess = require('../../utils/ad-access');
 const shareCard = require('../../utils/share-card');
 const environmentConfig = require('../../config/env');
+const myMiniProgramGuide = require('../../utils/my-miniprogram-guide');
 
 function canResetTestAccount() {
   const runtime = environmentConfig.resolveRuntimeEnvironment(wx);
@@ -45,6 +46,9 @@ function clearCachedAvatarUrl(assetId) {
 
 Page(launchAd.wrap({
   data: {
+    showMyMiniProgramGuide: false,
+    myMiniProgramGuideStyle: '',
+    myMiniProgramGuideArrowStyle: '',
     loading: true,
     error: '',
     accountState: 'active',
@@ -60,22 +64,66 @@ Page(launchAd.wrap({
     adLoaded: false, adFamilyId: '', adVersion: 0,
     adVisible: false,
     showTestReset: false,
-    resettingTestAccount: false
+    resettingTestAccount: false,
+    feedbackLoading: true,
+    feedbackError: '',
+    feedbackAvailable: false,
+    feedbackQrCodeUrl: '',
+    feedbackVersion: 0
   },
 
   onShow: function () {
+    myMiniProgramGuide.dismissManual(this);
     this._unloaded = false;
+    this._feedbackHidden = false;
     this.setData({ showTestReset: canResetTestAccount() });
     if (this.data.resettingTestAccount) return;
     this.loadPage();
+    this.loadFeedbackGroup();
     this._adPageHidden = false;
     adAccess.hide(this, false);
     app.ensureLogin().then(() => adAccess.refresh(this, app, 'profile', app.getCurrentFamily())).catch(function () {});
     if (app.refreshPendingBadge) app.refreshPendingBadge().catch(function () {});
   },
 
-  onHide: function () { this._adPageHidden = true; adAccess.hide(this, false); },
-  onUnload: function () { this._adPageHidden = true; adAccess.hide(this, false); this._unloaded = true; this._pageVersion = (this._pageVersion || 0) + 1; formState.clearLeaveAlert(this); },
+  onHide: function () { myMiniProgramGuide.dismissManual(this); this._feedbackHidden = true; this._feedbackVersion = (this._feedbackVersion || 0) + 1; this._adPageHidden = true; adAccess.hide(this, false); },
+  onUnload: function () { myMiniProgramGuide.dismissManual(this); this._feedbackHidden = true; this._feedbackVersion = (this._feedbackVersion || 0) + 1; this._adPageHidden = true; adAccess.hide(this, false); this._unloaded = true; this._pageVersion = (this._pageVersion || 0) + 1; formState.clearLeaveAlert(this); },
+
+  loadFeedbackGroup: function () {
+    const self = this;
+    if (this._unloaded || this._feedbackHidden || this.data.resettingTestAccount) return Promise.resolve();
+    const version = this._feedbackVersion = (this._feedbackVersion || 0) + 1;
+    this.setData({ feedbackLoading: true, feedbackError: '', feedbackAvailable: false, feedbackQrCodeUrl: '', feedbackVersion: version });
+    function isCurrent() {
+      return !self._unloaded && !self._feedbackHidden && !self.data.resettingTestAccount && version === self._feedbackVersion;
+    }
+    return app.ensureLogin().then(function () {
+      if (!isCurrent()) return null;
+      return api.call('feedbackGroup.get');
+    }).then(function (data) {
+      if (!isCurrent() || !data) return;
+      self.setData({
+        feedbackLoading: false,
+        feedbackAvailable: Boolean(data.available && data.qrCodeUrl),
+        feedbackQrCodeUrl: data.available ? data.qrCodeUrl || '' : ''
+      });
+    }).catch(function (error) {
+      if (!isCurrent()) return;
+      self.setData({ feedbackLoading: false, feedbackError: api.userMessage(error, '反馈群信息加载失败，请稍后重试') });
+    });
+  },
+
+  feedbackQrError: function (event) {
+    const dataset = event.currentTarget.dataset;
+    if (this._unloaded || this._feedbackHidden || this.data.resettingTestAccount ||
+      Number(dataset.version) !== this._feedbackVersion || dataset.url !== this.data.feedbackQrCodeUrl) return;
+    this.setData({ feedbackAvailable: false, feedbackQrCodeUrl: '', feedbackError: '二维码加载失败，请重新加载' });
+  },
+
+  previewFeedbackQrCode: function () {
+    if (this._unloaded || this._feedbackHidden || this.data.resettingTestAccount || !this.data.feedbackAvailable || !this.data.feedbackQrCodeUrl) return;
+    wx.previewImage({ current: this.data.feedbackQrCodeUrl, urls: [this.data.feedbackQrCodeUrl], showmenu: true });
+  },
 
   loadPage: function (options) {
     const self = this;
@@ -212,6 +260,9 @@ Page(launchAd.wrap({
   resetTestAccount: function () {
     const self = this;
     if (!canResetTestAccount() || this.data.resettingTestAccount || this.data.savingAvatar || this.data.savingProfile) return Promise.resolve();
+    myMiniProgramGuide.dismissManual(this);
+    const refreshFeedback = Boolean(this.data.feedbackVersion);
+    this._feedbackVersion = (this._feedbackVersion || 0) + 1;
     this.setData({ resettingTestAccount: true });
     this._pageVersion = (this._pageVersion || 0) + 1;
     const confirmation = this._testResetCompleted ? Promise.resolve({ confirm: true }) : wx.showModal({
@@ -235,7 +286,7 @@ Page(launchAd.wrap({
         self._testResetCompleted = true;
         app.clearTestSession();
         formState.clearLeaveAlert(self);
-        if (!self._unloaded) self.setData({ user: null, nickName: '', avatarUrl: '', avatarAssetId: '', hasNameChanges: false, adVisible: false, accountState: 'active', deletion: null });
+        if (!self._unloaded) self.setData({ user: null, nickName: '', avatarUrl: '', avatarAssetId: '', hasNameChanges: false, adVisible: false, accountState: 'active', deletion: null, feedbackLoading: false, feedbackError: '', feedbackAvailable: false, feedbackQrCodeUrl: '' });
       }
       return wx.reLaunch({ url: '/pages/tree/index' });
     }).catch(function (error) {
@@ -243,11 +294,14 @@ Page(launchAd.wrap({
       wx.showToast({ title: api.userMessage(error, self._testResetCompleted ? '注销完成，请再次点击重新进入' : '注销失败，请重试'), icon: 'none' });
     }).then(function () {
       if (!self._unloaded) self.setData({ resettingTestAccount: false });
+      if (refreshFeedback && !self._testResetCompleted && !self._unloaded && !self._feedbackHidden) return self.loadFeedbackGroup();
     });
   },
 
   showPrivacy: function () { wx.navigateTo({ url: '/pages/privacy/index' }); },
-  showFeedbackGroup: function () { wx.navigateTo({ url: '/pages/feedback-group/index' }); },
+  showMyMiniProgramHelp: function () { myMiniProgramGuide.showManual(this); },
+  dismissMyMiniProgramGuide: function () { myMiniProgramGuide.dismissManual(this); },
+  stopEvent: function () {},
   hideAd: function (event) { adAccess.error(this, false, event); },
   showAd: function (event) { adAccess.loaded(this, false, event); },
   openAdMembership: function () { adAccess.openMembership(this, app, false); },

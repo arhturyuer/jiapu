@@ -1,5 +1,6 @@
 <wxs module="graphGesture" src="../../wxs/graph-gesture.wxs" />
 <import src="../../templates/kinship-card.wxml" />
+<import src="../../templates/my-miniprogram-guide.wxml" />
 <page-meta page-orientation="{{pageOrientation}}" bindresize="onPageResize"></page-meta>
 <view class="tree-page {{isLandscape ? 'is-landscape' : ''}} {{isCleanScreen ? 'is-clean-screen' : ''}}">
   <view class="loading-panel" wx:if="{{loading}}">
@@ -47,12 +48,12 @@
       <view class="toolbar-share landscape-hidden" bindtap="startShare">分享</view>
     </view>
 
-    <view class="tree-share-reminder" wx:if="{{showShareReminder}}">
+    <view class="tree-share-reminder" wx:if="{{showShareReminder && !showMyMiniProgramGuide}}">
       <view class="tree-share-reminder-copy"><text class="tree-share-reminder-title">邀请家人一起补全</text><text class="tree-share-reminder-desc">已有 {{currentFamily.personCount}} 位家人，分享给家庭群，一起把家谱补完整。</text></view>
       <view class="tree-share-reminder-actions"><button class="tree-share-reminder-invite" bindtap="startShare">邀请家人</button><button class="tree-share-reminder-dismiss" bindtap="dismissShareReminder">暂不分享</button></view>
     </view>
 
-    <view class="tree-top-ad" wx:elif="{{topAdVisible && !isCleanScreen && !isLandscape}}">
+    <view class="tree-top-ad" wx:elif="{{topAdVisible && !showMyMiniProgramGuide && !isCleanScreen && !isLandscape}}">
       <ad-custom class="tree-top-ad-template" unit-id="{{topAdUnitId}}" data-version="{{topAdVersion}}" bindload="adLoad" binderror="adError" bindclose="adClose"></ad-custom>
       <view class="tree-top-ad-actions" wx:if="{{topAdLoaded}}">
         <button class="tree-top-ad-close" aria-label="关闭广告" bindtap="dismissTopAd">
@@ -61,6 +62,8 @@
         <button class="tree-top-ad-membership" bindtap="openTopAdMembership">开通会员，全家人免广告</button>
       </view>
     </view>
+
+    <template is="myMiniProgramGuide" data="{{showMyMiniProgramGuide: showMyMiniProgramGuide, myMiniProgramGuideStyle: myMiniProgramGuideStyle, myMiniProgramGuideArrowStyle: myMiniProgramGuideArrowStyle}}" />
 
     <view class="graph-empty" wx:if="{{nodes.length === 0}}">
       <text class="graph-empty-title">家谱还是空的</text>
