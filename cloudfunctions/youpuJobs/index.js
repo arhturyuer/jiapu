@@ -36,6 +36,8 @@ const COLLECTIONS = [
   'payment_orders',
   'payment_events',
   'membership_grants',
+  'membership_codes',
+  'membership_redemptions',
   'feedback_group_settings',
   'example_templates',
   'example_template_versions',
@@ -110,7 +112,7 @@ async function ensureCollections(event) {
   }
   await db.collection('system_config').doc('schema').set({
     data: {
-      version: 11,
+      version: 12,
       graphPersonLimit: 500,
       archiveRetentionDays: 30,
       deletionCoolingDays: 7,
@@ -330,6 +332,11 @@ async function anonymizeUser(request) {
     payerAnonymizedAt: db.serverDate(),
     updatedAt: db.serverDate()
   }, 1000);
+  for (const name of ['membership_codes', 'membership_redemptions']) {
+    await updateMany(name, { redeemedBy: user._id }, {
+      redeemedBy: anonymousActor, redeemedAnonymizedAt: db.serverDate(), updatedAt: db.serverDate()
+    }, 50000);
+  }
   await anonymizeOwnedMedia(user._id, anonymousActor);
   await db.collection('account_deletion_requests').doc(request._id).update({
     data: { status: 'completed', completedAt: db.serverDate(), updatedAt: db.serverDate() }
@@ -475,6 +482,12 @@ async function purgeFamily(family, allowResume) {
   await updateManyStable('payment_orders', { familyId: family._id }, {
     familyDeletedAt: db.serverDate(), updatedAt: db.serverDate()
   }, 5000);
+  await updateManyStable('membership_redemptions', { familyId: family._id }, {
+    familyDeletedAt: db.serverDate(), familyName: '', updatedAt: db.serverDate()
+  }, 50000);
+  await updateManyStable('membership_codes', { redeemedFamilyId: family._id }, {
+    familyDeletedAt: db.serverDate(), updatedAt: db.serverDate()
+  }, 50000);
   await db.collection('families').doc(family._id).remove();
   return { familyId: family._id, deletedFiles: deletedFiles, deletedBackupFiles: deletedBackupFiles, removed: removed };
 }

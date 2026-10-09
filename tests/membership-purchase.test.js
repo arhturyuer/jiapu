@@ -22,7 +22,7 @@ function harness() {
     calls.push({ type, payload });
     if (type === 'membership.catalog') return { products, paymentMode: 'sandbox' };
     if (type === 'membership.status') return { family: families.find(f => f._id === payload.familyId), membership: { active: false, lifetime: false }, canPurchase: true };
-    if (type === 'payment.listMine') return { items: [], hasMore: false };
+    if (type === 'payment.listMine' || type === 'membership.listRecords') return { items: [], hasMore: false };
     if (type === 'payment.createOrder') return { order: order('pending', payload.familyId, 'new-order'), payData: {} };
     if (type === 'payment.reconcileNow') return { order: order('pending', 'A', payload.orderId) };
     return {};
@@ -77,7 +77,7 @@ test('权益失败禁止购买，历史与后台核验失败不影响购买且�
   for (const mode of ['status', 'history', 'pending']) {
     const h = harness(); const previous = h.api.call;
     h.api.call = (type, data) => {
-      if (mode === 'status' && type === 'membership.status' || type === 'payment.listMine' && (mode === 'pending' ? data.unresolvedOnly : mode === 'history' && !data.unresolvedOnly)) return Promise.reject(new Error('offline'));
+      if (mode === 'status' && type === 'membership.status' || (mode === 'pending' && type === 'payment.listMine' && data.unresolvedOnly || mode === 'history' && type === 'membership.listRecords')) return Promise.reject(new Error('offline'));
       return previous(type, data);
     };
     await h.page.onShow(); assert.equal(h.page.data.canBuy, mode !== 'status'); assert.ok(h.page.data.statusError || h.page.data.ordersError || h.page.data.recoveryError);
@@ -276,14 +276,14 @@ test('付款成功入记录并展开，退款仍保留记录，历史错误可�
   const token = h.page.viewToken(); await h.page.acceptOrder(order('refunded', 'A', 'new-order'), token);
   assert.equal(h.page.data.orders[0].statusText, '已退款'); assert.equal(h.storage.size, 0);
   h.page.toggleRecords(); assert.equal(h.page.data.recordsExpanded, false);
-  h.api.call = (type, data) => type === 'payment.listMine' && data.paidOnly ? Promise.reject(new Error('offline')) : previous(type, data);
+  h.api.call = (type, data) => type === 'membership.listRecords' ? Promise.reject(new Error('offline')) : previous(type, data);
   await h.page.retryOrders(); assert.ok(h.page.data.ordersError); assert.equal(h.page.data.canBuy, true);
 });
 
 test('付款记录独立分页，退款和成功按订单 ID 合并且不混入未付款', async () => {
   const h = harness(); const previous = h.api.call; const cursors = [];
   h.api.call = (type, data) => {
-    if (type === 'payment.listMine' && data.paidOnly) {
+    if (type === 'membership.listRecords') {
       cursors.push(data.cursor);
       return Promise.resolve(data.cursor ? { items: [order('refunded', 'A', 'older-paid')], hasMore: false } : { items: [order('fulfilled', 'A', 'recent-paid')], hasMore: true, nextCursor: '10' });
     }
@@ -324,4 +324,48 @@ test('被动查单限制每次六笔并优先成功返回项，防止历史查�
     return previous(type, data);
   };
   await h.page.onShow(); assert.equal(reconciled.length, 6); assert.equal(reconciled[0], 'pending-11'); assert.equal(h.page.data.canBuy, true); assert.equal(title, '家庭会员');
+});
+
+test('兑换请求阻止重复点击、切谱与支付，成功刷新权益和类型记录', async () => {
+  const h = harness(); await h.page.onShow(); const pending = deferred(); const previous = h.api.call;
+  const record = { recordId: 'redemption:r1', recordType: 'redemption', _id: 'r1', familyId: 'A', productName: '有谱家庭会员 30 天', status: 'fulfilled', redeemedAt: '2026-10-09T00:00:00Z', createdAt: '2026-10-09T00:00:00Z', maskedCode: '****-****-****-ABCD' };
+  let redeemed = false; let calls = 0;
+  h.api.call = async (type, data) => {
+    if (type === 'membership.redeem') { calls++; await pending.promise; redeemed = true; return { record }; }
+    if (redeemed && type === 'membership.status') return { family: h.families[0], membership: { active: true, lifetime: false } };
+    if (redeemed && type === 'membership.listRecords') return { items: [record], hasMore: false };
+    return previous(type, data);
+  };
+  h.page.openRedeem(); h.page.inputRedeem({ detail: { value: '2345-6789-abcd-efgh' } });
+  const request = h.page.submitRedeem(); await flush();
+  await h.page.submitRedeem(); await h.page.changeFamily({ detail: { value: 1 } }); await h.page.startPayment();
+  assert.equal(calls, 1); assert.equal(h.page.data.family._id, 'A'); assert.equal(h.page.data.canBuy, false);
+  pending.resolve(); await request;
+  assert.equal(h.page.data.membership.active, true); assert.equal(h.page.data.recordsExpanded, true); assert.equal(h.page.data.redeemOpen, false);
+  assert.equal(h.page.data.orders[0].typeText, '兑换码兑换'); assert.equal(h.page.data.orders[0].priceText, '—');
+  assert.equal(h.invalidated.includes('A'), true);
+});
+
+test('兑换网络失败保留输入与幂等标识，重试后正常恢复', async () => {
+  const h = harness(); await h.page.onShow(); const requests = []; const previous = h.api.call;
+  h.api.call = async (type, data) => {
+    if (type !== 'membership.redeem') return previous(type, data);
+    requests.push(data);
+    if (requests.length === 1) throw new Error('timeout');
+    return { record: { recordId: 'redemption:r1', recordType: 'redemption', familyId: 'A', status: 'fulfilled', createdAt: new Date().toISOString() } };
+  };
+  h.page.openRedeem(); h.page.inputRedeem({ detail: { value: '2345-6789-ABCD-EFGH' } }); await h.page.submitRedeem();
+  assert.equal(h.page.data.redeemCode, '2345-6789-ABCD-EFGH'); assert.ok(h.page.data.redeemError); assert.equal(h.page.data.redeeming, false);
+  await h.page.submitRedeem(); assert.equal(requests[0].idempotencyKey, requests[1].idempotencyKey);
+});
+
+test('兑换校验和已有会员限制不发送请求，离页后结果不污染另一家谱', async () => {
+  const h = harness(); await h.page.onShow(); const pending = deferred(); const previous = h.api.call; let sent = 0;
+  h.api.call = async (type, data) => { if (type !== 'membership.redeem') return previous(type, data); sent++; return pending.promise; };
+  h.page.openRedeem(); h.page.inputRedeem({ detail: { value: 'wrong' } }); await h.page.submitRedeem(); assert.equal(sent, 0);
+  h.page.inputRedeem({ detail: { value: '2345-6789-ABCD-EFGH' } }); h.page.setData({ membership: { active: true } }); await h.page.submitRedeem(); assert.equal(sent, 0);
+  h.page.setData({ membership: { active: false } }); const request = h.page.submitRedeem(); await flush();
+  h.page.onHide(); h.page.setData({ familyIndex: 1 }); h.page.resetFamily(); await h.page.onShow();
+  pending.resolve({ record: { familyId: 'A', recordType: 'redemption' } }); await request;
+  assert.equal(h.page.data.family._id, 'B'); assert.equal(h.page.data.orders.length, 0); assert.equal(h.invalidated.length, 0);
 });

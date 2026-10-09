@@ -130,6 +130,7 @@ test('关于页使用正式版实际版本并按最新在前展示受控更新�
   const uploadScript = fs.readFileSync(path.join(root, 'deployment/upload-miniprogram.sh'), 'utf8');
   const verifier = fs.readFileSync(path.join(root, 'deployment/verify-release-note.mjs'), 'utf8');
   assert.deepEqual(releaseInfo.validateReleaseNotes(releaseNotes), [
+    { version: '1.6.9', summary: '新增家庭会员兑换码，支持后台批量生成与管理，会员页可兑换并区分购买和兑换记录。' },
     { version: '1.6.8', summary: '优化家庭会员购买页与权益展示，购买按钮固定底部，未付款订单不再阻挡购买，完善支付恢复与客服入口。' },
     {
       version: '1.6.7',

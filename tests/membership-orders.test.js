@@ -63,7 +63,7 @@ test('会员页首次加载会读取当前家谱订单并自动确认最近待�
       statusCalls += 1;
       return Promise.resolve({ family: { _id: 'family-1', name: '赵氏家谱' }, membership: { active: statusCalls > 1, lifetime: false, expiresAt: '2027-09-01T00:00:00Z' } });
     }
-    if (type === 'payment.listMine') return Promise.resolve({ items: [order(statusCalls > 1 ? 'fulfilled' : 'pending')], hasMore: false, nextCursor: '' });
+    if (type === 'payment.listMine' || type === 'membership.listRecords') return Promise.resolve({ items: [order(statusCalls > 1 ? 'fulfilled' : 'pending')], hasMore: false, nextCursor: '' });
     if (type === 'payment.getOrder') return Promise.resolve({ order: order('fulfilled') });
     throw new Error('unexpected action ' + type);
   };
@@ -72,7 +72,7 @@ test('会员页首次加载会读取当前家谱订单并自动确认最近待�
     page.onLoad({ familyId: 'family-1' });
     await page.onShow();
 
-    assert.deepEqual(calls.find(function (call) { return call.type === 'payment.listMine'; }).payload, { familyId: 'family-1', paidOnly: true, pageSize: 10, cursor: '' });
+    assert.deepEqual(calls.find(function (call) { return call.type === 'membership.listRecords'; }).payload, { familyId: 'family-1', pageSize: 10, cursor: '' });
     assert.equal(calls.filter(function (call) { return call.type === 'payment.getOrder'; }).length, 1);
     assert.equal(page.data.orders[0].status, 'fulfilled');
     assert.equal(page.data.membership.active, true);

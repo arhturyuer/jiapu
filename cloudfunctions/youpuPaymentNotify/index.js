@@ -33,13 +33,14 @@ async function applyDelivery(payload) {
       endsAt = addDays(startsAt, order.durationDays);
     }
     await transaction.collection('membership_grants').doc('grant_' + order._id).set({ data: {
-      familyId: order.familyId, orderId: order._id, productId: order.productId,
+      familyId: order.familyId, orderId: order._id, productId: order.productId, recordType: 'payment',
       durationDays: Number(order.durationDays) || 0, lifetime: Boolean(order.lifetime),
       startsAt: startsAt, endsAt: endsAt, paidAt: paidAt, status: 'active',
       createdAt: db.serverDate(), updatedAt: db.serverDate()
     } });
     await transaction.collection('families').doc(order.familyId).update({ data: {
       proLifetime: Boolean(family.proLifetime || order.lifetime),
+      proRevision: _.inc(1),
       proExpiresAt: family.proLifetime || order.lifetime ? _.remove() : endsAt,
       proUpdatedAt: db.serverDate(), updatedAt: db.serverDate()
     } });
@@ -67,7 +68,18 @@ async function applyRefund(payload) {
     previewOrder = previewResult.data && previewResult.data[0];
   }
   if (!previewOrder) throw new Error('order not found');
-  const activeGrantResult = await db.collection('membership_grants').where({ familyId: previewOrder.familyId, status: 'active' }).limit(100).get();
+  const previewFamily = (await db.collection('families').doc(previewOrder.familyId).get()).data;
+  if (!previewFamily) throw new Error('family unavailable');
+  const activeGrants = [];
+  let offset = 0;
+  while (true) {
+    const result = await db.collection('membership_grants').where({ familyId: previewOrder.familyId, status: 'active' })
+      .orderBy('_id', 'asc').skip(offset).limit(100).get();
+    activeGrants.push(...(result.data || []));
+    if (activeGrants.length > 50000) throw new Error('membership grant limit exceeded');
+    if ((result.data || []).length < 100) break;
+    offset += result.data.length;
+  }
   return db.runTransaction(async function (transaction) {
     let seen = null;
     try { seen = (await transaction.collection('payment_events').doc(eventId).get()).data; } catch (error) { /* new event */ }
@@ -76,9 +88,11 @@ async function applyRefund(payload) {
     const order = result.data;
     const refundState = protocol.assertRefundMatchesOrder(order, payload);
     if (refundState.duplicate) return { duplicate: true, orderId: order._id };
+    const family = (await transaction.collection('families').doc(order.familyId).get()).data;
+    if (!family || Number(family.proRevision || 0) !== Number(previewFamily.proRevision || 0)) throw new Error('membership changed; retry refund');
     const grantId = 'grant_' + order._id;
     await transaction.collection('membership_grants').doc(grantId).update({ data: { status: 'refunded', refundedAt: db.serverDate(), updatedAt: db.serverDate() } });
-    const grants = (activeGrantResult.data || []).filter(function (item) { return item._id !== grantId; }).sort(function (a, b) { return new Date(a.paidAt || 0) - new Date(b.paidAt || 0); });
+    const grants = activeGrants.filter(function (item) { return item._id !== grantId; }).sort(function (a, b) { return new Date(a.paidAt || 0) - new Date(b.paidAt || 0); });
     const lifetime = grants.some(function (item) { return item.lifetime; });
     let cursor = null;
     grants.forEach(function (item) {
@@ -88,7 +102,7 @@ async function applyRefund(payload) {
       cursor += Math.max(0, Number(item.durationDays) || 0) * 86400000;
     });
     await transaction.collection('families').doc(order.familyId).update({ data: {
-      proLifetime: lifetime, proExpiresAt: lifetime || cursor === null ? _.remove() : new Date(cursor),
+      proLifetime: lifetime, proExpiresAt: lifetime || cursor === null ? _.remove() : new Date(cursor), proRevision: _.inc(1),
       proUpdatedAt: db.serverDate(), updatedAt: db.serverDate()
     } });
     await transaction.collection('payment_orders').doc(order._id).update({ data: { status: 'refunded', refundId: payload.refundId, refundedAt: db.serverDate(), updatedAt: db.serverDate() } });

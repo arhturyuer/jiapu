@@ -7,7 +7,7 @@
 </view>
 <view class="membership-page page-shell" style="{{dockHeight ? 'padding-bottom: calc(' + dockHeight + 'px + 24rpx)' : ''}}" wx:else>
   <view class="purchase-family surface-card">
-    <picker range="{{families}}" range-key="name" value="{{familyIndex < 0 ? 0 : familyIndex}}" disabled="{{paying}}" bindchange="changeFamily"><view class="family-picker"><text>{{family ? family.name : '请选择家谱'}}</text><text>{{paying ? '处理中' : '切换 ›'}}</text></view></picker>
+    <picker range="{{families}}" range-key="name" value="{{familyIndex < 0 ? 0 : familyIndex}}" disabled="{{paying || redeeming}}" bindchange="changeFamily"><view class="family-picker"><text>{{family ? family.name : '请选择家谱'}}</text><text>{{paying || redeeming ? '处理中' : '切换 ›'}}</text></view></picker>
     <text class="current-status">{{selectionError || (statusReady ? membershipText : statusError ? '会员权益读取失败' : family ? '正在读取会员权益…' : '请选择要购买的家谱')}}</text>
     <text class="scope-copy">这份家谱全体家人共享</text>
   </view>
@@ -31,21 +31,35 @@
     <view class="state-actions" wx:if="{{showPaymentRefresh && !paying}}"><button class="text-action" loading="{{refreshingOrderId}}" disabled="{{refreshingOrderId}}" bindtap="refreshPayment">刷新支付状态</button><button class="text-action" open-type="contact">联系客服</button></view>
   </view>
   <view class="records surface-card">
-    <view class="records-toggle" bindtap="toggleRecords"><text class="section-title">购买记录</text><text class="records-indicator">{{recordsExpanded ? '收起 ∧' : '查看 ›'}}</text></view>
+    <view class="records-toggle" bindtap="toggleRecords"><text class="section-title">会员记录</text><text class="records-indicator">{{recordsExpanded ? '收起 ∧' : '查看 ›'}}</text></view>
     <view wx:if="{{recordsExpanded}}">
-      <view class="order-loading" wx:if="{{loadingOrders}}">正在加载购买记录…</view>
+      <view class="order-loading" wx:if="{{loadingOrders}}">正在加载会员记录…</view>
       <view class="purchase-error" wx:elif="{{ordersError}}"><text>{{ordersError}}</text><button class="secondary-button" bindtap="retryOrders">重试加载记录</button></view>
       <view class="order-list" wx:elif="{{orders.length}}">
-        <view class="order-row" wx:for="{{orders}}" wx:key="orderId">
-          <view class="order-copy"><text class="order-name">{{item.productName}}</text><text class="order-meta">{{item.timeText}}</text><button class="order-copy-id" data-id="{{item.orderId}}" bindtap="copyOrder">复制订单号</button></view>
+        <view class="order-row" wx:for="{{orders}}" wx:key="recordId">
+          <view class="order-copy"><text class="order-name">{{item.productName}}</text><text class="order-meta">{{item.typeText}} · {{item.timeText}}</text><button wx:if="{{item.recordType === 'payment'}}" class="order-copy-id" data-id="{{item.orderId}}" bindtap="copyOrder">复制订单号</button><text wx:else class="order-meta">{{item.maskedCode}}</text></view>
           <view class="order-side"><text class="order-price">{{item.priceText}}</text><text class="order-status {{item.statusClass}}">{{item.statusText}}</text></view>
         </view>
         <button class="secondary-button order-more" wx:if="{{hasMoreOrders}}" loading="{{loadingMoreOrders}}" disabled="{{loadingMoreOrders}}" bindtap="loadMoreOrders">加载更多</button>
       </view>
-      <view class="order-empty" wx:elif="{{ordersReady && family}}">暂无已付款的购买记录</view>
+      <view class="order-empty" wx:elif="{{ordersReady && family}}">暂无购买或兑换记录</view>
     </view>
   </view>
-  <view class="help-row"><text>购买遇到问题？</text><button class="purchase-contact" open-type="contact">联系微信客服</button></view>
+  <view class="help-row">
+    <button class="text-action redeem-entry" disabled="{{paying || redeeming || !family}}" bindtap="openRedeem">兑换码</button>
+    <button class="purchase-contact" open-type="contact">联系客服</button>
+  </view>
+  <view wx:if="{{redeemOpen}}" class="redeem-overlay" catchtap="closeRedeem">
+    <view class="redeem-dialog surface-card" catchtap="stopRedeemTap">
+      <text class="section-title">兑换家庭会员</text><text class="redeem-family">{{family.name}}</text>
+      <text class="redeem-note">仅免费或会员已到期的家谱可兑换。兑换成功后，全体家人共享权益，兑换码不可再次使用。</text>
+      <input class="redeem-input" value="{{redeemCode}}" maxlength="100" disabled="{{redeeming}}" placeholder="输入或粘贴兑换码" bindinput="inputRedeem" />
+      <text wx:if="{{redeemError}}" class="redeem-error">{{redeemError}}</text>
+      <view class="agreement"><text>兑换表示同意</text><text class="rule-link" bindtap="openRules">《家庭会员与退款说明》</text></view>
+      <button class="primary-button" disabled="{{redeeming || !statusReady}}" loading="{{redeeming}}" bindtap="submitRedeem">{{redeeming ? '正在兑换' : '确认兑换'}}</button>
+      <button class="text-action" disabled="{{redeeming}}" bindtap="closeRedeem">取消</button>
+    </view>
+  </view>
   <view class="purchase-dock">
     <view class="dock-inner"><view class="agreement"><text>开通会员表示同意</text><text class="rule-link" bindtap="openRules">《家庭会员与退款说明》</text></view><button class="primary-button pay-button" loading="{{paying}}" disabled="{{!canBuy}}" bindtap="startPayment">{{payLabel}}</button></view>
   </view>

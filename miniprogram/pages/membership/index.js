@@ -19,6 +19,7 @@ function expiryText(membership) {
   return '有效至 ' + format.dateText(membership.expiresAt);
 }
 function orderPresentation(order) {
+  const redemption = order.recordType === 'redemption';
   const status = order.status || 'pending';
   const labels = { pending: '待确认', fulfilled: '已开通', refunded: '已退款', failed: '未完成', closed: '已关闭' };
   const dates = {
@@ -30,11 +31,14 @@ function orderPresentation(order) {
   };
   const date = dates[status] || dates.pending;
   return Object.assign({}, order, {
-    statusText: labels[status] || '处理中',
+    recordId: order.recordId || 'payment:' + order.orderId,
+    recordType: redemption ? 'redemption' : 'payment',
+    typeText: redemption ? '兑换码兑换' : '付费购买',
+    statusText: redemption ? '已兑换' : labels[status] || '处理中',
     statusClass: status,
-    priceText: priceText(order.priceCents),
-    timeText: date.label + (format.dateText(date.value) || '刚刚'),
-    canRefresh: status === 'pending' || (status === 'closed' && order.closeReason === 'payment_timeout' && order.reconcileStatus !== 'closed_unpaid')
+    priceText: redemption ? '—' : priceText(order.priceCents),
+    timeText: (redemption ? '兑换于 ' : date.label) + (format.dateText(redemption ? order.redeemedAt : date.value) || '刚刚'),
+    canRefresh: !redemption && (status === 'pending' || (status === 'closed' && order.closeReason === 'payment_timeout' && order.reconcileStatus !== 'closed_unpaid'))
   });
 }
 function orderConfirmationAction(paymentMode) { return paymentMode === 'mock' ? 'payment.getOrder' : 'payment.reconcileNow'; }
@@ -49,10 +53,10 @@ function clientPaymentResult(result) {
 }
 
 function mergeOrders(current, incoming) {
-  const items = new Map((current || []).map(function (item) { return [item.orderId, item]; }));
-  (incoming || []).forEach(function (item) { items.set(item.orderId, orderPresentation(item)); });
+  const items = new Map((current || []).map(function (item) { return [item.recordId || 'payment:' + item.orderId, item]; }));
+  (incoming || []).forEach(function (item) { const row = orderPresentation(item); items.set(row.recordId, row); });
   return Array.from(items.values()).sort(function (a, b) {
-    return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+    return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime() || (a.recordId > b.recordId ? -1 : 1);
   });
 }
 
@@ -65,7 +69,8 @@ Page(launchAd.wrap({
     loadingOrders: false, loadingMoreOrders: false, refreshingOrderId: '',
     statusReady: false, ordersReady: false, unresolvedReady: false, statusError: '', ordersError: '', recoveryError: '',
     canBuy: false, payLabel: '确认购买', termText: '支付确认后开始计时', recoveryPending: false,
-    showPaymentRefresh: false, dockHeight: 0
+    showPaymentRefresh: false, dockHeight: 0,
+    redeemOpen: false, redeemCode: '', redeeming: false, redeemError: ''
   },
   onLoad: function (options) { this.initialFamilyId = options.familyId || ''; this._stopped = false; this._epoch = 0; this._resolvedOrderIds = new Set(); },
   onReady: function () { this.measureDock(); },
@@ -111,7 +116,7 @@ Page(launchAd.wrap({
     const product = this.data.products.find(item => item.productId === this.data.selectedProductId);
     const membership = this.data.membership;
     this.setData({
-      canBuy: Boolean(this.data.family && product && this.data.statusReady && !this.data.paying && !(membership && membership.lifetime)),
+      canBuy: Boolean(this.data.family && product && this.data.statusReady && !this.data.paying && !this.data.redeeming && !(membership && membership.lifetime)),
       payLabel: membership && membership.lifetime ? '已开通永久会员' : this.data.paying ? '正在处理订单' : !this.data.family ? '请选择家谱' : !this.data.statusReady ? (this.data.statusError ? '请重试读取权益' : '正在读取会员权益') : (membership && membership.active ? '续费家庭会员 ' : '开通家庭会员 ') + (product ? product.priceText : ''),
       termText: product && product.lifetime ? '家谱未永久删除且服务持续运营期间有效' : membership && membership.active ? '在现有有效期后继续累加' : '支付确认后开始计时'
     });
@@ -141,6 +146,7 @@ Page(launchAd.wrap({
     }
   },
   resetFamily: function () {
+    this._redeemContext = null;
     const family = this.selectedFamily();
     this._epoch = (this._epoch || 0) + 1;
     if (this._pollTimer) clearTimeout(this._pollTimer);
@@ -150,7 +156,8 @@ Page(launchAd.wrap({
     this.setData({ family: family || null, membership: null, membershipText: '', statusReady: false, ordersReady: false, unresolvedReady: false,
       statusError: '', ordersError: '', recoveryError: '', orders: [], unresolvedOrders: [], orderCursor: '', hasMoreOrders: false, recordsExpanded: false,
       loadingOrders: false, loadingMoreOrders: false, refreshingOrderId: '', paying: false, showPaymentRefresh: false,
-      paymentState: '', paymentMessage: '', recoveryPending: Boolean(this._operation), canBuy: false });
+      paymentState: '', paymentMessage: '', recoveryPending: Boolean(this._operation), canBuy: false,
+      redeemOpen: false, redeemCode: '', redeeming: false, redeemError: '' });
     this.updatePurchase();
   },
   loadStatus: async function (background) {
@@ -176,13 +183,13 @@ Page(launchAd.wrap({
     if (reset) this.setData({ loadingOrders: true, ordersReady: false, ordersError: '', orderCursor: '', hasMoreOrders: false });
     else this.setData({ loadingMoreOrders: true, ordersError: '' });
     try {
-      const data = await api.call('payment.listMine', { familyId: token.familyId, paidOnly: true, pageSize: 10, cursor: reset ? '' : this.data.orderCursor });
+      const data = await api.call('membership.listRecords', { familyId: token.familyId, pageSize: 10, cursor: reset ? '' : this.data.orderCursor });
       if (!this.isCurrent(token) || sequence !== this._ordersSequence) return;
       let orders = mergeOrders(reset ? [] : this.data.orders, data.items).filter(item => ['fulfilled', 'refunded'].includes(item.status));
       if (revision !== (this._recordsRevision || 0)) orders = mergeOrders(orders, this.data.orders);
       this.setData({ orders, orderCursor: data.nextCursor || '', hasMoreOrders: Boolean(data.hasMore), ordersReady: true });
     } catch (error) {
-      if (this.isCurrent(token) && sequence === this._ordersSequence) this.setData({ ordersError: api.userMessage(error, '购买记录读取失败，请重试'), ordersReady: false });
+      if (this.isCurrent(token) && sequence === this._ordersSequence) this.setData({ ordersError: api.userMessage(error, '会员记录读取失败，请重试'), ordersReady: false });
     } finally {
       if (this.isCurrent(token) && sequence === this._ordersSequence) this.setData({ loadingOrders: false, loadingMoreOrders: false });
     }
@@ -210,7 +217,7 @@ Page(launchAd.wrap({
     this._epoch = (this._epoch || 0) + 1;
     const token = this.viewToken(); if (!token.familyId) return;
     if (this._pollTimer) clearTimeout(this._pollTimer);
-    this.setData({ paying: false, refreshingOrderId: '' });
+    this.setData({ paying: false, redeeming: false, refreshingOrderId: '' });
     // History and reconciliation do not gate the purchase button.
     const records = this.loadOrders(true);
     const pending = this.loadUnresolved().then(() => {
@@ -293,14 +300,14 @@ Page(launchAd.wrap({
   },
   loadMoreOrders: function () { return this.loadOrders(false); },
   changeFamily: function (event) {
-    if (this.data.paying) return;
+    if (this.data.paying || this.data.redeeming) return;
     const index = Number(event.detail && event.detail.value !== undefined ? event.detail.value : event.currentTarget.dataset.index);
     if (!Number.isInteger(index) || !this.data.families[index]) return;
     this.setData({ familyIndex: index, selectionError: '' }); this.resetFamily();
     return this.refreshCurrentFamily(true);
   },
   selectProduct: function (event) {
-    if (this.data.paying) return;
+    if (this.data.paying || this.data.redeeming) return;
     const id = event.currentTarget.dataset.id;
     if (!this.data.products.some(item => item.productId === id)) return;
     this.setData({ selectedProductId: id }); this.updatePurchase();
@@ -308,6 +315,46 @@ Page(launchAd.wrap({
   openRules: function () { wx.navigateTo({ url: '/pages/legal/index?type=membership' }); },
   createFamily: function () { wx.navigateTo({ url: '/pages/create-family/index' }); },
   copyOrder: function (event) { wx.setClipboardData({ data: event.currentTarget.dataset.id }); },
+  openRedeem: function () {
+    if (this.data.paying || this.data.redeeming || !this.data.family) return;
+    this.setData({ redeemOpen: true, redeemError: '' });
+  },
+  closeRedeem: function () { if (!this.data.redeeming) this.setData({ redeemOpen: false }); },
+  stopRedeemTap: function () {},
+  inputRedeem: function (event) {
+    if (this.data.redeeming) return;
+    this.setData({ redeemCode: event.detail.value, redeemError: '' });
+  },
+  submitRedeem: async function () {
+    if (this.data.redeeming || this.data.paying || !this.data.statusReady || !this.data.family) return;
+    const code = this.data.redeemCode.toUpperCase().replace(/[\s-]/g, '');
+    if (!/^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{16}$/.test(code)) { this.setData({ redeemError: '请输入完整的 16 位兑换码' }); return; }
+    const token = this.viewToken(); if (!this.isCurrent(token)) return;
+    if (this.data.membership && this.data.membership.active && !(this._redeemContext && this._redeemContext.code === code)) {
+      this.setData({ redeemError: '仅免费或会员已到期的家谱可以兑换' }); return;
+    }
+    if (!this._redeemContext || this._redeemContext.code !== code || this._redeemContext.familyId !== token.familyId) {
+      this._redeemContext = { code, familyId: token.familyId, requestId: api.requestId() };
+    }
+    const context = this._redeemContext;
+    this.setData({ redeeming: true, redeemError: '' }); this.updatePurchase();
+    try {
+      const result = await api.call('membership.redeem', { familyId: token.familyId, code, idempotencyKey: context.requestId });
+      if (!this.isCurrent(token) || this._redeemContext !== context) return;
+      app.invalidateFamilyData(token.familyId);
+      this._recordsRevision = (this._recordsRevision || 0) + 1;
+      this.setData({ redeemOpen: false, redeemCode: '', recordsExpanded: true, orders: mergeOrders(this.data.orders, [result.record]),
+        paymentState: 'success', paymentMessage: '兑换成功，全体家人共享会员权益' });
+      this._redeemContext = null;
+      await Promise.all([this.loadStatus(true), this.loadOrders(true)]);
+    } catch (error) {
+      if (!this.isCurrent(token) || this._redeemContext !== context) return;
+      this.setData({ redeemError: api.userMessage(error, '兑换结果暂未确认，请保留兑换码并重试') });
+      if (error.isBusinessError) this._redeemContext = null;
+    } finally {
+      if (this.isCurrent(token)) { this.setData({ redeeming: false }); this.updatePurchase(); }
+    }
+  },
   platformAllowed: function () {
     const system = wx.getSystemInfoSync ? wx.getSystemInfoSync() : {};
     const isIos = String(system.platform).toLowerCase() === 'ios';
@@ -323,7 +370,7 @@ Page(launchAd.wrap({
     return true;
   },
   startPayment: async function () {
-    if (!this.data.canBuy || !this.platformAllowed()) return;
+    if (this.data.redeeming || !this.data.canBuy || !this.platformAllowed()) return;
     const token = this.viewToken();
     if (!this.isCurrent(token)) return;
     const product = this.data.products.find(item => item.productId === this.data.selectedProductId);

@@ -172,7 +172,7 @@ exports.main = async function (event) {
       const status = await cloud.callFunction({ name: 'youpuUserApi', data: { type: 'family.copy.status', taskId } });
       check(status.result && !status.result.success && ['COPY_NOT_FOUND', 'UNAUTHENTICATED'].includes(status.result.code), 'PROBE_GATEWAY_STATUS');
       const schema = await read(db, 'system_config', 'schema');
-      check(schema.version === 11, 'PROBE_SCHEMA');
+      check(schema.version >= 11, 'PROBE_SCHEMA');
       data = { createDenied: create.result.code, taskDenied: status.result.code, schemaVersion: schema.version };
     }
     else if (event.action === 'inspect') {

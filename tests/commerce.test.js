@@ -200,8 +200,8 @@ test('个人订单记录按付款人和家谱分页，会员页可恢复待确�
   assert.match(page, /reconcileBackground/);
   assert.match(page, /refreshOrderById/);
   assert.match(page, /loadMoreOrders/);
-  assert.match(template, /购买记录/);
-  assert.match(page, /paidOnly: true/); assert.doesNotMatch(template, /pending-orders/);
+  assert.match(template, /会员记录/);
+  assert.match(page, /membership\.listRecords/); assert.doesNotMatch(template, /pending-orders/);
   assert.match(template, /刷新支付状态/);
 });
 

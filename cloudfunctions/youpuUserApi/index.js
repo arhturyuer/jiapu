@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const domain = require('./domain');
 const personDate = require('./person-date');
 const commerce = require('./commerce');
+const membershipRedemption = require('./membership-redemption');
 const jobDispatcher = require('./job-dispatcher');
 const subscriptionNotification = require('./subscription-notification');
 const stagingAccountReset = require('./staging-account-reset');
@@ -21,6 +22,7 @@ const GRAPH_RELATION_LIMIT = 2000;
 const MODERATION_CONFIG_ID = 'moderation';
 const ACTIVE_ROLES = domain.ACTIVE_ROLES;
 const RATE_LIMITS = {
+  'membership.redeem': { max: 20, windowMs: 60 * 60 * 1000 },
   'pdf.create': { max: 20, windowMs: 24 * 60 * 60 * 1000, transactional: true },
   // Copy quota is charged atomically with task creation, in Beijing calendar days.
   'family.copy.create': { max: 3, windowMs: 24 * 60 * 60 * 1000, transactional: true },
@@ -47,6 +49,7 @@ const RATE_LIMITS = {
   'media.prepare': { max: 100, windowMs: 24 * 60 * 60 * 1000 }
 };
 const MUTATION_TYPES = new Set([
+  'membership.redeem',
   'pdf.create',
   'analytics.track',
   'auth.updateProfile',
@@ -3248,6 +3251,8 @@ async function membershipCatalog() {
   };
 }
 
+const redemptionService = membershipRedemption.createService({ db, assert, commerce, getOpenid, requireActiveUser, requireMembership, ACTIVE_ROLES, mutate, maybeGet });
+
 async function membershipStatus(event) {
   const openid = getOpenid();
   await requireActiveUser(openid);
@@ -3469,6 +3474,7 @@ async function fulfillOrderTransaction(transaction, order, wxOrderId, paidAt) {
     data: {
       familyId: order.familyId,
       orderId: order._id,
+      recordType: 'payment',
       productId: order.productId,
       durationDays: Number(order.durationDays) || 0,
       lifetime: Boolean(order.lifetime),
@@ -3483,6 +3489,7 @@ async function fulfillOrderTransaction(transaction, order, wxOrderId, paidAt) {
   await transaction.collection('families').doc(order.familyId).update({
     data: {
       proLifetime: Boolean(family.proLifetime || order.lifetime),
+      proRevision: _.inc(1),
       proExpiresAt: family.proLifetime || order.lifetime ? _.remove() : endsAt,
       proUpdatedAt: db.serverDate(),
       updatedAt: db.serverDate()
@@ -3526,15 +3533,18 @@ async function paymentMockRefund(event) {
   const previewOrder = await mustGet(db, 'payment_orders', orderId, 'PAYMENT_ORDER_NOT_FOUND', '订单不存在');
   assert(previewOrder.payerUserId === user._id, 'NO_PERMISSION', '不能处理其他用户的订单');
   assert(previewOrder.status === 'fulfilled', 'PAYMENT_NOT_REFUNDABLE', '当前订单不能模拟退款');
-  const activeGrantResult = await db.collection('membership_grants').where({ familyId: previewOrder.familyId, status: 'active' }).limit(100).get();
+  const previewFamily = await mustGet(db, 'families', previewOrder.familyId, 'FAMILY_NOT_FOUND', '家谱不存在');
+  const activeGrants = await listAll('membership_grants', { familyId: previewOrder.familyId, status: 'active' }, 50000);
   return mutate('payment.mockRefund', event, openid, async function (transaction) {
     const order = await mustGet(transaction, 'payment_orders', orderId, 'PAYMENT_ORDER_NOT_FOUND', '订单不存在');
     assert(order.payerUserId === user._id, 'NO_PERMISSION', '不能处理其他用户的订单');
     assert(order.status === 'fulfilled', 'PAYMENT_NOT_REFUNDABLE', '当前订单不能模拟退款');
+    const family = await mustGet(transaction, 'families', order.familyId, 'FAMILY_NOT_FOUND', '家谱不存在');
+    assert(Number(family.proRevision || 0) === Number(previewFamily.proRevision || 0), 'MEMBERSHIP_RETRY', '会员权益发生变化，请重试退款');
     const grant = await mustGet(transaction, 'membership_grants', 'grant_' + orderId, 'MEMBERSHIP_GRANT_NOT_FOUND', '会员发放记录不存在');
     await transaction.collection('membership_grants').doc(grant._id).update({ data: { status: 'refunded', refundedAt: db.serverDate(), updatedAt: db.serverDate() } });
-    const entitlement = commerce.recomputeEntitlement((activeGrantResult.data || []).filter(function (item) { return item._id !== grant._id; }), new Date());
-    await transaction.collection('families').doc(order.familyId).update({ data: { proLifetime: entitlement.lifetime, proExpiresAt: entitlement.expiresAt || _.remove(), proUpdatedAt: db.serverDate(), updatedAt: db.serverDate() } });
+    const entitlement = commerce.recomputeEntitlement(activeGrants.filter(function (item) { return item._id !== grant._id; }), new Date());
+    await transaction.collection('families').doc(order.familyId).update({ data: { proLifetime: entitlement.lifetime, proExpiresAt: entitlement.expiresAt || _.remove(), proRevision: _.inc(1), proUpdatedAt: db.serverDate(), updatedAt: db.serverDate() } });
     await transaction.collection('payment_orders').doc(orderId).update({ data: { status: 'refunded', refundedAt: db.serverDate(), updatedAt: db.serverDate() } });
     await transaction.collection('payment_events').doc('mock_refund_' + orderId).set({ data: {
       type: 'xpay_refund_notify', wxOrderId: order.wxOrderId || ('mock_' + orderId), orderId: orderId,
@@ -3844,6 +3854,8 @@ const handlers = {
   'account.resetTest': function (event) { return testAccounts.reset(cloud.getWXContext() || {}, event); },
   'account.cancelDeletion': accountCancelDeletion,
   'membership.catalog': membershipCatalog,
+  'membership.redeem': redemptionService.redeem,
+  'membership.listRecords': redemptionService.list,
   'membership.status': membershipStatus,
   'payment.createOrder': paymentCreateOrder,
   'payment.clientCompleted': paymentClientCompleted,

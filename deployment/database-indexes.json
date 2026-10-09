@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 11,
+  "schemaVersion": 12,
   "indexes": {
     "users": [
       { "name": "openid_unique", "unique": true, "sparse": true, "fields": [{ "field": "openid", "order": "asc" }] },
@@ -126,6 +126,20 @@
     "payment_events": [
       { "name": "wx_type_unique", "unique": true, "fields": [{ "field": "wxOrderId", "order": "asc" }, { "field": "type", "order": "asc" }] },
       { "name": "family_created", "fields": [{ "field": "familyId", "order": "asc" }, { "field": "createdAt", "order": "desc" }] }
+    ],
+    "membership_codes": [
+      { "name": "created_id_desc", "fields": [{ "field": "createdAt", "order": "desc" }, { "field": "_id", "order": "desc" }] },
+      { "name": "batch_created_id", "fields": [{ "field": "batchId", "order": "asc" }, { "field": "createdAt", "order": "desc" }, { "field": "_id", "order": "desc" }] },
+      { "name": "product_created_id", "fields": [{ "field": "productId", "order": "asc" }, { "field": "createdAt", "order": "desc" }, { "field": "_id", "order": "desc" }] },
+      { "name": "status_created_id", "fields": [{ "field": "status", "order": "asc" }, { "field": "createdAt", "order": "desc" }, { "field": "_id", "order": "desc" }] },
+      { "name": "status_expiry", "fields": [{ "field": "status", "order": "asc" }, { "field": "expiresAt", "order": "asc" }] },
+      { "name": "actor_id", "fields": [{ "field": "redeemedBy", "order": "asc" }, { "field": "_id", "order": "asc" }] },
+      { "name": "family_id", "fields": [{ "field": "redeemedFamilyId", "order": "asc" }, { "field": "_id", "order": "asc" }] }
+    ],
+    "membership_redemptions": [
+      { "name": "created_id_desc", "fields": [{ "field": "createdAt", "order": "desc" }, { "field": "_id", "order": "desc" }] },
+      { "name": "actor_family_created_id", "fields": [{ "field": "redeemedBy", "order": "asc" }, { "field": "familyId", "order": "asc" }, { "field": "createdAt", "order": "desc" }, { "field": "_id", "order": "desc" }] },
+      { "name": "family_created_id", "fields": [{ "field": "familyId", "order": "asc" }, { "field": "createdAt", "order": "desc" }, { "field": "_id", "order": "desc" }] }
     ],
     "membership_grants": [
       { "name": "order_unique", "unique": true, "fields": [{ "field": "orderId", "order": "asc" }] },

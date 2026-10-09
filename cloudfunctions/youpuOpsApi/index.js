@@ -1,4 +1,5 @@
 const cloud = require('wx-server-sdk');
+const redemptionCodes = require('./redemption-codes');
 const crypto = require('crypto');
 const participation = require('./participation');
 const exampleValidation = require('./example-validation');
@@ -1965,7 +1966,14 @@ async function examplesArchive(event, context) {
   });
 }
 
+const codeService = redemptionCodes.createService({ db, assert, requireOperator, opsMutate, writeOpsAudit, maybeGet });
 const handlers = {
+  'commerce.records': codeService.listRecords,
+  'commerce.recordDetail': codeService.detail,
+  'commerce.codes.generate': codeService.generate,
+  'commerce.codes.list': codeService.list,
+  'commerce.codes.reveal': codeService.reveal,
+  'commerce.codes.revoke': codeService.revoke,
   'session.me': sessionMe,
   'analytics.summary': analyticsSummary,
   'analytics.details': analyticsDetails,

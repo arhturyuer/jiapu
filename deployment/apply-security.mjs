@@ -44,6 +44,8 @@ const collections = [
   'payment_orders',
   'payment_events',
   'membership_grants',
+  'membership_codes',
+  'membership_redemptions',
   'commerce_metrics_daily',
   'feedback_group_settings',
   'example_templates',

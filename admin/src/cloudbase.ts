@@ -100,7 +100,7 @@ export async function callOps<T>(action: string, data: Record<string, unknown> =
       ...data,
       action,
       accessToken: tokenInfo.accessToken,
-      requestId: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+      requestId: typeof data.requestId === 'string' && data.requestId ? data.requestId : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
     }
   });
   const responseRecord = asRecord(response) || {};

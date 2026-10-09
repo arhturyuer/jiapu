@@ -4,6 +4,7 @@ import { callOps, getErrorMessage, hasLoginState, signIn, signOut } from './clou
 import ExampleManager from './components/ExampleManager.vue';
 import FeedbackGroupManager from './components/FeedbackGroupManager.vue';
 import DataManager from './components/DataManager.vue';
+import MembershipManager from './components/MembershipManager.vue';
 
 type ModuleKey = 'analytics' | 'dashboard' | 'commerce' | 'users' | 'families' | 'examples' | 'feedbackGroup' | 'reports' | 'moderation' | 'deletions' | 'audits' | 'operators';
 type ModerationScope = 'pending' | 'reviewed';
@@ -354,7 +355,10 @@ async function loadModule(module: ModuleKey, direction: 'reset' | 'next' | 'prev
     if (['users', 'families'].includes(module) && listStatus.value) params.status = listStatus.value;
     if (['reports', 'deletions'].includes(module) && listScope.value) params.scope = listScope.value;
     if (module === 'users' && userParticipationFilter.value !== 'all') params.participationType = userParticipationFilter.value;
-    if (module === 'commerce') commerceStats.value = await callOps<Row>('commerce.summary');
+    if (module === 'commerce') {
+      commerceStats.value = await callOps<Row>('commerce.summary');
+      rows.value = []; resetListPagination(); return;
+    }
     const data = await callOps<PageResult>(actionByModule[module], params);
     rows.value = data.items;
     nextCursor.value = data.nextCursor;
@@ -651,7 +655,7 @@ onMounted(bootstrap);
           <article class="dashboard-card" :class="{ attention: commerceStats.alertLevel }"><span>月支付额度</span><strong>{{ commerceStats.monthlyLimitPercent || 0 }}%</strong><small>上限 {{ formatMoney(commerceStats.monthlyLimitCents) }}<template v-if="commerceStats.alertLevel"> · 已触发 {{ commerceStats.alertLevel }}% 告警</template></small></article>
         </div>
         <div class="share-funnel-card"><div class="share-funnel-heading"><div><p class="eyebrow">SKU MIX</p><h2>本月商品结构</h2></div><small>价格由用户 API 服务端商品目录决定，后台不可修改。</small></div><div class="table-wrap"><table><thead><tr><th>商品</th><th>订单</th><th>GMV</th></tr></thead><tbody><tr v-for="item in commerceStats.sku || []" :key="item.productId"><td><strong>{{ item.name }}</strong><small>{{ item.productId }}</small></td><td>{{ item.orders }}</td><td>{{ formatMoney(item.gmvCents) }}</td></tr></tbody></table></div></div>
-        <div class="table-card"><div v-if="loading && !rows.length" class="loading-state"><div class="spinner"></div><p>正在读取订单…</p></div><div v-else-if="!rows.length" class="empty-state"><div>空</div><h3>当前没有订单</h3></div><div v-else class="table-wrap"><table><thead><tr><th>订单 / 家谱</th><th>商品</th><th>金额</th><th>状态</th><th>查单状态</th><th>创建时间</th><th>操作</th></tr></thead><tbody><tr v-for="row in rows" :key="row._id"><td><strong>{{ row._id }}</strong><small>{{ row.familyName || row.familyId }}</small></td><td><strong>{{ row.productName }}</strong><small>{{ row.productId }}</small></td><td>{{ formatMoney(row.priceCents) }}</td><td><span class="status" :class="row.status">{{ commerceStatusLabel(row.status) }}</span></td><td><strong>{{ row.reconcileStatus || '—' }}</strong><small>{{ row.reconcileMessage }}</small></td><td>{{ formatDate(row.createdAt) }}</td><td class="row-actions"><button v-if="row.status === 'pending'" @click="openAction('重新查询订单', '只会请求后台重新向微信平台查单，不会手工开会员、改价或退款。', 'commerce.retryOrder', { orderId: row._id })">查单重试</button></td></tr></tbody></table></div><div v-if="rows.length" class="pagination"><span>本页 {{ rows.length }} 条</span><div><button :disabled="loading || pageNumber === 1" @click="loadModule(activeModule, 'previous')">上一页</button><strong>第 {{ pageNumber }} 页</strong><button :disabled="loading || !hasMore" @click="loadModule(activeModule, 'next')">下一页</button></div></div></div>
+        <MembershipManager :is-super-admin="operator?.role === 'super_admin'" />
       </section>
 
       <section v-else-if="activeModule !== 'analytics'" class="table-card">
