@@ -1,3 +1,4 @@
+const platformCapabilities = require('../../utils/platform-capabilities');
 const launchAd = require('../../utils/launch-ad');
 const app = getApp();
 const api = require('../../utils/api');
@@ -166,7 +167,7 @@ Page(launchAd.wrap({
     if (this.data.uploading || this.data.savingAvatar || this.data.submitting) return Promise.resolve();
     let selectedPath = '';
     return privacy.ensurePrivacyAuthorized().then(function () {
-      return wx.chooseMedia({ count: 1, mediaType: ['image'], sourceType: ['album', 'camera'] });
+      return platformCapabilities.chooseImage();
     }).then(function (result) {
       const file = result.tempFiles[0];
       selectedPath = file.tempFilePath;

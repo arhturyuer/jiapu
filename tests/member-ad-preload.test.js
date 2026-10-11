@@ -234,14 +234,14 @@ test('关闭复用的平台和设备信息异常采用销毁兜底并隔离旧�
   assert.equal(queries(), 1);
 });
 
-test('广告错误和原生关闭保留免费模块文案，同次窗口变化不重试，下次打开重试一次', async function (t) {
+test('广告错误和原生关闭释放占位，同次窗口变化不重试，下次打开重试一次', async function (t) {
   const { app, page } = fixture(t);
   const queries = freeResponse(t, app);
   await open(page, app);
   const old = event(page);
   ads.error(page, true, old);
   assert.equal(page.data.memberAdMounted, false);
-  assert.equal(page.data.memberAdReserved, true);
+  assert.equal(page.data.memberAdReserved, false);
   assert.equal(page.data.memberAdLoaded, false);
   assert.equal(page.data.memberAdPreloadState, 'failed');
   await ads.resizeMember(page, app);
@@ -264,7 +264,7 @@ test('10秒加载超时清理失败实例，隐藏实例也超时；成功加载
   assert.equal(page.data.memberAdMounted, true);
   t.mock.timers.tick(1);
   assert.equal(page.data.memberAdMounted, false);
-  assert.equal(page.data.memberAdReserved, true);
+  assert.equal(page.data.memberAdReserved, false);
   assert.equal(page.data.memberAdPreloadState, 'failed');
   await open(page, app);
   ads.closeMember(page);
@@ -486,7 +486,7 @@ test('旧测量在切谱或新一轮尺寸变更后不可提交；错误中断�
   await Promise.all([first, second]);
   assert.equal(page.data.memberAdWidth, 320);
   assert.equal(page.data.memberAdMounted, false);
-  assert.equal(page.data.memberAdReserved, true);
+  assert.equal(page.data.memberAdReserved, false);
 });
 
 

@@ -11,11 +11,16 @@
       <text class="date-cancel" bindtap="close">取消</text>
     </view>
     <view class="date-column-labels"><text>年</text><text>月</text><text>日</text></view>
-    <picker-view class="date-wheels" indicator-style="height: 88rpx;" value="{{pickerValue}}" bindchange="chooseDate">
+    <picker-view wx:if="{{!isDesktop}}" class="date-wheels" indicator-style="height: {{isWide ? '44px' : '88rpx'}};" value="{{pickerValue}}" bindchange="chooseDate">
       <picker-view-column><view class="date-option" wx:for="{{yearOptions}}" wx:key="value">{{item.label}}</view></picker-view-column>
       <picker-view-column><view class="date-option" wx:for="{{monthOptions}}" wx:key="value">{{item.label}}</view></picker-view-column>
       <picker-view-column><view class="date-option" wx:for="{{dayOptions}}" wx:key="value">{{item.label}}</view></picker-view-column>
     </picker-view>
+    <view class="desktop-date-selectors" wx:if="{{isDesktop}}">
+      <picker mode="selector" range="{{yearOptions}}" range-key="label" value="{{pickerValue[0]}}" data-column="0" bindchange="chooseDesktopDate"><view class="desktop-date-option">{{yearOptions[pickerValue[0]].label}} ▾</view></picker>
+      <picker mode="selector" range="{{monthOptions}}" range-key="label" value="{{pickerValue[1]}}" data-column="1" bindchange="chooseDesktopDate"><view class="desktop-date-option">{{monthOptions[pickerValue[1]].label}} ▾</view></picker>
+      <picker mode="selector" range="{{dayOptions}}" range-key="label" value="{{pickerValue[2]}}" data-column="2" bindchange="chooseDesktopDate"><view class="desktop-date-option">{{dayOptions[pickerValue[2]].label}} ▾</view></picker>
+    </view>
     <view class="date-extra"><view class="leap-option {{working.isLeapMonth ? 'selected' : ''}}" wx:if="{{working.calendar === 'lunar' && working.month}}" bindtap="toggleLeapMonth">{{working.isLeapMonth ? '✓ 闰月' : '选择闰月'}}</view><text class="date-hint">选“无”可只记录已知的部分</text></view>
     <view class="date-actions"><text bindtap="clear">清空</text><button bindtap="confirm">确定</button></view>
   </view>

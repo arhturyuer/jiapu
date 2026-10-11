@@ -1,3 +1,4 @@
+const capabilities = require('./platform-capabilities');
 const BROWSE_DELAY = 15000;
 const DISPLAY_DURATION = 8000;
 const REMINDER_INTERVAL = 7 * 24 * 60 * 60 * 1000;
@@ -126,6 +127,7 @@ function create(page, app, injected) {
   }
   function sync() {
     if (stopped) return;
+    if (!capabilities.canGuide(runtime.wx)) { stop(false); return; }
     if ((key && key !== scope(app)) || page._myMiniProgramGuideOwner !== owner) { stop(false); return; }
     const now = runtime.now();
     if (!key && ready(page, app)) {
@@ -203,6 +205,7 @@ function dismissManual(page) {
 }
 
 function showManual(page) {
+  if (!capabilities.canGuide()) return;
   if (page._unloaded || page._feedbackHidden || page.data.resettingTestAccount) return;
   dismissManual(page);
   const version = page._myMiniProgramManualVersion;

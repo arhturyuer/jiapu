@@ -2,7 +2,7 @@
 <import src="../../templates/kinship-card.wxml" />
 <import src="../../templates/my-miniprogram-guide.wxml" />
 <page-meta page-orientation="{{pageOrientation}}" bindresize="onPageResize"></page-meta>
-<view class="tree-page {{isLandscape ? 'is-landscape' : ''}} {{isCleanScreen ? 'is-clean-screen' : ''}}">
+<view class="tree-page {{isLandscape && !isLargeDevice ? 'is-landscape' : ''}} {{isLargeDevice ? 'is-large-device' : ''}} {{isCleanScreen ? 'is-clean-screen' : ''}}">
   <view class="loading-panel" wx:if="{{loading}}">
     <view class="loading-dot"></view>
     <text>正在整理家谱...</text>
@@ -53,7 +53,7 @@
       <view class="tree-share-reminder-actions"><button class="tree-share-reminder-invite" bindtap="startShare">邀请家人</button><button class="tree-share-reminder-dismiss" bindtap="dismissShareReminder">暂不分享</button></view>
     </view>
 
-    <view class="tree-top-ad" wx:elif="{{topAdVisible && !showMyMiniProgramGuide && !isCleanScreen && !isLandscape}}">
+    <view class="tree-top-ad" wx:elif="{{topAdVisible && !showMyMiniProgramGuide && !isCleanScreen && (!isLandscape || isLargeDevice)}}">
       <ad-custom class="tree-top-ad-template" unit-id="{{topAdUnitId}}" data-version="{{topAdVersion}}" bindload="adLoad" binderror="adError" bindclose="adClose"></ad-custom>
       <view class="tree-top-ad-actions" wx:if="{{topAdLoaded}}">
         <button class="tree-top-ad-close" aria-label="关闭广告" bindtap="dismissTopAd">
@@ -125,7 +125,7 @@
       <view class="graph-control" bindtap="zoomGraphIn">＋</view>
       <view class="graph-control" bindtap="zoomGraphOut">－</view>
       <view class="graph-control graph-control-text" bindtap="fitWholeGraph">全谱</view>
-      <view class="graph-control graph-control-text orientation-control {{orientationChanging ? 'is-disabled' : ''}}" bindtap="togglePageOrientation">{{orientationChanging ? '切换中' : isLandscape ? '竖屏' : '横屏'}}</view>
+      <view wx:if="{{!isLargeDevice}}" class="graph-control graph-control-text orientation-control {{orientationChanging ? 'is-disabled' : ''}}" bindtap="togglePageOrientation">{{orientationChanging ? '切换中' : isLandscape ? '竖屏' : '横屏'}}</view>
       <view class="graph-control graph-control-text" bindtap="openDisplaySettings">设置</view>
       <view class="graph-control graph-control-text {{posterGenerating ? 'is-disabled' : ''}}" bindtap="generatePoster">图片</view><view class="graph-control graph-control-text" bindtap="openPdfExport">PDF</view>
       <view class="graph-control {{orientationChanging ? 'is-disabled' : ''}}" bindtap="toggleCleanScreen" aria-role="button" aria-label="清屏查看家谱">
@@ -137,7 +137,7 @@
       <text wx:if="{{graphRendering}}">正在分批绘制 {{renderedCount}} / {{totalVisibleCount}} 人</text>
       <text wx:elif="{{selectedPersonId && !showMemberSheet}}">关系已高亮，再次点击成员或点“•••”进行操作</text>
       <text wx:elif="{{hiddenBranchCount > 0}}">已收起 {{hiddenBranchCount}} 人，点击 +人数 可展开分支</text>
-      <text wx:else>{{viewMode === 'full' ? '拖动查看全谱，点击成员进行操作' : '当前从' + viewpointName + '查看关系'}}</text>
+      <text wx:else>{{isDesktop ? '左键拖动 · 按钮或 + / - 缩放 · 0 查看全谱' : viewMode === 'full' ? '拖动查看全谱，点击成员进行操作' : '当前从' + viewpointName + '查看关系'}}</text>
     </view>
   </block>
 
@@ -290,3 +290,5 @@
 <canvas type="2d" id="tree-share-card" class="share-card-canvas"></canvas>
 <canvas type="2d" id="tree-poster-canvas" class="tree-poster-canvas"></canvas>
 <view class="poster-generating" wx:if="{{posterGenerating}}"><view class="loading-dot"></view><text>正在生成图片</text></view>
+
+<view class="graph-unit-probe" aria-hidden="true"></view>

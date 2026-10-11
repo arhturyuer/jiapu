@@ -73,7 +73,7 @@ function fail(page, cache) {
   cache.state = 'failed';
   remove(page, cache);
   page.setData({ memberAdPreloadState: 'failed', memberAdLayoutPending: false,
-    memberAdReserved: Boolean(page.data.showMemberSheet && !cache.dismissed) });
+    memberAdReserved: false });
 }
 
 async function mount(page, app, cache) {

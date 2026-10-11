@@ -117,7 +117,7 @@ Page(launchAd.wrap({
     const membership = this.data.membership;
     this.setData({
       canBuy: Boolean(this.data.family && product && this.data.statusReady && !this.data.paying && !this.data.redeeming && !(membership && membership.lifetime)),
-      payLabel: membership && membership.lifetime ? '已开通永久会员' : this.data.paying ? '正在处理订单' : !this.data.family ? '请选择家谱' : !this.data.statusReady ? (this.data.statusError ? '请重试读取权益' : '正在读取会员权益') : (membership && membership.active ? '续费家庭会员 ' : '开通家庭会员 ') + (product ? product.priceText : ''),
+      payLabel: this.data.isDesktop && this.data.paymentMode !== 'mock' ? '请在手机微信开通' : membership && membership.lifetime ? '已开通永久会员' : this.data.paying ? '正在处理订单' : !this.data.family ? '请选择家谱' : !this.data.statusReady ? (this.data.statusError ? '请重试读取权益' : '正在读取会员权益') : (membership && membership.active ? '续费家庭会员 ' : '开通家庭会员 ') + (product ? product.priceText : ''),
       termText: product && product.lifetime ? '家谱未永久删除且服务持续运营期间有效' : membership && membership.active ? '在现有有效期后继续累加' : '支付确认后开始计时'
     });
     this.measureDock();
@@ -357,6 +357,10 @@ Page(launchAd.wrap({
   },
   platformAllowed: function () {
     const system = wx.getSystemInfoSync ? wx.getSystemInfoSync() : {};
+    if (this.data.isDesktop && this.data.paymentMode !== 'mock') {
+      wx.showModal({ title: '请在手机微信开通', content: '电脑端购买尚未通过平台验证。请使用同一微信账号在手机打开有谱，选择当前家谱开通会员；此处可查看权益、付款记录或兑换会员。', showCancel: false });
+      return false;
+    }
     const isIos = String(system.platform).toLowerCase() === 'ios';
     if (this.data.paymentMode === 'sandbox' && isIos) {
       wx.showModal({ title: '测试环境提示', content: '当前测试方式仅支持 Android 真机完成购买流程验证，iPhone 不会发起扣款。', showCancel: false }); return false;

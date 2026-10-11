@@ -1,4 +1,5 @@
 const personDate = require('../../utils/person-date');
+const deviceLayout = require('../../utils/device-layout');
 
 const MONTHS = [{ value: '', label: '无' }].concat(Array.from({ length: 12 }, function (_, index) {
   return { value: String(index + 1), label: String(index + 1) + '月' };
@@ -47,6 +48,8 @@ Component({
     }
   },
   data: {
+    isDesktop: false,
+    isWide: false,
     shown: false,
     summary: '',
     working: personDate.emptyDraft(),
@@ -56,9 +59,20 @@ Component({
     pickerValue: [0, 0, 0]
   },
   lifetimes: {
-    attached: function () { this.setData({ summary: personDate.displayDraft(workingDraft(this.data.value)) }); }
+    attached: function () {
+      const layout = deviceLayout.read();
+      this.setData({ isDesktop: layout.desktop, isWide: layout.wide, summary: personDate.displayDraft(workingDraft(this.data.value)) });
+    }
+  },
+  pageLifetimes: {
+    resize: function (event) { this.setData({ isWide: deviceLayout.read(null, event && event.size || event).wide }); }
   },
   methods: {
+    chooseDesktopDate: function (event) {
+      const indexes = this.data.pickerValue.slice();
+      indexes[Number(event.currentTarget.dataset.column)] = Number(event.detail.value);
+      this.chooseDate({ detail: { value: indexes } });
+    },
     open: function () {
       const working = workingDraft(this.data.value);
       const yearOptions = yearsFor();

@@ -1,0 +1,77 @@
+/* Shared layout policy; component sizes are generated beside their mobile CSS. */
+@media (min-width: 600px) {
+  page .page-shell, page .pdf-page { width:100%; max-width:720px; margin-left:auto; margin-right:auto; }
+  page .family-page, page .profile-page, page .person-list-page, page .examples-page { max-width:1120px; }
+  page .page-shell > view, page .form-column { min-width:0; }
+  page .primary-button, page .secondary-button, page .danger-button { min-height:44px; font-size:16px; }
+  page input, page textarea { min-width:0; }
+  page .field-input, page .nickname-input, page .person-search, page .search-input { min-height:44px; }
+  page .empty-description { max-width:560px; }
+  page .empty-panel, page .loading-panel, page .error-panel { min-height:0; padding-top:48px; padding-bottom:48px; }
+  page .sheet-mask { align-items:center; justify-content:center; padding:16px; }
+  page .bottom-sheet { width:100%; max-width:560px; max-height:calc(100vh - 32px); padding:20px; border-radius:16px; overflow-y:auto; }
+  page .sheet-handle { display:none; }
+  page .page-shell .gender-avatar, page .bottom-sheet .gender-avatar { border-width:1.5px; }
+  page .page-shell .gender-badge, page .bottom-sheet .gender-badge { min-width:22px; height:17px; padding:0 5px; border-radius:9px; font-size:10px; }
+  page .person-sheet-name { white-space:normal; overflow-wrap:anywhere; }
+  page .setting-title, page .setting-desc, page .info-value, page .member-name, page .family-option-name { overflow-wrap:anywhere; }
+  page .submit-actions, page .purchase-dock { left:50%; right:auto; width:100%; max-width:720px; transform:translateX(-50%); }
+  page .purchase-dock { max-height:55vh; overflow-y:auto; }
+  page .dock-inner { max-width:none; }
+  page .date-overlay { align-items:center; justify-content:center; padding:16px; }
+  page .date-panel { width:100%; max-width:560px; max-height:calc(100vh - 32px); overflow-y:auto; border-radius:16px; }
+  page .permission-card, page .redeem-dialog { max-width:560px; max-height:calc(100vh - 32px); overflow-y:auto; }
+  page .preview-scroll { max-width:1120px; margin:0 auto; }
+  page .preview-actions { justify-content:center; }
+  page .preview-button { max-width:340px; }
+  page .launch-action-buttons { max-width:720px; margin:0 auto; }
+  page .term-note { display:block; margin:12px 0; color:#65706A; font-size:14px; line-height:1.6; }
+  page .graph-controls { right:12px; bottom:calc(60px + env(safe-area-inset-bottom)); gap:6px; }
+  page .graph-control { width:44px; height:44px; font-size:20px; }
+  page .graph-control-text { font-size:12px; }
+  page .graph-help { max-width:560px; bottom:calc(12px + env(safe-area-inset-bottom)); }
+  page .tree-toolbar { min-width:0; height:76px; padding:12px; }
+  page .tree-page .graph-viewport { height:calc(100vh - 76px); }
+  page .tree-page.is-clean-screen .graph-viewport, page .tree-page.is-landscape .graph-viewport { height:100vh; }
+  page .mode-switch { height:50px; }
+  page .mode-item { height:44px; }
+  page .family-switch { min-width:0; flex:none; width:32%; max-width:320px; }
+  page .tree-top-ad, page .tree-share-reminder { max-width:560px; margin:0 auto; }
+  page .member-sheet-ad-header, page .member-sheet-ad-close, page .member-sheet-membership-link { min-height:44px; }
+  page .member-sheet-ad-close { width:44px; min-width:44px; }
+  page .is-large-device .member-sheet-mask { align-items:stretch; justify-content:flex-end; padding:0; }
+  page .is-large-device .member-sheet-mask .person-sheet { width:360px; max-width:360px; height:100vh; max-height:100vh; border-radius:16px 0 0 16px; }
+  page .perspective-list { height:calc(65vh - 110px); }
+  page .perspective-sheet { height:65vh; max-height:calc(100vh - 32px); }
+  page .child-order-button, page .perspective-option, page .family-option, page .entry-option, page .relation-chip,
+  page .person-search, page .member-relation-option, page .action-cell, page .mode-item, page .mode-switch, page .example-tab, page .family-switch, page .toolbar-share, page .invite-button, page .choice-item { min-height:44px; }
+
+  page .member-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }
+  page .member-row { min-width:0; }
+  page .pdf-actions { flex-wrap:wrap; }
+  page .pdf-actions button { min-width:140px; }
+}
+
+@media (min-width: 1024px) {
+  page .family-page, page .profile-page { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; align-items:start; }
+  page .family-page .family-hero, page .family-page .onboarding-card, page .family-page .stats-grid,
+  page .family-page .family-empty, page .profile-page .profile-card, page .profile-page .pending-card,
+  page .family-page .family-upgrade, page .family-page .ad-placement, page .profile-page .ad-placement { grid-column:1 / -1; }
+  page .family-page .section-block, page .profile-page .section-block { margin-top:0; }
+  page .family-page .stats-grid { grid-template-columns:repeat(4,minmax(0,1fr)); margin-top:0; }
+  page .family-page .onboarding-card { margin-top:0; }
+  page .form-columns { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; align-items:start; }
+  page .form-columns .optional-card { margin-top:0; }
+  page .edit-form-columns { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; }
+}
+
+@media (min-width: 600px) and (max-height: 520px) {
+  page .date-wheels { height:160px; }
+  page .date-panel { padding:12px 16px; }
+  page .date-toolbar { height:auto; min-height:44px; flex-wrap:wrap; gap:8px; }
+  page .date-extra { flex-wrap:wrap; gap:8px; }
+  page .graph-controls { bottom:12px; flex-direction:row; flex-wrap:wrap; max-width:calc(100% - 24px); }
+  page .graph-help { display:none; }
+}
+
+.desktop-relation-remove { min-height:44px; padding:8px; margin-left:8px; color:#B43D3D; font-size:14px; }

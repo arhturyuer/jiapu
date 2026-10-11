@@ -1,3 +1,4 @@
+const deviceLayout = require('../../utils/device-layout');
 const pdfEntry = require('../../utils/pdf-entry');
 const launchAd = require('../../utils/launch-ad');
 const app = getApp();
@@ -448,10 +449,11 @@ Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap({
     const info = this.getWindowSize();
     const width = info.windowWidth || 375;
     const rpxToPx = width / 750;
+    const uiUnit = deviceLayout.read(null, info).uiUnit;
     const isLandscape = width > (info.windowHeight || 667);
     return {
       width: width,
-      height: Math.max(isLandscape ? 120 : 240, (info.windowHeight || 667) - (isLandscape || this.data.isCleanScreen ? 0 : 112 * rpxToPx)),
+      height: Math.max(isLandscape ? 120 : 240, (info.windowHeight || 667) - ((isLandscape && !this.data.isLargeDevice) || this.data.isCleanScreen ? 0 : (width >= 600 ? 76 : 112 * uiUnit))),
       rpxToPx: rpxToPx,
       windowWidth: width
     };
@@ -475,6 +477,7 @@ Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap({
       this.measureGraphViewport(this.getWindowSize(), function (measured) {
         if (page._pageHidden || page._hidden || page._unloaded || page._lastLayout !== layout || page._gestureVersion !== version) return;
         page._graphViewport = measured;
+        page.setData({ graphScaleMin: graphViewport.minimumScaleForViewport(measured) });
         // A missing rect leaves the controls usable without retry recursion.
         if (measured.left === undefined) measured.left = 0;
         page.fitGraph(focusPersonId, fitAll, fitOptions);
@@ -526,6 +529,15 @@ Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap({
   toggleCleanScreen: function () { graphCleanScreen.toggle.call(this); },
 
   resetPageOrientation: function () {
+    if (this.data.isLargeDevice) {
+      this._orientationResizeSequence = (this._orientationResizeSequence || 0) + 1;
+      this._orientationTarget = '';
+      if (this._orientationTimer) clearTimeout(this._orientationTimer);
+      this._orientationTimer = null;
+      this.setData({ pageOrientation: 'auto', orientationChanging: false, isCleanScreen: false });
+      this.syncPageChrome(false);
+      return;
+    }
     this._orientationResizeSequence = (this._orientationResizeSequence || 0) + 1;
     if (this._orientationTimer) clearTimeout(this._orientationTimer);
     this._orientationTimer = null;
@@ -541,7 +553,7 @@ Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap({
 
   syncPageChrome: function (isLandscape) {
     if (typeof wx === 'undefined') return;
-    isLandscape = isLandscape || this.data.isCleanScreen;
+    isLandscape = (isLandscape && !this.data.isLargeDevice) || this.data.isCleanScreen;
     const familyName = this.data.currentFamily && this.data.currentFamily.name;
     if (wx.setNavigationBarTitle) {
       wx.setNavigationBarTitle({ title: familyName || '有谱' });
@@ -562,6 +574,7 @@ Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap({
   },
 
   togglePageOrientation: function () {
+    if (this.data.isLargeDevice) return;
     if (this.data.orientationChanging) return;
     const target = this.data.isLandscape ? 'portrait' : 'landscape';
     this._orientationViewport = this.getGraphViewport();
@@ -597,7 +610,7 @@ Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap({
   onPageResize: function (event) {
     const size = event && event.detail && event.detail.size;
     if (!size) return;
-    this.applyPageResize(size);
+    this.onResize({ size: size });
   },
 
   applyPageResize: function (size) {
@@ -617,7 +630,7 @@ Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap({
     if (settled) this._orientationTimer = null;
     const self = this;
     this.setData({
-      pageOrientation: target || actual,
+      pageOrientation: this.data.isLargeDevice ? 'auto' : target || actual,
       isLandscape: actual === 'landscape',
       orientationChanging: Boolean(target && !settled),
       graphScaleMin: minimumScale
@@ -628,10 +641,12 @@ Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap({
         self.measureGraphViewport({ windowWidth: width, windowHeight: height }, function (nextViewport) {
           if (resizeSequence !== self._orientationResizeSequence) return;
           self._graphViewport = nextViewport;
+          const measuredMinimum = graphViewport.minimumScaleForViewport(nextViewport);
+          self.setData({ graphScaleMin: measuredMinimum });
           if (self._lastLayout && self._lastLayout.nodes.length) {
             if (previousViewport) {
               self.commitGraphTransform(graphViewport.resizeTransform(previousTransform, previousViewport, nextViewport, {
-                minimumScale: minimumScale
+                minimumScale: measuredMinimum
               }));
             } else {
               self.fitGraph(self.data.selectedPersonId || self.data.viewpointId, !(self.data.selectedPersonId || self.data.viewpointId), { initialView: true });
@@ -653,12 +668,13 @@ Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap({
     const height = Number(size.windowHeight) || 667;
     const fallback = {
       width: width,
-      height: Math.max(width > height ? 120 : 240, height - (width > height || this.data.isCleanScreen ? 0 : 112 * width / 750)),
+      height: Math.max(width > height ? 120 : 240, height - ((width > height && !this.data.isLargeDevice) || this.data.isCleanScreen ? 0 : (width >= 600 ? 76 : 112 * deviceLayout.read(null, size).uiUnit))),
       rpxToPx: width / 750,
       windowWidth: width
     };
     const query = this.createSelectorQuery ? this.createSelectorQuery() : wx.createSelectorQuery();
     query.select('.graph-viewport').boundingClientRect();
+    query.select('.graph-unit-probe').boundingClientRect();
     query.exec(function (result) {
       const rect = result && result[0];
       callback(rect && rect.width && rect.height ? {
@@ -666,7 +682,7 @@ Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap({
         top: rect.top,
         width: rect.width,
         height: rect.height,
-        rpxToPx: width / 750,
+        rpxToPx: result[1] && result[1].width > 0 ? result[1].width / 100 : width / 750,
         windowWidth: width
       } : fallback);
     });

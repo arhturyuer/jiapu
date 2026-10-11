@@ -10,7 +10,7 @@
     </scroll-view>
     <view class="preview-actions">
       <button class="secondary-button preview-button" loading="{{sharing}}" disabled="{{sharing || saving}}" bindtap="shareImage">发送给好友</button>
-      <button class="primary-button preview-button" loading="{{saving}}" disabled="{{sharing || saving}}" bindtap="saveImage">保存图片</button>
+      <button class="primary-button preview-button" loading="{{saving}}" disabled="{{sharing || saving}}" bindtap="saveImage">{{isDesktop ? '保存到电脑' : '保存图片'}}</button>
     </view>
   </block>
   <view class="permission-mask" wx:if="{{permissionGuide}}">

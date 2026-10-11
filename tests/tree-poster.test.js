@@ -145,7 +145,7 @@ test('真实与示例家谱共用一键生成和两个底部操作', function ()
   assert.match(exampleScript, /onHide:[\s\S]*treePosterFlow\.cancel\(this\)/);
   assert.equal((previewTemplate.match(/class="[^"]*preview-button/g) || []).length, 2, '预览底部只保留两个主操作');
   assert.match(previewTemplate, />发送给好友<\/button>/);
-  assert.match(previewTemplate, />保存图片<\/button>/);
+  assert.match(previewTemplate, /isDesktop \? \'保存到电脑\' : \'保存图片\'/);
   assert.match(previewTemplate, /open-type="openSetting" bindopensetting="onMiniProgramSetting"/);
   assert.match(previewScript, /privacy\.ensurePrivacyAuthorized\(\)[\s\S]*saveToAlbum\(\)/);
   assert.match(previewScript, /wx\.getAppAuthorizeSetting\(\)/);

@@ -22,7 +22,7 @@
 <block wx:if="{{task.status === 'completed'}}">
 <text class="pdf-note">{{task.personCount}} 位成员 · {{task.relationCount}} 条关系 · {{task.pageCount}} 页</text>
 <text class="pdf-note" wx:if="{{task.unavailableMediaCount}}">{{task.unavailableMediaCount}} 位成员的头像暂不可用，已使用占位。</text>
-<view class="pdf-actions"><button class="secondary-button" data-action="preview" loading="{{opening}}" disabled="{{opening}}" bindtap="openFile">预览 PDF</button><button class="primary-button" data-action="share" disabled="{{opening}}" bindtap="openFile">转发文件</button></view>
+<view class="pdf-actions"><button class="secondary-button" data-action="preview" loading="{{opening}}" disabled="{{opening}}" bindtap="openFile">预览 PDF</button><button class="primary-button" data-action="share" disabled="{{opening}}" bindtap="openFile">转发文件</button><button class="secondary-button" wx:if="{{isDesktop}}" data-action="save" disabled="{{opening}}" bindtap="openFile">保存到电脑</button></view>
 </block>
 </view>
 <view wx:if="{{taskError}}"><text class="pdf-note">{{taskError}}</text><button class="secondary-button" wx:if="{{!uncertain}}" bindtap="refreshTask">重新读取状态</button></view>

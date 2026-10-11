@@ -1,3 +1,5 @@
+const capabilities = require('./platform-capabilities');
+
 function apiFrom(options) {
   if (options && options.wxApi) return options.wxApi;
   return wx;
@@ -108,6 +110,19 @@ function isCancelled(error) {
   return Boolean(error && (error.code === 'SHARE_CANCELLED' || String(error.errMsg || '').toLowerCase().indexOf('cancel') >= 0));
 }
 
+function saveToDisk(filePath, options) {
+  const api = apiFrom(options);
+  if (!capabilities.canSaveToDisk(api)) return Promise.reject(transferError('SAVE_UNSUPPORTED', '当前微信不支持保存到电脑，请在手机微信继续'));
+  if (!filePath) return Promise.reject(transferError('SAVE_PATH_MISSING', '文件尚未准备好，请重新下载'));
+  return new Promise(function (resolve, reject) {
+    try {
+      api.saveFileToDisk({ filePath: filePath, success: resolve, fail: function (error) {
+        reject(transferError(isCancelled(error) ? 'SHARE_CANCELLED' : 'SAVE_FAILED', '文件保存失败，请重试', error));
+      } });
+    } catch (error) { reject(transferError('SAVE_FAILED', '文件保存失败，请重试', error)); }
+  });
+}
+
 function shareFailureText(error) {
   const raw = String(error && error.errMsg || '');
   const normalized = raw.toLowerCase();
@@ -119,6 +134,8 @@ function shareFailureText(error) {
 
 module.exports = {
   canShareFile: canShareFile,
+  canSaveToDisk: capabilities.canSaveToDisk,
+  saveToDisk: saveToDisk,
   downloadToTempFile: downloadToTempFile,
   shareFile: shareFile,
   removeTempFile: removeTempFile,

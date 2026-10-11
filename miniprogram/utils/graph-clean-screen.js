@@ -5,7 +5,7 @@ function toggle() {
   this._orientationTransform = this.getGraphTransform();
   const size = Object.assign({}, this.getWindowSize());
   // page-meta can rotate the canvas before getWindowInfo catches up.
-  if ((size.windowWidth > size.windowHeight) !== Boolean(this.data.isLandscape)) {
+  if (!this.data.isLargeDevice && (size.windowWidth > size.windowHeight) !== Boolean(this.data.isLandscape)) {
     size.windowWidth = this._orientationViewport.windowWidth || this._orientationViewport.width;
     size.windowHeight = this._orientationViewport.height;
   }

@@ -92,7 +92,9 @@ Page(launchAd.wrap({
       this.file().then(function () { if (!self._unloaded) wx.showToast({ title: '文件已准备好，请再次点击转发', icon: 'none' }); }).catch(function (error) { if (!self._unloaded) wx.showToast({ title: api.userMessage(error, '文件下载失败，请重试'), icon: 'none' }); }).then(function () { if (!self._unloaded) self.setData({ opening: false }); });
       return;
     }
-    const operation = action === 'share'
+    const operation = action === 'save'
+      ? this.file().then(function (file) { if (self._unloaded) return; return transfer.saveToDisk(file.filePath); })
+      : action === 'share'
       ? transfer.shareFile(this._file.filePath, this._file.fileName)
       : this.file().then(function (file) { return new Promise(function (resolve, reject) { wx.openDocument({ filePath: file.filePath, fileType: 'pdf', showMenu: true, success: resolve, fail: reject }); }); });
     operation.catch(function (error) { if (!self._unloaded && !transfer.isCancelled(error)) wx.showToast({ title: api.userMessage(error, '文件操作失败，请重试'), icon: 'none' }); }).then(function () { if (!self._unloaded) self.setData({ opening: false }); });

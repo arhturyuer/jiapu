@@ -3,6 +3,7 @@ const api = require('../../utils/api');
 const posterSession = require('../../utils/poster-session');
 const privacy = require('../../utils/privacy');
 const subscribeNotifications = require('../../utils/subscribe-notifications');
+const transfer = require('../../utils/file-transfer');
 const app = getApp();
 
 function cancelled(error) {
@@ -188,6 +189,14 @@ Page(launchAd.wrap({
     if (!this.data.filePath || this.data.saving) return;
     const self = this;
     this.setData({ saving: true });
+    if (this.data.isDesktop) {
+      transfer.saveToDisk(this.data.filePath).then(function () {
+        if (!self._unloaded) wx.showToast({ title: '图片已保存', icon: 'success' });
+      }).catch(function (error) {
+        if (!self._unloaded && !transfer.isCancelled(error)) wx.showToast({ title: error.message, icon: 'none' });
+      }).then(function () { if (!self._unloaded) self.setData({ saving: false }); });
+      return;
+    }
     privacy.ensurePrivacyAuthorized().then(function () {
       return requestMiniProgramAlbumPermission();
     }).then(function () {

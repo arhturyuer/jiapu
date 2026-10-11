@@ -40,7 +40,9 @@ try {
   run(node, [resolve(root, 'scripts/package-membership.mjs'), '--check']);
   const tests = files.filter(function (file) { return /^tests\/[^/]+\.test\.js$/.test(file); });
   if (!tests.length) throw new Error('未找到自动化测试，已阻止空检查通过。');
-  run(node, ['--test', ...tests.map(function (file) { return resolve(root, file); })]);
+  // Bound CPU contention: cold-start performance assertions keep their original
+  // wall-clock limits while the full suite avoids flooding desktop processes.
+  run(node, ['--test', '--test-concurrency=4', ...tests.map(function (file) { return resolve(root, file); })]);
   // The build script already includes vue-tsc; avoid running it twice.
   run(pnpm, ['run', buildAdmin ? 'build' : 'typecheck'], resolve(root, 'admin'));
   console.log('本地代码、文档、测试和后台' + (buildAdmin ? '构建' : '类型检查') + '通过；未执行云端或微信操作。');

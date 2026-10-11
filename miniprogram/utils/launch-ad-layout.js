@@ -13,7 +13,7 @@ function fromWindow(info, capsule, ratio) {
   const bottom = windowInfo.safeArea && Number(windowInfo.safeArea.bottom);
   const safeBottom = Number.isFinite(bottom) ? Math.max(0, Math.min(screenHeight - bottom, height / 4)) : 0;
   // Two 88rpx buttons, a 16rpx gap and 20rpx padding on each side.
-  const actionsHeight = 232 * width / 750 + safeBottom;
+  const actionsHeight = 232 * (width >= 600 ? 0.5 : width / 750) + safeBottom;
   const contentHeight = Math.max(1, height - safeTop - actionsHeight);
   return { windowWidth: width, windowHeight: height, safeTop: safeTop, safeBottom: safeBottom,
     contentHeight: contentHeight, templateWidth: fitWidth(width, contentHeight, ratio) };

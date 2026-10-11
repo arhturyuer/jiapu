@@ -5,7 +5,7 @@
 <view class="page-shell" wx:elif="{{!families.length}}">
   <view class="empty-panel"><text class="empty-title">{{selectionError || '还没有可购买会员的家谱'}}</text><text class="empty-description">创建或加入家谱后，全体家人可共享会员权益</text><button class="primary-button empty-action" bindtap="createFamily">创建家谱</button><button class="secondary-button empty-action" bindtap="loadPage">重新加载家谱</button></view>
 </view>
-<view class="membership-page page-shell" style="{{dockHeight ? 'padding-bottom: calc(' + dockHeight + 'px + 24rpx)' : ''}}" wx:else>
+<view class="membership-page page-shell" style="{{dockHeight ? 'padding-bottom: calc(' + dockHeight + (isWide ? 'px + 12px)' : 'px + 24rpx)') : ''}}" wx:else>
   <view class="purchase-family surface-card">
     <picker range="{{families}}" range-key="name" value="{{familyIndex < 0 ? 0 : familyIndex}}" disabled="{{paying || redeeming}}" bindchange="changeFamily"><view class="family-picker"><text>{{family ? family.name : '请选择家谱'}}</text><text>{{paying || redeeming ? '处理中' : '切换 ›'}}</text></view></picker>
     <text class="current-status">{{selectionError || (statusReady ? membershipText : statusError ? '会员权益读取失败' : family ? '正在读取会员权益…' : '请选择要购买的家谱')}}</text>
@@ -60,6 +60,7 @@
       <button class="text-action" disabled="{{redeeming}}" bindtap="closeRedeem">取消</button>
     </view>
   </view>
+  <text class="term-note" wx:if="{{isDesktop && paymentMode !== 'mock'}}">电脑端暂不发起购买，请在手机微信打开当前家谱开通。兑换码和权益查询可在此使用。</text>
   <view class="purchase-dock">
     <view class="dock-inner"><view class="agreement"><text>开通会员表示同意</text><text class="rule-link" bindtap="openRules">《家庭会员与退款说明》</text></view><button class="primary-button pay-button" loading="{{paying}}" disabled="{{!canBuy}}" bindtap="startPayment">{{payLabel}}</button></view>
   </view>

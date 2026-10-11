@@ -1,5 +1,6 @@
 const commerceConfig = require('../config/commerce');
 const adAccess = require('./ad-access');
+const deviceLayout = require('./device-layout');
 const LAUNCH_PAGE = 'pages/launch-ad/index';
 const TAB_PAGES = ['pages/tree/index', 'pages/members/index', 'pages/profile/index'];
 
@@ -111,7 +112,7 @@ function wrap(definition) {
       if (name === 'onUnload') this._launchGate.unloaded = true;
     };
   });
-  return definition;
+  return deviceLayout.wrap(definition);
 }
 
 module.exports = { begin: begin, prepare: prepare, wrap: wrap, restore: restore, url: url };

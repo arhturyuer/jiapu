@@ -16,7 +16,7 @@
     <text>{{contextError}}</text><button class="secondary-button retry-button" bindtap="loadRelationContext">重新加载</button>
   </view>
 
-  <block wx:if="{{entryMode === 'new'}}">
+  <view class="form-columns" wx:if="{{entryMode === 'new'}}">
     <view class="form-card surface-card">
       <text class="field-label">姓名</text>
       <input class="field-input" placeholder="请输入姓名" value="{{name}}" data-field="name" bindinput="inputField" maxlength="30" />
@@ -57,7 +57,7 @@
         <textarea class="field-textarea" placeholder="写下一些想被家人记住的事" value="{{bio}}" data-field="bio" bindinput="inputField" maxlength="500"></textarea>
       </view>
     </view>
-  </block>
+  </view>
 
   <view class="existing-card surface-card" wx:else>
     <input class="field-input existing-search" placeholder="输入姓名查找谱中成员" value="{{existingKeyword}}" bindinput="filterExisting" />

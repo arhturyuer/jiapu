@@ -43,6 +43,7 @@ function harness(accountState = 'active') {
     '../../utils/launch-ad': { wrap: definition => definition },
     '../../utils/api': api,
     '../../utils/privacy': {},
+    '../../utils/platform-capabilities': require('../miniprogram/utils/platform-capabilities'),
     '../../utils/form-state': { clearLeaveAlert() {} },
     '../../utils/ad-access': { hide() {}, refresh: () => Promise.resolve() },
     '../../utils/share-card': {},

@@ -49,7 +49,7 @@ test('主家谱竖屏画布只扣除顶部工具栏，不重复预留原生 TabB
   const style = read('miniprogram/pages/tree/index.wxss');
   assert.match(style, /height:\s*calc\(100vh - 112rpx\)/);
   assert.doesNotMatch(style, /height:\s*calc\(100vh - 112rpx - 120rpx\)/);
-  assert.match(script, /isLandscape \|\| this\.data\.isCleanScreen \? 0 : 112 \* rpxToPx/);
-  assert.match(script, /width > height \|\| this\.data\.isCleanScreen \? 0 : 112 \* width \/ 750/);
+  assert.match(script, /isLandscape && !this\.data\.isLargeDevice\) \|\| this\.data\.isCleanScreen \? 0 : \(width >= 600 \? 76 : 112 \* uiUnit/);
+  assert.match(script, /width > height && !this\.data\.isLargeDevice\) \|\| this\.data\.isCleanScreen \? 0 : \(width >= 600 \? 76 : 112 \* deviceLayout\.read/);
   assert.match(style, /\.graph-help \{[^}]*bottom:\s*calc\(24rpx \+ env\(safe-area-inset-bottom\)\)/);
 });

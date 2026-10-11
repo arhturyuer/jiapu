@@ -1,4 +1,5 @@
 const graphViewport = require('./graph-viewport');
+const desktop = require('./graph-desktop');
 
 function visible(page) {
   return !page._pageHidden && !page._hidden && !page._unloaded;
@@ -69,12 +70,14 @@ function wrap(definition) {
   });
   const onShow = definition.onShow;
   definition.onShow = function () {
+    desktop.attach(this);
     this.setData({ graphGestureConfig: config(this, this.getGraphTransform()) });
     return onShow && onShow.apply(this, arguments);
   };
   ['onHide', 'onUnload'].forEach(function (name) {
     const original = definition[name];
     definition[name] = function () {
+      desktop.detach(this);
       invalidate(this);
       return original && original.apply(this, arguments);
     };

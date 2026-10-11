@@ -78,6 +78,7 @@ test('本地检查无本机配置或凭据运行，包含新文件并排除依�
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.ok(calls.some(function (call) { return call.args[0] === '--check' && call.args[1].endsWith('example.mjs'); }));
   assert.ok(calls.some(function (call) { return call.args[0] === '--test'; }));
+  assert.ok(calls.some(function (call) { return call.args[0] === '--test' && call.args[1] === '--test-concurrency=4'; }));
   assert.ok(calls.some(function (call) { return call.name === 'pnpm-stub' && call.args[1] === 'typecheck' && call.cwd === path.join(f.root, 'admin'); }));
   assert.ok(calls.every(function (call) { return ['node-stub', 'pnpm-stub'].includes(call.name); }));
   assert.doesNotMatch(JSON.stringify(calls), /bad\.js|env\.local\.js/);

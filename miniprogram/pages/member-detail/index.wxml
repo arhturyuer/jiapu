@@ -33,7 +33,7 @@
           <image class="relation-avatar gender-avatar {{item.person.genderClass}}" wx:if="{{item.person.avatar}}" src="{{item.person.avatar}}" mode="aspectFill"></image>
           <view class="relation-avatar relation-placeholder gender-avatar {{item.person.genderClass}}" wx:else>{{item.initial}}</view>
           <view class="relation-copy"><view class="relation-name-row"><text class="relation-name">{{item.person.name}}</text><text class="gender-badge {{item.person.genderClass}}">{{item.person.genderText}}</text></view><text class="relation-label">{{item.label}}</text></view>
-          <text class="relation-arrow">›</text>
+          <text class="relation-arrow">›</text><button class="desktop-relation-remove" wx:if="{{isDesktop && isAdmin}}" data-relation-id="{{item.relationId}}" disabled="{{removingRelationId !== ''}}" catchtap="removeRelation">移除关系</button>
         </view>
       </view>
     </view>

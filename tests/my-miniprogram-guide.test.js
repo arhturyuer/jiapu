@@ -50,7 +50,7 @@ function fixture(t) {
     getStorageSync: function (key) { return storage.get(key); },
     setStorageSync: function (key, value) { storage.set(key, value); },
     getWindowInfo: function () { return { windowWidth: 375, statusBarHeight: 44 }; },
-    getMenuButtonBoundingClientRect: function () { return { left: 278, width: 87, bottom: 76 }; },
+    getMenuButtonBoundingClientRect: function () { return { left: 278, right: 365, top: 44, width: 87, height: 32, bottom: 76 }; },
     checkIsAddedToMyMiniProgram: function (options) { checks.push(options); options.success({ added: false }); },
     showModal: function (options) { modals.push(options); },
     showToast: function () {}, switchTab: function () {}, removeStorageSync: function (key) { storage.delete(key); }

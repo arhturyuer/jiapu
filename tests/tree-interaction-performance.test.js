@@ -162,7 +162,7 @@ test('顶部广告迟到结果不会覆盖邀请引导、切谱或离页，旧�
   assert.equal(page.data.topAdLoaded, false);
 });
 
-test('顶部与人物弹框广告分别处理事件，顶部模板与邀请互斥且清屏横屏不渲染', async function (t) {
+test('顶部与人物弹框广告分别处理事件，顶部模板与邀请互斥且清屏和手机横屏不渲染、大屏横屏可展示', async function (t) {
   const { page } = topAdFixture(t);
   const previousUnit = commerceConfig.bannerAdUnits.staging.memberSheet;
   commerceConfig.bannerAdUnits.staging.memberSheet = 'adunit-test-member';
@@ -176,7 +176,7 @@ test('顶部与人物弹框广告分别处理事件，顶部模板与邀请互�
   assert.equal(page.data.memberAdReserved, false);
   assert.equal(page.data.memberAdVisible, false, '关闭人物弹框销毁原生广告，禁止隐藏视频');
   const template = fs.readFileSync(path.join(__dirname, '../miniprogram/pages/tree/index.wxml'), 'utf8');
-  assert.match(template, /tree-share-reminder" wx:if="\{\{showShareReminder && !showMyMiniProgramGuide\}\}"[\s\S]*?<view class="tree-top-ad" wx:elif="\{\{topAdVisible && !showMyMiniProgramGuide && !isCleanScreen && !isLandscape\}\}"/);
+  assert.match(template, /tree-share-reminder" wx:if="\{\{showShareReminder && !showMyMiniProgramGuide\}\}"[\s\S]*?<view class="tree-top-ad" wx:elif="\{\{topAdVisible && !showMyMiniProgramGuide && !isCleanScreen && \(!isLandscape \|\| isLargeDevice\)\}\}"/);
   assert.match(template, /<ad-custom[^>]*bindload="adLoad"[^>]*binderror="adError"[^>]*bindclose="adClose"/);
   assert.match(template, /tree-top-ad-actions" wx:if="\{\{topAdLoaded\}\}"[\s\S]*tree-top-ad-close"[^>]*aria-label="关闭广告"[^>]*bindtap="dismissTopAd"[\s\S]*<icon type="cancel"[\s\S]*tree-top-ad-membership" bindtap="openTopAdMembership">开通会员，全家人免广告/);
 });
@@ -398,7 +398,7 @@ test('成员弹框广告刷新会员后才加载，真实与示例共用购买�
     const loadedEvent = { currentTarget: { dataset: { version: item.data.memberAdVersion } } };
     item.closeMemberAd(loadedEvent);
     assert.equal(item.data.memberAdVisible, false);
-    assert.equal(item.data.memberAdReserved, true);
+    assert.equal(item.data.memberAdReserved, false);
     item.showMemberAd(loadedEvent);
     assert.equal(item.data.memberAdLoaded, false);
     await item.openMemberActions({ currentTarget: { dataset: { id: 'parent' } } });
