@@ -57,13 +57,14 @@ test('日期弹框的年、月、日“无”形成可保存精度，取消不�
   const changes = [];
   const picker = Object.assign({}, definition.methods, {
     data: Object.assign({}, definition.data, { value: clientDate.emptyDraft() }),
-    setData: function (patch) {
+    setData: function (patch, callback) {
       Object.keys(patch).forEach(function (key) {
         if (key.indexOf('.') < 0) this.data[key] = patch[key];
         else this.data[key.split('.')[0]][key.split('.')[1]] = patch[key];
       }, this);
+      if (callback) callback();
     },
-    triggerEvent: function (name, detail) { changes.push({ name: name, detail: detail }); }
+    triggerEvent: function (name, detail) { if (name === 'change') changes.push({ name: name, detail: detail }); }
   });
   picker.open();
   assert.equal(picker.data.yearOptions[0].value, '');

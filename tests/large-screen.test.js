@@ -177,7 +177,7 @@ test('桌面日期选择复用闰年和部分精度规则，取消不提交', t 
   platform(t, { platform: 'windows' }, { showToast() {} });
   const changes = [];
   const picker = instance(definition.methods, { value: { calendar: 'solar', year: '2000', month: '2', day: '29' }, pickerValue: [] });
-  picker.triggerEvent = (name, detail) => changes.push(detail);
+  picker.triggerEvent = (name, detail) => { if (name === 'change') changes.push(detail); };
   picker.open();
   const year1900 = picker.data.yearOptions.findIndex(item => item.value === '1900');
   picker.chooseDesktopDate({ currentTarget: { dataset: { column: 0 } }, detail: { value: year1900 } });

@@ -5,6 +5,7 @@ const app = getApp();
 const api = require('../../utils/api');
 const privacy = require('../../utils/privacy');
 const formState = require('../../utils/form-state');
+const formFocus = require('../../utils/form-focus');
 const personGender = require('../../utils/person-gender');
 const personDate = require('../../utils/person-date');
 
@@ -60,7 +61,10 @@ Page(launchAd.wrap({
     uploading: false,
     savingAvatar: false,
     submitting: false,
-    hasFormChanges: false
+    hasFormChanges: false,
+    datePickerOpen: false,
+    saveError: '',
+    saveProblemId: ''
   },
 
   onLoad: function (options) {
@@ -108,6 +112,8 @@ Page(launchAd.wrap({
         currentRole: data.currentRole,
         uploading: false,
         savingAvatar: false,
+        saveError: '',
+        saveProblemId: '',
         hasFormChanges: false
       });
       self._initialForm = normalizedForm(self.data);
@@ -141,7 +147,7 @@ Page(launchAd.wrap({
 
   setFormData: function (patch) {
     const self = this;
-    this.setData(Object.assign({ readingSaved: false, readingNameError: '', readingResult: '' }, patch), function () { self.refreshFormState(); });
+    this.setData(Object.assign({ readingSaved: false, readingNameError: '', readingResult: '', saveError: '', saveProblemId: '' }, patch), function () { self.refreshFormState(); });
   },
 
   inputField: function (event) {
@@ -164,6 +170,7 @@ Page(launchAd.wrap({
 
   onBirthDateChange: function (event) { this.setFormData({ birthDraft: event.detail.value }); },
   onDeathDateChange: function (event) { this.setFormData({ deathDraft: event.detail.value }); },
+  onDatePickerVisibilityChange: formFocus.datePickerVisibility,
 
   chooseAvatar: function () {
     const self = this;
@@ -262,20 +269,24 @@ Page(launchAd.wrap({
   },
 
   readingBack: formFeedback.back,
+  showSaveError: function (error, fallback, field) {
+    const problem = api.userError(error, fallback);
+    this.setData({ saveError: problem.message, saveProblemId: problem.problemId });
+    formFeedback.error(this, problem.message, field);
+    wx.showToast({ title: problem.message, icon: 'none' });
+  },
   validateReadingName: function () { if (!this.data.elderMode) return; this.setData({ readingNameFocus: false, readingNameError: !String(this.data.name || '').trim() ? '请填写姓名' : '' }); },
   submit: function () {
     const self = this;
     const current = normalizedForm(this.data);
     if (!current.name) {
-      formFeedback.error(this, '姓名不能为空', 'name');
-      wx.showToast({ title: '姓名不能为空', icon: 'none' });
+      this.showSaveError(null, '姓名不能为空', 'name');
       return Promise.resolve();
     }
     const birth = personDate.toInfo(this.data.birthDraft);
     const death = personDate.toInfo(this.data.deathDraft);
     if (birth.error || (this.data.lifeStatus === 'deceased' && death.error)) {
-      formFeedback.error(this, birth.error ? '出生时间：' + birth.error : '离世时间：' + death.error);
-      wx.showToast({ title: (birth.error ? '出生时间：' + birth.error : '离世时间：' + death.error), icon: 'none' });
+      this.showSaveError(null, birth.error ? '出生时间：' + birth.error : '离世时间：' + death.error);
       return Promise.resolve();
     }
     if (!this.data.hasFormChanges || this.data.submitting || this.data.uploading || this.data.savingAvatar) return Promise.resolve();
@@ -283,7 +294,7 @@ Page(launchAd.wrap({
     FORM_FIELDS.forEach(function (field) {
       if ((current[field] || '') !== (self._initialForm[field] || '')) changes[field] = field === 'birthDateInfo' ? birth.info : field === 'deathDateInfo' ? (current.lifeStatus === 'living' ? null : death.info) : current[field];
     });
-    this.setData({ submitting: true });
+    this.setData({ submitting: true, saveError: '', saveProblemId: '' });
     return api.call('person.update', {
       personId: this.data.personId,
       data: changes
@@ -307,7 +318,7 @@ Page(launchAd.wrap({
       return data;
     }).catch(function (error) {
       self.setData({ submitting: false });
-      formFeedback.error(self, api.userMessage(error, '保存失败')); wx.showToast({ title: api.userMessage(error, '保存失败'), icon: 'none' });
+      self.showSaveError(error, '暂时无法保存，请稍后重试');
     });
   }
 }));

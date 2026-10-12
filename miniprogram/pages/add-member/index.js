@@ -5,6 +5,7 @@ const app = getApp();
 const api = require('../../utils/api');
 const privacy = require('../../utils/privacy');
 const formState = require('../../utils/form-state');
+const formFocus = require('../../utils/form-focus');
 const kinship = require('../../utils/kinship');
 const personGender = require('../../utils/person-gender');
 const personDate = require('../../utils/person-date');
@@ -33,7 +34,8 @@ Page(launchAd.wrap({
     sharedParents: [], selectedSharedParentIds: [], sharedChildren: [], selectedSharedChildIds: [],
     name: '', gender: '', lifeStatus: 'living', birthDraft: personDate.emptyDraft(), deathDraft: personDate.emptyDraft(), birthPlace: '', avatar: '', selectedAvatarPath: '',
     avatarAssetId: '', moderationStatus: '', avatarState: '', avatarStateText: '', bio: '', showMoreFields: false,
-    uploading: false, submitting: false, submitStage: '', hasUnsavedChanges: false, relationSummary: [], siblingBlocked: false
+    uploading: false, submitting: false, submitStage: '', hasUnsavedChanges: false, relationSummary: [], siblingBlocked: false,
+    datePickerOpen: false
   },
   onLoad: function (options) {
     const type = RELATION_OPTIONS.some(function (item) { return item.key === options.relationType; }) ? options.relationType : 'son';
@@ -48,6 +50,7 @@ Page(launchAd.wrap({
     this.loadRelationContext();
   },
   onShow: function () { if (this.data.readingSaved && !this.data.elderMode) formFeedback.returnAfter(this, 600); },
+  onDatePickerVisibilityChange: formFocus.datePickerVisibility,
   onHide: function () { formFeedback.clearReturn(this); },
   onUnload: function () { formState.clearLeaveAlert(this); formFeedback.clearReturn(this); if (this._existingTimer) clearTimeout(this._existingTimer); if (this._duplicateTimer) clearTimeout(this._duplicateTimer); },
   markDirty: function () { this.setData({ readingSaved: false, readingNameError: '', readingResult: '' }); if (!this.data.hasUnsavedChanges) this.setData({ hasUnsavedChanges: true }); formState.syncLeaveAlert(this, true, '新增成员信息尚未保存，确定离开吗？'); },

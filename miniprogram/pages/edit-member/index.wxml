@@ -16,7 +16,7 @@
   <view class="form-card surface-card edit-form-columns">
     <view class="form-column">
     <text class="field-label">姓名</text>
-    <input class="field-input" id="reading-name" aria-label="姓名，必填" focus="{{readingNameFocus}}" bindblur="validateReadingName" value="{{name}}" data-field="name" bindinput="inputField" maxlength="30" />
+    <input disabled="{{datePickerOpen}}" class="field-input" id="reading-name" aria-label="姓名，必填" focus="{{readingNameFocus}}" bindblur="validateReadingName" value="{{name}}" data-field="name" bindinput="inputField" maxlength="30" />
 <text class="field-error" wx:if="{{elderMode && readingNameError}}">{{readingNameError}}</text>
     <text class="field-label second-label">性别</text>
     <view class="choice-row">
@@ -32,16 +32,17 @@
     </view>
     </view>
     <view class="form-column">
-    <person-date-picker label="出生时间" value="{{birthDraft}}" bindchange="onBirthDateChange" />
-    <person-date-picker wx:if="{{lifeStatus === 'deceased'}}" label="离世时间" value="{{deathDraft}}" bindchange="onDeathDateChange" />
+    <person-date-picker bindvisibilitychange="onDatePickerVisibilityChange" label="出生时间" value="{{birthDraft}}" bindchange="onBirthDateChange" />
+    <person-date-picker bindvisibilitychange="onDatePickerVisibilityChange" wx:if="{{lifeStatus === 'deceased'}}" label="离世时间" value="{{deathDraft}}" bindchange="onDeathDateChange" />
     <text class="field-label second-label">籍贯</text>
-    <input aria-label="籍贯" class="field-input" placeholder="可选" value="{{birthPlace}}" data-field="birthPlace" bindinput="inputField" maxlength="80" />
+    <input disabled="{{datePickerOpen}}" aria-label="籍贯" class="field-input" placeholder="可选" value="{{birthPlace}}" data-field="birthPlace" bindinput="inputField" maxlength="80" />
     <text class="field-label second-label">人物简介</text>
-    <textarea aria-label="人物简介" class="field-textarea" placeholder="记录值得被家人记住的事" value="{{bio}}" data-field="bio" bindinput="inputField" maxlength="500"></textarea>
+    <textarea disabled="{{datePickerOpen}}" aria-label="人物简介" class="field-textarea" placeholder="记录值得被家人记住的事" value="{{bio}}" data-field="bio" bindinput="inputField" maxlength="500"></textarea>
     </view>
   </view>
   <text class="permission-note" wx:if="{{currentRole !== 'admin'}}">姓名、性别和人物状态的修改需要管理员确认。</text>
-  <view class="reading-result {{readingResultError ? 'reading-error' : ''}}" wx:if="{{elderMode && readingResult}}"><text>{{readingResult}}</text><button class="secondary-button" wx:if="{{readingSaved}}" bindtap="readingBack">返回家谱</button></view>
+  <view class="reading-result reading-error" wx:if="{{saveError}}" aria-role="alert"><text>{{saveError}}</text><text class="save-problem-id" wx:if="{{saveProblemId}}" selectable="true">问题编号：{{saveProblemId}}</text></view>
+  <view class="reading-result {{readingResultError ? 'reading-error' : ''}}" wx:elif="{{elderMode && readingResult}}"><text>{{readingResult}}</text><button class="secondary-button" wx:if="{{readingSaved}}" bindtap="readingBack">返回家谱</button></view>
   <view class="submit-actions">
     <button class="primary-button submit-button" loading="{{submitting}}" disabled="{{!name || !hasFormChanges || uploading || savingAvatar || submitting}}" bindtap="submit">{{submitting ? '保存中…' : hasFormChanges ? '保存其他资料' : '其他资料未修改'}}</button>
   </view>

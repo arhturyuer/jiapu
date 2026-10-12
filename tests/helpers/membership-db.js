@@ -6,6 +6,7 @@ function createDatabase() {
   db.command = {};
   for (const op of ['lt', 'lte', 'gt', 'gte', 'neq', 'in', 'and', 'or', 'inc']) db.command[op] = value => ({ op, value });
   db.command.remove = () => ({ op: 'remove' }); db.serverDate = () => new Date(db.now);
+  db.command.set = value => ({ op: 'set', value });
   function equal(a, b) { return a instanceof Date || b instanceof Date ? new Date(a).getTime() === new Date(b).getTime() : a === b; }
   function match(row, where) {
     if (where && where.op === 'and') return where.value.every(condition => match(row, condition));
@@ -56,6 +57,7 @@ function createDatabase() {
             for (const [field, value] of Object.entries(data)) {
               if (value && value.op === 'inc') row[field] = Number(row[field] || 0) + value.value;
               else if (value && value.op === 'remove') delete row[field];
+              else if (value && value.op === 'set') row[field] = structuredClone(value.value);
               else row[field] = structuredClone(value);
             }
             current().set(key, row);

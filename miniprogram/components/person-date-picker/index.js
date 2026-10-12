@@ -1,6 +1,7 @@
 const reading = require('../../utils/reading-preference');
 const personDate = require('../../utils/person-date');
 const deviceLayout = require('../../utils/device-layout');
+const formFocus = require('../../utils/form-focus');
 
 const MONTHS = [{ value: '', label: '无' }].concat(Array.from({ length: 12 }, function (_, index) {
   return { value: String(index + 1), label: String(index + 1) + '月' };
@@ -80,13 +81,24 @@ Component({
       this.chooseDate({ detail: { value: indexes } });
     },
     open: function () {
+      if (this.data.shown) return;
+      formFocus.hideKeyboard();
+      this.triggerEvent('visibilitychange', { shown: true });
       const working = workingDraft(this.data.value);
       const yearOptions = yearsFor();
       const dayOptions = daysFor(working.calendar, working.year, working.month);
       this.setData({ shown: true, working: working, yearOptions: yearOptions, dayOptions: dayOptions,
         pickerValue: [selectedIndex(yearOptions, working.year), selectedIndex(MONTHS, working.month), selectedIndex(dayOptions, working.day)] });
     },
-    close: function () { this.setData({ shown: false }); },
+    close: function () {
+      if (!this.data.shown) return;
+      const self = this;
+      formFocus.hideKeyboard();
+      this.setData({ shown: false }, function () {
+        self.triggerEvent('visibilitychange', { shown: false });
+        formFocus.hideKeyboard();
+      });
+    },
     noop: function () {},
     chooseCalendar: function (event) {
       const calendar = event.currentTarget.dataset.calendar;
@@ -122,7 +134,7 @@ Component({
       const result = personDate.toInfo(working);
       if (result.error) { wx.showToast({ title: result.error, icon: 'none' }); return; }
       this.triggerEvent('change', { value: working });
-      this.setData({ shown: false });
+      this.close();
     }
   }
 });

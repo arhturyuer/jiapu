@@ -18,6 +18,13 @@ test('统一错误语言覆盖常见分类并保留问题编号', function () {
     ['GRAPH_CHANGED', '刷新'],
     ['RATE_LIMITED', '频繁'],
     ['CONTENT_REJECTED', '安全检查'],
+    ['INVALID_PERSON_DATE', '日期和闰月'],
+    ['PERSON_DEATH_BEFORE_BIRTH', '离世时间不能早于出生'],
+    ['LIVING_PERSON_DEATH_DATE', '健在成员'],
+    ['NO_CHANGES', '没有可保存的修改'],
+    ['CONTENT_NOT_ALLOWED', '安全检查'],
+    ['CONTENT_PENDING_REVIEW', '人工复核'],
+    ['CONTENT_REVIEW_UNAVAILABLE', '暂时不可用'],
     ['PAYMENT_RECONCILE_UNAVAILABLE', '不要重复购买']
   ];
   cases.forEach(function (item) {

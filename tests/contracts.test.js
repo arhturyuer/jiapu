@@ -139,6 +139,7 @@ test('关于页使用正式版实际版本并按最新在前展示受控更新�
   const uploadScript = fs.readFileSync(path.join(root, 'deployment/upload-miniprogram.sh'), 'utf8');
   const verifier = fs.readFileSync(path.join(root, 'deployment/verify-release-note.mjs'), 'utf8');
   assert.deepEqual(releaseInfo.validateReleaseNotes(releaseNotes), [
+    { version: '1.6.13', summary: '修复成员生卒日期保存失败，优化保存错误提示，修复日期确认后意外弹出键盘。' },
     { version: '1.6.12', summary: '新增长辈模式与字号设置，支持简化图谱操作、放大文字和按钮，优化成员填写及全页面阅读体验。' },
     { version: '1.6.11', summary: '适配 iPad 和电脑微信大屏，优化家谱浏览、成员编辑、日期选择及图片和 PDF 保存体验。' },
     { version: '1.6.10', summary: '新增添加到我的小程序引导，优化我的页反馈群二维码及成员表单固定保存底栏。' },

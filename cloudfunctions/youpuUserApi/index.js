@@ -733,6 +733,16 @@ function normalizePersonChanges(input) {
   return result;
 }
 
+function personUpdateData(changes) {
+  const data = Object.assign({}, changes, { updatedAt: db.serverDate() });
+  // Plain objects are expanded to child paths by CloudBase update(). Use an
+  // explicit replacement so a stored null can become a date object safely.
+  ['birthDateInfo', 'deathDateInfo', 'birthDateRange', 'deathDateRange'].forEach(function (field) {
+    if (data[field] && typeof data[field] === 'object') data[field] = _.set(data[field]);
+  });
+  return data;
+}
+
 async function requireOwnedMedia(assetId, openid, familyId, kind) {
   const id = cleanText(assetId, 80);
   if (!id) return null;
@@ -2217,7 +2227,7 @@ async function personUpdate(event) {
       await recordNotificationEvent(transaction, 'review', event, openid, person.familyId, result._id);
       return { pending: true, requestId: result._id, person: publicPerson(person) };
     }
-    await transaction.collection('persons').doc(person._id).update({ data: Object.assign({}, changes, { updatedAt: db.serverDate() }) });
+    await transaction.collection('persons').doc(person._id).update({ data: personUpdateData(changes) });
     await audit(transaction, {
       familyId: person.familyId,
       openid: openid,
@@ -2372,7 +2382,7 @@ async function changeReview(event) {
       if (request.payload.changes.gender !== undefined) assertGenderChangeAllowed(person.gender, request.payload.changes.gender);
       if (changesAffectPersonDates(request.payload.changes)) assertPersonDates(Object.assign({}, person, request.payload.changes));
       await transaction.collection('persons').doc(person._id).update({
-        data: Object.assign({}, request.payload.changes, { updatedAt: db.serverDate() })
+        data: personUpdateData(request.payload.changes)
       });
     }
     if (approved && request.type === 'reorder_children') {

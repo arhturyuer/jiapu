@@ -21,7 +21,7 @@
   <view class="form-columns" wx:if="{{entryMode === 'new'}}">
     <view class="form-card surface-card">
       <text class="field-label">姓名</text>
-      <input class="field-input" id="reading-name" aria-label="姓名，必填" focus="{{readingNameFocus}}" bindblur="validateReadingName" placeholder="请输入姓名" value="{{name}}" data-field="name" bindinput="inputField" maxlength="30" />
+      <input disabled="{{datePickerOpen}}" class="field-input" id="reading-name" aria-label="姓名，必填" focus="{{readingNameFocus}}" bindblur="validateReadingName" placeholder="请输入姓名" value="{{name}}" data-field="name" bindinput="inputField" maxlength="30" />
 <text class="field-error" wx:if="{{elderMode && readingNameError}}">{{readingNameError}}</text>
       <view class="duplicate-box" wx:if="{{duplicateSuggestions.length}}">
         <text class="duplicate-title">家谱中有相似姓名，确认是否为同一人</text>
@@ -49,21 +49,21 @@
         <text class="upload-state upload-state-{{avatarState}}" wx:if="{{avatarStateText}}">{{avatarStateText}}</text>
       </view>
 
-      <person-date-picker label="出生时间" value="{{birthDraft}}" bindchange="onBirthDateChange" />
-      <person-date-picker wx:if="{{lifeStatus === 'deceased'}}" label="离世时间" value="{{deathDraft}}" bindchange="onDeathDateChange" />
+      <person-date-picker bindvisibilitychange="onDatePickerVisibilityChange" label="出生时间" value="{{birthDraft}}" bindchange="onBirthDateChange" />
+      <person-date-picker bindvisibilitychange="onDatePickerVisibilityChange" wx:if="{{lifeStatus === 'deceased'}}" label="离世时间" value="{{deathDraft}}" bindchange="onDeathDateChange" />
 
       <view data-reading-control="true" aria-role="button" class="more-toggle" bindtap="toggleMoreFields"><text>更多资料</text><text>{{showMoreFields ? '收起' : '展开'}}</text></view>
       <view class="more-fields" wx:if="{{showMoreFields}}">
         <text class="field-label">籍贯</text>
-        <input aria-label="籍贯" class="field-input" placeholder="请输入籍贯" value="{{birthPlace}}" data-field="birthPlace" bindinput="inputField" maxlength="80" />
+        <input disabled="{{datePickerOpen}}" aria-label="籍贯" class="field-input" placeholder="请输入籍贯" value="{{birthPlace}}" data-field="birthPlace" bindinput="inputField" maxlength="80" />
         <text class="field-label second-label">人物简介</text>
-        <textarea aria-label="人物简介" class="field-textarea" placeholder="写下一些想被家人记住的事" value="{{bio}}" data-field="bio" bindinput="inputField" maxlength="500"></textarea>
+        <textarea disabled="{{datePickerOpen}}" aria-label="人物简介" class="field-textarea" placeholder="写下一些想被家人记住的事" value="{{bio}}" data-field="bio" bindinput="inputField" maxlength="500"></textarea>
       </view>
     </view>
   </view>
 
   <view class="existing-card surface-card" wx:else>
-    <input aria-label="查找已有家人" class="field-input existing-search" placeholder="输入姓名查找谱中成员" value="{{existingKeyword}}" bindinput="filterExisting" />
+    <input disabled="{{datePickerOpen}}" aria-label="查找已有家人" class="field-input existing-search" placeholder="输入姓名查找谱中成员" value="{{existingKeyword}}" bindinput="filterExisting" />
     <scroll-view class="existing-list" scroll-y wx:if="{{existingResults.length}}">
       <view data-reading-control="true" aria-role="button" class="existing-person {{item._id === selectedExistingId ? 'selected' : ''}} {{item.selectable === false ? 'disabled' : ''}}" wx:for="{{existingResults}}" wx:key="_id" data-id="{{item._id}}" bindtap="selectExisting">
         <view class="existing-avatar gender-avatar {{item.genderClass}}">{{item.initial}}</view>
