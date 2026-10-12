@@ -1,3 +1,4 @@
+const formFeedback = require('../../utils/form-feedback');
 const platformCapabilities = require('../../utils/platform-capabilities');
 const launchAd = require('../../utils/launch-ad');
 const app = getApp();
@@ -73,8 +74,10 @@ Page(launchAd.wrap({
     this.loadPerson();
   },
 
+  onShow: function () { if (this.data.readingSaved && !this.data.elderMode) formFeedback.returnAfter(this, 700); },
+  onHide: function () { formFeedback.clearReturn(this); },
   onUnload: function () {
-    formState.clearLeaveAlert(this);
+    formState.clearLeaveAlert(this); formFeedback.clearReturn(this);
   },
 
   loadPerson: function () {
@@ -138,7 +141,7 @@ Page(launchAd.wrap({
 
   setFormData: function (patch) {
     const self = this;
-    this.setData(patch, function () { self.refreshFormState(); });
+    this.setData(Object.assign({ readingSaved: false, readingNameError: '', readingResult: '' }, patch), function () { self.refreshFormState(); });
   },
 
   inputField: function (event) {
@@ -258,16 +261,20 @@ Page(launchAd.wrap({
     this.chooseAvatar();
   },
 
+  readingBack: formFeedback.back,
+  validateReadingName: function () { if (!this.data.elderMode) return; this.setData({ readingNameFocus: false, readingNameError: !String(this.data.name || '').trim() ? '请填写姓名' : '' }); },
   submit: function () {
     const self = this;
     const current = normalizedForm(this.data);
     if (!current.name) {
+      formFeedback.error(this, '姓名不能为空', 'name');
       wx.showToast({ title: '姓名不能为空', icon: 'none' });
       return Promise.resolve();
     }
     const birth = personDate.toInfo(this.data.birthDraft);
     const death = personDate.toInfo(this.data.deathDraft);
     if (birth.error || (this.data.lifeStatus === 'deceased' && death.error)) {
+      formFeedback.error(this, birth.error ? '出生时间：' + birth.error : '离世时间：' + death.error);
       wx.showToast({ title: (birth.error ? '出生时间：' + birth.error : '离世时间：' + death.error), icon: 'none' });
       return Promise.resolve();
     }
@@ -292,14 +299,15 @@ Page(launchAd.wrap({
         icon: data.pending ? 'none' : 'success',
         duration: 2200
       });
+      formFeedback.saved(self, self.data.avatarState === 'failed' ? '资料已保存，头像仍需重试' : data.pending ? '修改已提交管理员审核，确认后才会生效' : '资料已保存', self.data.avatarState !== 'failed');
       if (self.data.avatarState !== 'failed') {
         formState.clearLeaveAlert(self);
-        setTimeout(function () { wx.navigateBack(); }, 700);
+        if (!self.data.elderMode) formFeedback.returnAfter(self, 700);
       }
       return data;
     }).catch(function (error) {
       self.setData({ submitting: false });
-      wx.showToast({ title: api.userMessage(error, '保存失败'), icon: 'none' });
+      formFeedback.error(self, api.userMessage(error, '保存失败')); wx.showToast({ title: api.userMessage(error, '保存失败'), icon: 'none' });
     });
   }
 }));

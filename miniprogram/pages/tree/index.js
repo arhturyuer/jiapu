@@ -1,3 +1,4 @@
+const readingGraph = require('../../utils/reading-graph');
 const deviceLayout = require('../../utils/device-layout');
 const pdfEntry = require('../../utils/pdf-entry');
 const launchAd = require('../../utils/launch-ad');
@@ -382,7 +383,7 @@ Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap({
         nameLayout: nameLayout,
         collapsedIds: collapsedIds,
         selectedPersonId: selectedPersonId,
-        kinshipDetails: kinshipDetails
+        contentScale: this.data.graphContentScale || 1, kinshipDetails: kinshipDetails
       }
     );
     const viewpoint = this.data.rawPersons.find(function (person) {
@@ -488,6 +489,8 @@ Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap({
     this._graphViewport = viewport;
     const optionsValue = fitOptions || {};
     const transform = (optionsValue.initialView ? graphViewport.initialTransform : graphViewport.fitTransform)(layout, viewport, {
+      initialNameSize: 16 * (this.data.graphContentScale || 1),
+      nodeNameRpx: 28 * (this.data.graphContentScale || 1),
       relations: this.data.rawRelations,
       fitAll: fitAll,
       focusPersonId: focusPersonId,
@@ -835,10 +838,25 @@ Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap({
     this.loadPage({ mode: 'full', personId: '' });
   },
 
+  noop: function () {},
+  readingMoreAction: function (event) {
+    const action = event.currentTarget.dataset.action;
+    if (['fitWholeGraph', 'openDisplaySettings', 'generatePoster', 'openPdfExport', 'togglePageOrientation', 'toggleCleanScreen'].indexOf(action) < 0) return;
+    this.setData({ showReadingMore: false });
+    this[action]();
+  },
+  onReadingChange: readingGraph.changed,
+  lookClearly: readingGraph.lookClearly,
+  openReadingPeople: readingGraph.openPeople,
+  toggleReadingMore: function () { this.setData({ showReadingMore: !this.data.showReadingMore }); },
   showPerson: function (event) {
     const personId = event.currentTarget.dataset.id;
     const person = this.data.rawPersons.find(function (item) { return item._id === personId; });
     if (!person) return;
+    if (this.data.elderMode) {
+      this.renderGraph(this.data.viewMode, this.data.viewpointId, { preserveViewport: true, selectedPersonId: personId, statePatch: { selectedPersonId: personId } });
+      return this.openMemberActions(event);
+    }
     if (this.data.selectedPersonId === personId) {
       this.openMemberActions(event);
       return;

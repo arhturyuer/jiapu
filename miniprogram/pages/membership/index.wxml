@@ -1,4 +1,6 @@
-<view class="loading-panel" wx:if="{{loading}}"><view class="loading-dot"></view><text>正在加载会员方案…</text></view>
+
+<view class="reading-root {{elderMode ? 'reading-elder' : ''}} {{readingLarge ? 'reading-large' : ''}}" style="{{readingStyle}}{{readingDockStyle}}">
+<view class="loading-panel" wx:if="{{loading}}"><view aria-hidden="true" class="loading-dot"></view><text>正在加载会员方案…</text></view>
 <view class="page-shell" wx:elif="{{pageError}}">
   <view class="empty-panel"><text class="empty-title">暂时无法加载会员页</text><text class="empty-description">{{pageError}}</text><button class="primary-button empty-action" bindtap="loadPage">重新加载</button><button class="purchase-contact" open-type="contact">联系微信客服</button></view>
 </view>
@@ -21,7 +23,7 @@
     <view><text class="benefit-icon">藏</text><text class="benefit-title">家庭资料备份</text><text class="benefit-description">管理员导出资料与照片</text></view>
   </view>
   <view class="section-heading"><text class="section-title">选择会员期限</text><text class="muted-text">不自动续费</text></view>
-  <view class="product-card {{selectedProductId === item.productId ? 'selected' : ''}}" wx:for="{{products}}" wx:key="productId" data-id="{{item.productId}}" bindtap="selectProduct">
+  <view data-reading-control="true" aria-role="button" class="product-card {{selectedProductId === item.productId ? 'selected' : ''}}" wx:for="{{products}}" wx:key="productId" data-id="{{item.productId}}" bindtap="selectProduct">
     <view class="product-copy"><text class="product-name">{{item.displayName}}</text><text class="recommend" wx:if="{{item.recommended}}">推荐</text></view><text class="price">{{item.priceText}}</text><text class="product-check">{{selectedProductId === item.productId ? '✓' : ''}}</text>
   </view>
   <text class="term-note" wx:if="{{products.length}}">{{termText}}</text>
@@ -31,7 +33,7 @@
     <view class="state-actions" wx:if="{{showPaymentRefresh && !paying}}"><button class="text-action" loading="{{refreshingOrderId}}" disabled="{{refreshingOrderId}}" bindtap="refreshPayment">刷新支付状态</button><button class="text-action" open-type="contact">联系客服</button></view>
   </view>
   <view class="records surface-card">
-    <view class="records-toggle" bindtap="toggleRecords"><text class="section-title">会员记录</text><text class="records-indicator">{{recordsExpanded ? '收起 ∧' : '查看 ›'}}</text></view>
+    <view data-reading-control="true" aria-role="button" class="records-toggle" bindtap="toggleRecords"><text class="section-title">会员记录</text><text class="records-indicator">{{recordsExpanded ? '收起 ∧' : '查看 ›'}}</text></view>
     <view wx:if="{{recordsExpanded}}">
       <view class="order-loading" wx:if="{{loadingOrders}}">正在加载会员记录…</view>
       <view class="purchase-error" wx:elif="{{ordersError}}"><text>{{ordersError}}</text><button class="secondary-button" bindtap="retryOrders">重试加载记录</button></view>
@@ -49,19 +51,20 @@
     <button class="text-action redeem-entry" disabled="{{paying || redeeming || !family}}" bindtap="openRedeem">兑换码</button>
     <button class="purchase-contact" open-type="contact">联系客服</button>
   </view>
-  <view wx:if="{{redeemOpen}}" class="redeem-overlay" catchtap="closeRedeem">
-    <view class="redeem-dialog surface-card" catchtap="stopRedeemTap">
+  <view data-reading-control="true" aria-role="button" wx:if="{{redeemOpen}}" class="redeem-overlay" catchtap="closeRedeem">
+    <view data-reading-control="true" aria-role="button" class="redeem-dialog surface-card" catchtap="stopRedeemTap">
       <text class="section-title">兑换家庭会员</text><text class="redeem-family">{{family.name}}</text>
       <text class="redeem-note">仅免费或会员已到期的家谱可兑换。兑换成功后，全体家人共享权益，兑换码不可再次使用。</text>
-      <input class="redeem-input" value="{{redeemCode}}" maxlength="100" disabled="{{redeeming}}" placeholder="输入或粘贴兑换码" bindinput="inputRedeem" />
+      <input aria-label="会员兑换码" class="redeem-input" value="{{redeemCode}}" maxlength="100" disabled="{{redeeming}}" placeholder="输入或粘贴兑换码" bindinput="inputRedeem" />
       <text wx:if="{{redeemError}}" class="redeem-error">{{redeemError}}</text>
-      <view class="agreement"><text>兑换表示同意</text><text class="rule-link" bindtap="openRules">《家庭会员与退款说明》</text></view>
+      <view class="agreement"><text>兑换表示同意</text><text data-reading-control="true" aria-role="button" class="rule-link" bindtap="openRules">《家庭会员与退款说明》</text></view>
       <button class="primary-button" disabled="{{redeeming || !statusReady}}" loading="{{redeeming}}" bindtap="submitRedeem">{{redeeming ? '正在兑换' : '确认兑换'}}</button>
       <button class="text-action" disabled="{{redeeming}}" bindtap="closeRedeem">取消</button>
     </view>
   </view>
   <text class="term-note" wx:if="{{isDesktop && paymentMode !== 'mock'}}">电脑端暂不发起购买，请在手机微信打开当前家谱开通。兑换码和权益查询可在此使用。</text>
   <view class="purchase-dock">
-    <view class="dock-inner"><view class="agreement"><text>开通会员表示同意</text><text class="rule-link" bindtap="openRules">《家庭会员与退款说明》</text></view><button class="primary-button pay-button" loading="{{paying}}" disabled="{{!canBuy}}" bindtap="startPayment">{{payLabel}}</button></view>
+    <view class="dock-inner"><view class="agreement"><text>开通会员表示同意</text><text data-reading-control="true" aria-role="button" class="rule-link" bindtap="openRules">《家庭会员与退款说明》</text></view><button class="primary-button pay-button" loading="{{paying}}" disabled="{{!canBuy}}" bindtap="startPayment">{{payLabel}}</button></view>
   </view>
+</view>
 </view>

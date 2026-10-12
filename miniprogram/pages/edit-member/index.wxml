@@ -1,11 +1,13 @@
-<view class="loading-panel" wx:if="{{loading}}"><view class="loading-dot"></view><text>正在读取资料...</text></view>
+
+<view class="reading-root {{elderMode ? 'reading-elder' : ''}} {{readingLarge ? 'reading-large' : ''}}" style="{{readingStyle}}{{readingDockStyle}}">
+<view class="loading-panel" wx:if="{{loading}}"><view aria-hidden="true" class="loading-dot"></view><text>正在读取资料...</text></view>
 <view class="page-shell" wx:elif="{{error}}"><view class="empty-panel"><view class="empty-mark">!</view><text class="empty-title">无法编辑资料</text><text class="empty-description">{{error}}</text><button class="secondary-button" bindtap="loadPerson">重新加载</button></view></view>
 <view class="form-page page-shell" wx:else>
-  <view class="avatar-section {{uploading || savingAvatar ? 'avatar-busy' : ''}}" bindtap="chooseAvatar">
+  <view data-reading-control="true" aria-role="button" class="avatar-section {{uploading || savingAvatar ? 'avatar-busy' : ''}}" bindtap="chooseAvatar">
     <image class="avatar-preview" wx:if="{{avatar}}" src="{{avatar}}" mode="aspectFill"></image>
     <view class="avatar-preview avatar-empty" wx:else><text class="avatar-add">＋</text><text class="avatar-hint">添加照片</text></view>
     <text class="avatar-action" wx:if="{{!uploading && !savingAvatar}}">{{avatar ? '更换头像' : '添加头像'}}</text>
-    <view class="avatar-state {{avatarState}}" wx:if="{{avatarStateText}}" catchtap="retryAvatarSave">
+    <view data-reading-control="true" aria-role="button" class="avatar-state {{avatarState}}" wx:if="{{avatarStateText}}" catchtap="retryAvatarSave">
       <text>{{avatarStateText}}</text>
       <text class="avatar-retry" wx:if="{{avatarState === 'failed'}}">重试</text>
     </view>
@@ -14,31 +16,34 @@
   <view class="form-card surface-card edit-form-columns">
     <view class="form-column">
     <text class="field-label">姓名</text>
-    <input class="field-input" value="{{name}}" data-field="name" bindinput="inputField" maxlength="30" />
+    <input class="field-input" id="reading-name" aria-label="姓名，必填" focus="{{readingNameFocus}}" bindblur="validateReadingName" value="{{name}}" data-field="name" bindinput="inputField" maxlength="30" />
+<text class="field-error" wx:if="{{elderMode && readingNameError}}">{{readingNameError}}</text>
     <text class="field-label second-label">性别</text>
     <view class="choice-row">
-      <view class="choice-item {{gender === 'male' ? 'selected' : ''}}" data-gender="male" bindtap="chooseGender">男</view>
-      <view class="choice-item {{gender === 'female' ? 'selected' : ''}}" data-gender="female" bindtap="chooseGender">女</view>
-      <view class="choice-item {{gender === 'unknown' ? 'selected' : ''}}" wx:if="{{canKeepUnknownGender}}" data-gender="unknown" bindtap="chooseGender">未填写</view>
+      <view data-reading-control="true" aria-role="button" class="choice-item {{gender === 'male' ? 'selected' : ''}}" data-gender="male" bindtap="chooseGender" aria-label="{{gender === 'male' ? '已选择，' : ''}}男">男</view>
+      <view data-reading-control="true" aria-role="button" class="choice-item {{gender === 'female' ? 'selected' : ''}}" data-gender="female" bindtap="chooseGender" aria-label="{{gender === 'female' ? '已选择，' : ''}}女">女</view>
+      <view data-reading-control="true" aria-role="button" class="choice-item {{gender === 'unknown' ? 'selected' : ''}}" wx:if="{{canKeepUnknownGender}}" data-gender="unknown" bindtap="chooseGender" aria-label="{{gender === 'unknown' ? '已选择，' : ''}}未填写">未填写</view>
     </view>
     <text class="field-label second-label">状态</text>
     <view class="choice-row">
-      <view class="choice-item {{lifeStatus === 'living' ? 'selected' : ''}}" data-status="living" bindtap="chooseLifeStatus">健在</view>
-      <view class="choice-item {{lifeStatus === 'deceased' ? 'selected' : ''}}" data-status="deceased" bindtap="chooseLifeStatus">已故</view>
-      <view class="choice-item {{lifeStatus === 'unknown' ? 'selected' : ''}}" data-status="unknown" bindtap="chooseLifeStatus">未填写</view>
+      <view data-reading-control="true" aria-role="button" class="choice-item {{lifeStatus === 'living' ? 'selected' : ''}}" data-status="living" bindtap="chooseLifeStatus" aria-label="{{lifeStatus === 'living' ? '已选择，' : ''}}健在">健在</view>
+      <view data-reading-control="true" aria-role="button" class="choice-item {{lifeStatus === 'deceased' ? 'selected' : ''}}" data-status="deceased" bindtap="chooseLifeStatus" aria-label="{{lifeStatus === 'deceased' ? '已选择，' : ''}}已故">已故</view>
+      <view data-reading-control="true" aria-role="button" class="choice-item {{lifeStatus === 'unknown' ? 'selected' : ''}}" data-status="unknown" bindtap="chooseLifeStatus" aria-label="{{lifeStatus === 'unknown' ? '已选择，' : ''}}未填写">未填写</view>
     </view>
     </view>
     <view class="form-column">
     <person-date-picker label="出生时间" value="{{birthDraft}}" bindchange="onBirthDateChange" />
     <person-date-picker wx:if="{{lifeStatus === 'deceased'}}" label="离世时间" value="{{deathDraft}}" bindchange="onDeathDateChange" />
     <text class="field-label second-label">籍贯</text>
-    <input class="field-input" placeholder="可选" value="{{birthPlace}}" data-field="birthPlace" bindinput="inputField" maxlength="80" />
+    <input aria-label="籍贯" class="field-input" placeholder="可选" value="{{birthPlace}}" data-field="birthPlace" bindinput="inputField" maxlength="80" />
     <text class="field-label second-label">人物简介</text>
-    <textarea class="field-textarea" placeholder="记录值得被家人记住的事" value="{{bio}}" data-field="bio" bindinput="inputField" maxlength="500"></textarea>
+    <textarea aria-label="人物简介" class="field-textarea" placeholder="记录值得被家人记住的事" value="{{bio}}" data-field="bio" bindinput="inputField" maxlength="500"></textarea>
     </view>
   </view>
   <text class="permission-note" wx:if="{{currentRole !== 'admin'}}">姓名、性别和人物状态的修改需要管理员确认。</text>
+  <view class="reading-result {{readingResultError ? 'reading-error' : ''}}" wx:if="{{elderMode && readingResult}}"><text>{{readingResult}}</text><button class="secondary-button" wx:if="{{readingSaved}}" bindtap="readingBack">返回家谱</button></view>
   <view class="submit-actions">
     <button class="primary-button submit-button" loading="{{submitting}}" disabled="{{!name || !hasFormChanges || uploading || savingAvatar || submitting}}" bindtap="submit">{{submitting ? '保存中…' : hasFormChanges ? '保存其他资料' : '其他资料未修改'}}</button>
   </view>
+</view>
 </view>

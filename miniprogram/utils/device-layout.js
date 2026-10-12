@@ -1,3 +1,5 @@
+const reading = require('./reading-preference');
+
 function positive(value, fallback) {
   const number = Number(value);
   return Number.isFinite(number) && number > 0 ? number : fallback;
@@ -46,6 +48,8 @@ function wrap(definition) {
     const original = definition[name];
     definition[name] = function () {
       this._deviceHidden = false;
+      reading.watchDock(this);
+      reading.attach(this);
       const layout = sync(this);
       const result = original && original.apply(this, arguments);
       if (name === 'onShow' && !this._launchGate && this.applyPageResize && layout.largeDevice) {
@@ -78,10 +82,18 @@ function wrap(definition) {
     const original = definition[name];
     definition[name] = function () {
       this._deviceHidden = true;
+      reading.detach(this);
       clear(this);
       return original && original.apply(this, arguments);
     };
   });
+  const ready = definition.onReady;
+  definition.onReady = function () {
+    const result = ready && ready.apply(this, arguments);
+    reading.measureDock(this);
+    return result;
+  };
+  if (!definition.openReadingSettings) definition.openReadingSettings = reading.open;
   return definition;
 }
 

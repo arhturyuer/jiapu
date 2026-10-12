@@ -1,6 +1,7 @@
 const api = require('./utils/api');
 const environmentConfig = require('./config/env');
 const launchAd = require('./utils/launch-ad');
+const reading = require('./utils/reading-preference');
 const LOGIN_CACHE_TTL = 60 * 1000;
 const BUSINESS_CACHE_TTL = 60 * 60 * 1000;
 
@@ -36,6 +37,7 @@ App({
   },
 
   onLaunch: function (options) {
+    reading.refresh();
     const runtime = environmentConfig.resolveRuntimeEnvironment(wx);
     this.globalData.environment = runtime.active;
     this.globalData.runtimeVersion = runtime.runtimeVersion;
@@ -69,6 +71,7 @@ App({
   },
 
   onShow: function () {
+    reading.refresh();
     const self = this;
     if (this._analyticsTimer) clearInterval(this._analyticsTimer);
     // Local date checks only; daily dedup prevents periodic cloud requests.
@@ -569,6 +572,7 @@ App({
   },
 
   clearTestSession: function () {
+    reading.reset();
     this.clearLocalData();
     const keys = wx.getStorageInfoSync().keys || [];
     keys.forEach(function (key) {

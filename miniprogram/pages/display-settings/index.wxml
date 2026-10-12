@@ -1,4 +1,6 @@
-<view class="loading-panel" wx:if="{{loading}}"><view class="loading-dot"></view><text>正在读取显示设置...</text></view>
+
+<view class="reading-root {{elderMode ? 'reading-elder' : ''}} {{readingLarge ? 'reading-large' : ''}}" style="{{readingStyle}}{{readingDockStyle}}">
+<view class="loading-panel" wx:if="{{loading}}"><view aria-hidden="true" class="loading-dot"></view><text>正在读取显示设置...</text></view>
 <view class="page-shell" wx:elif="{{error}}"><view class="empty-panel"><view class="empty-mark">!</view><text class="empty-title">暂时无法打开显示设置</text><text class="empty-description">{{error}}</text><button class="primary-button empty-action" bindtap="loadPreference">重新加载</button></view></view>
 <view class="settings-page page-shell" wx:else>
   <view class="settings-intro surface-card">
@@ -9,8 +11,8 @@
   <view class="section-block">
     <view class="section-heading"><text class="section-title">姓名排列</text></view>
     <view class="layout-picker surface-card">
-      <view class="layout-option {{nameLayout === 'horizontal' ? 'selected' : ''}}" data-layout="horizontal" bindtap="chooseNameLayout"><text class="layout-title">横排</text><text class="layout-example">张建国</text></view>
-      <view class="layout-option {{nameLayout === 'vertical' ? 'selected' : ''}}" data-layout="vertical" bindtap="chooseNameLayout"><text class="layout-title">竖排</text><view class="layout-example layout-example-vertical"><text>张</text><text>建</text><text>国</text></view></view>
+      <view data-reading-control="true" aria-role="button" class="layout-option {{nameLayout === 'horizontal' ? 'selected' : ''}}" data-layout="horizontal" bindtap="chooseNameLayout"><text class="layout-title">横排</text><text class="layout-example">张建国</text></view>
+      <view data-reading-control="true" aria-role="button" class="layout-option {{nameLayout === 'vertical' ? 'selected' : ''}}" data-layout="vertical" bindtap="chooseNameLayout"><text class="layout-title">竖排</text><view class="layout-example layout-example-vertical"><text>张</text><text>建</text><text>国</text></view></view>
     </view>
   </view>
 
@@ -31,4 +33,5 @@
   </view>
 
   <text class="save-state">{{saving ? '正在保存...' : '修改后自动保存'}}</text>
+</view>
 </view>

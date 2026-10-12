@@ -1,5 +1,31 @@
 <import src="../../templates/my-miniprogram-guide.wxml" />
-<view class="loading-panel" wx:if="{{loading}}"><view class="loading-dot"></view><text>正在加载我的资料…</text></view>
+<template name="readingHelpEntry">
+  <view class="section-heading"><text class="section-title">帮助与反馈</text></view>
+  <view class="help-card surface-card">
+    <view class="feedback-card" wx:if="{{showFeedback}}">
+      <view class="feedback-copy">
+        <text class="setting-title">用户反馈群</text>
+        <text class="setting-desc" wx:if="{{feedbackError}}">{{feedbackError}}</text>
+        <text class="setting-desc" wx:elif="{{!feedbackLoading && !feedbackAvailable}}">反馈群暂未开放</text>
+        <text class="setting-desc" wx:else>长按识别二维码，进群交流、反馈问题</text>
+      </view>
+      <view class="feedback-qr-slot">
+        <text class="feedback-status" wx:if="{{feedbackLoading}}">正在加载二维码…</text>
+        <view class="feedback-fallback" wx:elif="{{feedbackError}}">
+          <button class="feedback-action" bindtap="loadFeedbackGroup">重新加载</button>
+        </view>
+        <image data-reading-control="true" aria-role="button" class="feedback-qr-image" wx:elif="{{feedbackAvailable}}" src="{{feedbackQrCodeUrl}}" mode="aspectFit" show-menu-by-longpress="{{true}}" bindtap="previewFeedbackQrCode" binderror="feedbackQrError" data-version="{{feedbackVersion}}" data-url="{{feedbackQrCodeUrl}}" aria-label="用户反馈群二维码，长按识别或点击放大"></image>
+        <view class="feedback-fallback" wx:else>
+          <button class="feedback-action" open-type="contact">联系微信客服</button>
+        </view>
+      </view>
+    </view>
+    <view class="help-divider" aria-hidden="true" wx:if="{{showFeedback}}"></view>
+    <view data-reading-control="true" aria-role="button" aria-label="{{'长辈模式与字号，长辈模式' + (elderMode ? '已开启' : '未开启')}}" class="setting-row reading-help-row" bindtap="openReadingSettings" hover-class="setting-row-active"><view class="setting-copy"><text class="setting-title">长辈模式与字号</text><text class="setting-desc">简化操作，调大按钮与字号</text><text class="setting-desc">长辈模式{{elderMode ? '已开启' : '未开启'}}</text></view><text class="setting-arrow" aria-hidden="true">›</text></view>
+  </view>
+</template>
+<view class="reading-root {{elderMode ? 'reading-elder' : ''}} {{readingLarge ? 'reading-large' : ''}}" style="{{readingStyle}}{{readingDockStyle}}">
+<view class="loading-panel" wx:if="{{loading}}"><view aria-hidden="true" class="loading-dot"></view><text>正在加载我的资料…</text></view>
 <view class="page-shell" wx:elif="{{error}}"><view class="empty-panel"><view class="empty-mark">!</view><text class="empty-title">暂时无法打开我的页面</text><text class="empty-description">{{error}}</text><button class="primary-button empty-action" bindtap="loadPage">重新加载</button></view></view>
 <view class="profile-page page-shell" wx:else>
   <view class="pending-card surface-card" wx:if="{{accountState === 'pending_delete'}}">
@@ -15,40 +41,23 @@
         <view class="profile-avatar profile-placeholder" wx:else>我</view>
       </button>
       <view class="profile-form">
-        <input class="nickname-input" type="text" placeholder="输入名字" value="{{nickName}}" bindinput="inputNickname" maxlength="30" />
+        <input aria-label="我的名字" class="nickname-input" type="text" placeholder="输入名字" value="{{nickName}}" bindinput="inputNickname" maxlength="30" />
         <button class="primary-button save-btn" wx:if="{{hasNameChanges}}" disabled="{{savingProfile || savingAvatar}}" loading="{{savingProfile}}" bindtap="saveProfile">保存名字</button>
       </view>
     </view>
 
     <view class="section-block"><view class="section-heading"><text class="section-title">账户与隐私</text></view><view class="setting-list surface-card">
-      <view class="setting-row" bindtap="showPrivacy" hover-class="setting-row-active"><view><text class="setting-title">隐私与账户</text><text class="setting-desc">管理授权、个人数据和账户状态</text></view><text class="setting-arrow">›</text></view>
-      <view class="setting-row" bindtap="showAbout" hover-class="setting-row-active"><view><text class="setting-title">关于有谱</text><text class="setting-desc">产品理念与版本信息</text></view><text class="setting-arrow">›</text></view>
+      <view data-reading-control="true" aria-role="button" class="setting-row" bindtap="showPrivacy" hover-class="setting-row-active"><view><text class="setting-title">隐私与账户</text><text class="setting-desc">管理授权、个人数据和账户状态</text></view><text class="setting-arrow">›</text></view>
+      <view data-reading-control="true" aria-role="button" class="setting-row" bindtap="showAbout" hover-class="setting-row-active"><view><text class="setting-title">关于有谱</text><text class="setting-desc">产品理念与版本信息</text></view><text class="setting-arrow">›</text></view>
       <view class="setting-row setting-share-row" hover-class="setting-row-active"><view class="setting-share-copy"><text class="setting-title">分享有谱</text><text class="setting-desc">向朋友推荐有谱家谱小程序</text></view><text class="setting-arrow">›</text><button class="setting-share-hit" open-type="share" hover-class="setting-row-active" aria-label="分享有谱家谱"></button></view>
-      <view class="setting-row" bindtap="showMyMiniProgramHelp" wx:if="{{!isLargeDevice}}" hover-class="setting-row-active"><view><text class="setting-title">添加到我的小程序</text><text class="setting-desc">下次找家谱更方便</text></view><text class="setting-arrow">›</text></view>
+      <view data-reading-control="true" aria-role="button" class="setting-row" bindtap="showMyMiniProgramHelp" wx:if="{{!isLargeDevice}}" hover-class="setting-row-active"><view><text class="setting-title">添加到我的小程序</text><text class="setting-desc">下次找家谱更方便</text></view><text class="setting-arrow">›</text></view>
     </view></view>
 
   </block>
 
   <view class="section-block">
-    <view class="section-heading"><text class="section-title">帮助与反馈</text></view>
-    <view class="feedback-card surface-card">
-      <view class="feedback-copy">
-        <text class="setting-title">用户反馈群</text>
-        <text class="setting-desc" wx:if="{{feedbackError}}">{{feedbackError}}</text>
-        <text class="setting-desc" wx:elif="{{!feedbackLoading && !feedbackAvailable}}">反馈群暂未开放</text>
-        <text class="setting-desc" wx:else>长按识别二维码，进群交流、反馈问题</text>
-      </view>
-      <view class="feedback-qr-slot">
-        <text class="feedback-status" wx:if="{{feedbackLoading}}">正在加载二维码…</text>
-        <view class="feedback-fallback" wx:elif="{{feedbackError}}">
-          <button class="feedback-action" bindtap="loadFeedbackGroup">重新加载</button>
-        </view>
-        <image class="feedback-qr-image" wx:elif="{{feedbackAvailable}}" src="{{feedbackQrCodeUrl}}" mode="aspectFit" show-menu-by-longpress="{{true}}" bindtap="previewFeedbackQrCode" binderror="feedbackQrError" data-version="{{feedbackVersion}}" data-url="{{feedbackQrCodeUrl}}" aria-label="用户反馈群二维码，长按识别或点击放大"></image>
-        <view class="feedback-fallback" wx:else>
-          <button class="feedback-action" open-type="contact">联系微信客服</button>
-        </view>
-      </view>
-    </view>
+    <template is="readingHelpEntry" data="{{elderMode: elderMode, showFeedback: !loading && !error, feedbackError: feedbackError, feedbackLoading: feedbackLoading, feedbackAvailable: feedbackAvailable, feedbackQrCodeUrl: feedbackQrCodeUrl, feedbackVersion: feedbackVersion}}" />
+
   </view>
   <view class="ad-placement {{adLoaded ? '' : 'ad-placement-loading'}}" wx:if="{{accountState !== 'pending_delete' && adVisible}}">
     <ad class="banner-ad" wx:if="{{adVisible}}" unit-id="{{adUnitId}}" data-version="{{adVersion}}" bindload="showAd" binderror="hideAd"></ad>
@@ -63,4 +72,6 @@
     </view>
   </view>
 </view>
+<view class="page-shell" wx:if="{{loading || error}}"><view class="section-block"><template is="readingHelpEntry" data="{{elderMode: elderMode, showFeedback: !loading && !error, feedbackError: feedbackError, feedbackLoading: feedbackLoading, feedbackAvailable: feedbackAvailable, feedbackQrCodeUrl: feedbackQrCodeUrl, feedbackVersion: feedbackVersion}}" /></view></view>
 <template is="myMiniProgramGuide" data="{{showMyMiniProgramGuide: showMyMiniProgramGuide, myMiniProgramGuideStyle: myMiniProgramGuideStyle, myMiniProgramGuideArrowStyle: myMiniProgramGuideArrowStyle}}" />
+</view>

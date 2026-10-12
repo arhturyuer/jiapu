@@ -1,14 +1,16 @@
+
+<view class="reading-root {{elderMode ? 'reading-elder' : ''}} {{readingLarge ? 'reading-large' : ''}}" style="{{readingStyle}}{{readingDockStyle}}">
 <view class="form-page page-shell">
   <view class="relation-context surface-card">
     <text class="context-label">为 {{anchorName}} 添加</text>
     <view class="relation-picker">
-      <view class="relation-chip {{relationType === item.key ? 'selected' : ''}}" wx:for="{{relationOptions}}" wx:key="key" data-type="{{item.key}}" bindtap="chooseRelation">{{item.label}}</view>
+      <view data-reading-control="true" aria-role="button" class="relation-chip {{relationType === item.key ? 'selected' : ''}}" wx:for="{{relationOptions}}" wx:key="key" data-type="{{item.key}}" bindtap="chooseRelation" aria-label="{{relationType === item.key ? '已选择，' : ''}}{{item.label}}">{{item.label}}</view>
     </view>
   </view>
 
   <view class="entry-switch">
-    <view class="entry-option {{entryMode === 'new' ? 'selected' : ''}}" data-mode="new" bindtap="chooseEntryMode">新建成员</view>
-    <view class="entry-option {{entryMode === 'existing' ? 'selected' : ''}}" data-mode="existing" bindtap="chooseEntryMode">关联已有成员</view>
+    <view data-reading-control="true" aria-role="button" class="entry-option {{entryMode === 'new' ? 'selected' : ''}}" data-mode="new" bindtap="chooseEntryMode" aria-label="{{entryMode === 'new' ? '已选择，' : ''}}新建成员">新建成员</view>
+    <view data-reading-control="true" aria-role="button" class="entry-option {{entryMode === 'existing' ? 'selected' : ''}}" data-mode="existing" bindtap="chooseEntryMode" aria-label="{{entryMode === 'existing' ? '已选择，' : ''}}关联已有成员">关联已有成员</view>
   </view>
 
   <view class="context-loading" wx:if="{{loadingContext}}">正在读取家谱成员...</view>
@@ -19,10 +21,11 @@
   <view class="form-columns" wx:if="{{entryMode === 'new'}}">
     <view class="form-card surface-card">
       <text class="field-label">姓名</text>
-      <input class="field-input" placeholder="请输入姓名" value="{{name}}" data-field="name" bindinput="inputField" maxlength="30" />
+      <input class="field-input" id="reading-name" aria-label="姓名，必填" focus="{{readingNameFocus}}" bindblur="validateReadingName" placeholder="请输入姓名" value="{{name}}" data-field="name" bindinput="inputField" maxlength="30" />
+<text class="field-error" wx:if="{{elderMode && readingNameError}}">{{readingNameError}}</text>
       <view class="duplicate-box" wx:if="{{duplicateSuggestions.length}}">
         <text class="duplicate-title">家谱中有相似姓名，确认是否为同一人</text>
-        <view class="duplicate-person" wx:for="{{duplicateSuggestions}}" wx:key="_id" data-id="{{item._id}}" bindtap="useExistingSuggestion">
+        <view data-reading-control="true" aria-role="button" class="duplicate-person" wx:for="{{duplicateSuggestions}}" wx:key="_id" data-id="{{item._id}}" bindtap="useExistingSuggestion">
           <view class="duplicate-person-main"><text>{{item.name}}{{item.birthDateText ? ' · ' + item.birthDateText : ''}}</text><text class="gender-badge {{item.genderClass}}">{{item.genderText}}</text></view><text class="link-text">改为关联</text>
         </view>
         <text class="duplicate-note">不是同一人可继续新建。</text>
@@ -31,16 +34,16 @@
       <text class="field-label second-label">性别</text>
       <view class="fixed-gender" wx:if="{{relationType === 'father' || relationType === 'mother' || relationType === 'son' || relationType === 'daughter'}}">{{gender === 'male' ? '男' : '女'}} · 已由所选关系确定</view>
       <view class="choice-row" wx:else>
-        <view class="choice-item {{gender === 'male' ? 'selected' : ''}}" data-gender="male" bindtap="chooseGender">男</view>
-        <view class="choice-item {{gender === 'female' ? 'selected' : ''}}" data-gender="female" bindtap="chooseGender">女</view>
+        <view data-reading-control="true" aria-role="button" class="choice-item {{gender === 'male' ? 'selected' : ''}}" data-gender="male" bindtap="chooseGender" aria-label="{{gender === 'male' ? '已选择，' : ''}}男">男</view>
+        <view data-reading-control="true" aria-role="button" class="choice-item {{gender === 'female' ? 'selected' : ''}}" data-gender="female" bindtap="chooseGender" aria-label="{{gender === 'female' ? '已选择，' : ''}}女">女</view>
       </view>
       <text class="field-label second-label">成员状态</text>
-      <view class="choice-row"><view class="choice-item {{lifeStatus === 'living' ? 'selected' : ''}}" data-status="living" bindtap="chooseLifeStatus">健在</view><view class="choice-item {{lifeStatus === 'deceased' ? 'selected' : ''}}" data-status="deceased" bindtap="chooseLifeStatus">已故</view></view>
+      <view class="choice-row"><view data-reading-control="true" aria-role="button" class="choice-item {{lifeStatus === 'living' ? 'selected' : ''}}" data-status="living" bindtap="chooseLifeStatus" aria-label="{{lifeStatus === 'living' ? '已选择，' : ''}}健在">健在</view><view data-reading-control="true" aria-role="button" class="choice-item {{lifeStatus === 'deceased' ? 'selected' : ''}}" data-status="deceased" bindtap="chooseLifeStatus" aria-label="{{lifeStatus === 'deceased' ? '已选择，' : ''}}已故">已故</view></view>
     </view>
 
     <view class="optional-card surface-card">
       <text class="optional-title">照片和补充资料（可选）</text>
-      <view class="avatar-section" bindtap="chooseAvatar">
+      <view data-reading-control="true" aria-role="button" class="avatar-section" bindtap="chooseAvatar">
         <image class="avatar-preview" wx:if="{{avatar}}" src="{{avatar}}" mode="aspectFill"></image>
         <view class="avatar-preview avatar-empty" wx:else><text class="avatar-add">＋</text><text class="avatar-hint">添加照片</text></view>
         <text class="upload-state upload-state-{{avatarState}}" wx:if="{{avatarStateText}}">{{avatarStateText}}</text>
@@ -49,20 +52,20 @@
       <person-date-picker label="出生时间" value="{{birthDraft}}" bindchange="onBirthDateChange" />
       <person-date-picker wx:if="{{lifeStatus === 'deceased'}}" label="离世时间" value="{{deathDraft}}" bindchange="onDeathDateChange" />
 
-      <view class="more-toggle" bindtap="toggleMoreFields"><text>更多资料</text><text>{{showMoreFields ? '收起' : '展开'}}</text></view>
+      <view data-reading-control="true" aria-role="button" class="more-toggle" bindtap="toggleMoreFields"><text>更多资料</text><text>{{showMoreFields ? '收起' : '展开'}}</text></view>
       <view class="more-fields" wx:if="{{showMoreFields}}">
         <text class="field-label">籍贯</text>
-        <input class="field-input" placeholder="请输入籍贯" value="{{birthPlace}}" data-field="birthPlace" bindinput="inputField" maxlength="80" />
+        <input aria-label="籍贯" class="field-input" placeholder="请输入籍贯" value="{{birthPlace}}" data-field="birthPlace" bindinput="inputField" maxlength="80" />
         <text class="field-label second-label">人物简介</text>
-        <textarea class="field-textarea" placeholder="写下一些想被家人记住的事" value="{{bio}}" data-field="bio" bindinput="inputField" maxlength="500"></textarea>
+        <textarea aria-label="人物简介" class="field-textarea" placeholder="写下一些想被家人记住的事" value="{{bio}}" data-field="bio" bindinput="inputField" maxlength="500"></textarea>
       </view>
     </view>
   </view>
 
   <view class="existing-card surface-card" wx:else>
-    <input class="field-input existing-search" placeholder="输入姓名查找谱中成员" value="{{existingKeyword}}" bindinput="filterExisting" />
+    <input aria-label="查找已有家人" class="field-input existing-search" placeholder="输入姓名查找谱中成员" value="{{existingKeyword}}" bindinput="filterExisting" />
     <scroll-view class="existing-list" scroll-y wx:if="{{existingResults.length}}">
-      <view class="existing-person {{item._id === selectedExistingId ? 'selected' : ''}} {{item.selectable === false ? 'disabled' : ''}}" wx:for="{{existingResults}}" wx:key="_id" data-id="{{item._id}}" bindtap="selectExisting">
+      <view data-reading-control="true" aria-role="button" class="existing-person {{item._id === selectedExistingId ? 'selected' : ''}} {{item.selectable === false ? 'disabled' : ''}}" wx:for="{{existingResults}}" wx:key="_id" data-id="{{item._id}}" bindtap="selectExisting">
         <view class="existing-avatar gender-avatar {{item.genderClass}}">{{item.initial}}</view>
         <view class="existing-copy"><text class="existing-name">{{item.name}}</text><text class="existing-meta">{{item.genderText}}{{item.birthDateText ? ' · ' + item.birthDateText : ''}} · {{item.relationStateText}}</text></view>
         <text class="existing-check">{{item.selectable === false ? '不可关联' : item._id === selectedExistingId ? '已选择' : '选择'}}</text>
@@ -73,31 +76,33 @@
 
   <view class="relation-extra surface-card" wx:if="{{(relationType === 'son' || relationType === 'daughter') && coParentCandidates.length}}">
     <text class="shared-title">选择另一位父母</text><text class="shared-description">只有一位伴侣时已默认选中，可取消；多位伴侣请手动确认。</text>
-    <view class="shared-child {{coParentId === item._id ? 'selected' : ''}}" wx:for="{{coParentCandidates}}" wx:key="_id" data-field="coParentId" data-id="{{item._id}}" bindtap="chooseExclusive"><view class="shared-avatar gender-avatar {{item.genderClass}}">{{item.initial}}</view><text class="shared-name">{{item.name}}</text><view class="shared-checkbox">{{coParentId === item._id ? '✓' : ''}}</view></view>
+    <view data-reading-control="true" aria-role="button" class="shared-child {{coParentId === item._id ? 'selected' : ''}}" wx:for="{{coParentCandidates}}" wx:key="_id" data-field="coParentId" data-id="{{item._id}}" bindtap="chooseExclusive"><view class="shared-avatar gender-avatar {{item.genderClass}}">{{item.initial}}</view><text class="shared-name">{{item.name}}</text><view class="shared-checkbox">{{coParentId === item._id ? '✓' : ''}}</view></view>
   </view>
 
   <view class="relation-extra surface-card" wx:if="{{(relationType === 'father' || relationType === 'mother') && parentPartnerCandidates.length}}">
     <text class="shared-title">是否也是另一位父母的伴侣？</text><text class="shared-description">伴侣关系需单独确认，不会根据共同子女自动推断。</text>
-    <view class="shared-child {{parentPartnerId === item._id ? 'selected' : ''}}" wx:for="{{parentPartnerCandidates}}" wx:key="_id" data-field="parentPartnerId" data-id="{{item._id}}" bindtap="chooseExclusive"><view class="shared-avatar gender-avatar {{item.genderClass}}">{{item.initial}}</view><text class="shared-name">{{item.name}}</text><text class="shared-state" wx:if="{{item.relationStateText}}">{{item.relationStateText}}</text><view class="shared-checkbox">{{parentPartnerId === item._id ? '✓' : ''}}</view></view>
+    <view data-reading-control="true" aria-role="button" class="shared-child {{parentPartnerId === item._id ? 'selected' : ''}}" wx:for="{{parentPartnerCandidates}}" wx:key="_id" data-field="parentPartnerId" data-id="{{item._id}}" bindtap="chooseExclusive"><view class="shared-avatar gender-avatar {{item.genderClass}}">{{item.initial}}</view><text class="shared-name">{{item.name}}</text><text class="shared-state" wx:if="{{item.relationStateText}}">{{item.relationStateText}}</text><view class="shared-checkbox">{{parentPartnerId === item._id ? '✓' : ''}}</view></view>
   </view>
 
   <view class="relation-extra surface-card" wx:if="{{relationType === 'sibling'}}">
     <block wx:if="{{siblingBlocked}}"><text class="shared-title">请先补充父亲或母亲</text><text class="shared-description">兄弟姐妹必须通过共同父母建立，系统不会创建无名占位成员。</text></block>
     <block wx:else><text class="shared-title">选择共同父母（至少一位）</text><text class="shared-description">可选择同父、同母或同父同母。</text>
-      <view class="shared-child {{item.selected ? 'selected' : ''}}" wx:for="{{sharedParents}}" wx:key="_id" data-field="selectedSharedParentIds" data-id="{{item._id}}" bindtap="toggleMulti"><view class="shared-avatar gender-avatar {{item.genderClass}}">{{item.initial}}</view><text class="shared-name">{{item.name}}</text><text class="shared-state" wx:if="{{item.relationStateText}}">{{item.relationStateText}}</text><view class="shared-checkbox">{{item.selected ? '✓' : ''}}</view></view>
+      <view data-reading-control="true" aria-role="button" class="shared-child {{item.selected ? 'selected' : ''}}" wx:for="{{sharedParents}}" wx:key="_id" data-field="selectedSharedParentIds" data-id="{{item._id}}" bindtap="toggleMulti"><view class="shared-avatar gender-avatar {{item.genderClass}}">{{item.initial}}</view><text class="shared-name">{{item.name}}</text><text class="shared-state" wx:if="{{item.relationStateText}}">{{item.relationStateText}}</text><view class="shared-checkbox">{{item.selected ? '✓' : ''}}</view></view>
     </block>
   </view>
 
   <view class="relation-extra surface-card" wx:if="{{(relationType === 'spouse' || relationType === 'father' || relationType === 'mother') && sharedChildren.length}}">
     <text class="shared-title">{{relationType === 'spouse' ? '选择双方的共同子女' : '是否也是这些成员的父母？'}}</text>
     <text class="shared-description">仅勾选已确认的亲子关系，未勾选不会自动推断。</text>
-    <view class="shared-child {{item.selected ? 'selected' : ''}}" wx:for="{{sharedChildren}}" wx:key="_id" data-field="selectedSharedChildIds" data-id="{{item._id}}" bindtap="toggleMulti"><view class="shared-avatar gender-avatar {{item.genderClass}}">{{item.initial}}</view><text class="shared-name">{{item.name}}</text><text class="shared-state" wx:if="{{item.relationStateText}}">{{item.relationStateText}}</text><view class="shared-checkbox">{{item.selected ? '✓' : ''}}</view></view>
+    <view data-reading-control="true" aria-role="button" class="shared-child {{item.selected ? 'selected' : ''}}" wx:for="{{sharedChildren}}" wx:key="_id" data-field="selectedSharedChildIds" data-id="{{item._id}}" bindtap="toggleMulti"><view class="shared-avatar gender-avatar {{item.genderClass}}">{{item.initial}}</view><text class="shared-name">{{item.name}}</text><text class="shared-state" wx:if="{{item.relationStateText}}">{{item.relationStateText}}</text><view class="shared-checkbox">{{item.selected ? '✓' : ''}}</view></view>
   </view>
 
   <view class="summary-card surface-card"><text class="summary-title">本次将保存</text><text class="summary-line" wx:for="{{relationSummary}}" wx:key="*this">• {{item}}</text></view>
   <text class="permission-note">普通家庭成员提交的全部关系会作为一项申请，由管理员统一确认。</text>
+  <view class="reading-result {{readingResultError ? 'reading-error' : ''}}" wx:if="{{elderMode && readingResult}}"><text>{{readingResult}}</text><button class="secondary-button" wx:if="{{readingSaved}}" bindtap="readingBack">返回家谱</button></view>
   <view class="submit-actions">
-    <button class="secondary-button submit-button" data-continue="true" loading="{{submitting}}" disabled="{{submitting || uploading || loadingContext || contextError || siblingBlocked || (relationType === 'sibling' && !selectedSharedParentIds.length) || (entryMode === 'new' ? (!name || !gender) : !selectedExistingId)}}" bindtap="submit">保存并继续添加</button>
-    <button class="primary-button submit-button" loading="{{submitting}}" disabled="{{submitting || uploading || loadingContext || contextError || siblingBlocked || (relationType === 'sibling' && !selectedSharedParentIds.length) || (entryMode === 'new' ? (!name || !gender) : !selectedExistingId)}}" bindtap="submit">{{submitting ? submitStage : '保存'}}</button>
+    <button class="secondary-button submit-button" data-continue="true" loading="{{submitting}}" disabled="{{readingSaved || submitting || uploading || loadingContext || contextError || siblingBlocked || (relationType === 'sibling' && !selectedSharedParentIds.length) || (entryMode === 'new' ? (!name || !gender) : !selectedExistingId)}}" bindtap="submit">保存并继续添加</button>
+    <button class="primary-button submit-button" loading="{{submitting}}" disabled="{{readingSaved || submitting || uploading || loadingContext || contextError || siblingBlocked || (relationType === 'sibling' && !selectedSharedParentIds.length) || (entryMode === 'new' ? (!name || !gender) : !selectedExistingId)}}" bindtap="submit">{{submitting ? submitStage : '保存'}}</button>
   </view>
+</view>
 </view>

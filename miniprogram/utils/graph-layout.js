@@ -1223,6 +1223,21 @@ function findLineCrossings(lines) {
   return crossings;
 }
 
+function scaleLayout(layout, value) {
+  const scale = Number(value);
+  if (!Number.isFinite(scale) || scale <= 0 || scale === 1) return layout;
+  const dimensions = ['x', 'y', 'x1', 'y1', 'x2', 'y2', 'length', 'width', 'height', 'nodeWidth', 'nodeHeight'];
+  function scaled(item) {
+    const result = Object.assign({}, item);
+    dimensions.forEach(function (key) { if (typeof result[key] === 'number') result[key] *= scale; });
+    if (result.style) result.style = result.style.replace(/(-?\d*\.?\d+)rpx\b/g, function (_, number) { return Number(number) * scale + 'rpx'; });
+    return result;
+  }
+  const result = scaled(layout);
+  ['nodes', 'lines', 'junctions', 'crossings'].forEach(function (key) { result[key] = layout[key].map(scaled); });
+  return result;
+}
+
 function layoutGraph(personsInput, relationsInput, options) {
   const optionsValue = options || {};
   const nameLayout = optionsValue.nameLayout === 'vertical' ? 'vertical' : 'horizontal';
@@ -1323,7 +1338,7 @@ function layoutGraph(personsInput, relationsInput, options) {
     connections = createFamilyConnections(nodesById, relations, optionsValue.selectedPersonId || '', metrics);
   }
   const crossings = findLineCrossings(connections.lines);
-  return {
+  return scaleLayout({
     nodes: nodes,
     lines: connections.lines,
     junctions: connections.junctions,
@@ -1336,7 +1351,7 @@ function layoutGraph(personsInput, relationsInput, options) {
     kinships: kinships,
     kinshipDetails: kinshipDetails,
     hiddenCount: filtered.hiddenCount
-  };
+  }, optionsValue.contentScale);
 }
 
 function suggestCollapsedIds(personsInput, relationsInput, options) {

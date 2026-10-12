@@ -25,10 +25,11 @@
     "pages/family-copy/index",
     "pages/report/index",
     "pages/legal/index",
-    "pages/about/index"
-    ,"pages/membership/index"
-    ,"pages/activity/index"
-    ,"pages/family-backup/index"
+    "pages/about/index",
+    "pages/membership/index",
+    "pages/activity/index",
+    "pages/family-backup/index",
+    "pages/reading-settings/index"
   ],
   "window": {
     "backgroundColor": "#F7F4EC",
@@ -38,7 +39,7 @@
     "navigationBarTextStyle": "black"
   },
   "tabBar": {
-    "color": "#7B8580",
+    "color": "#65706A",
     "selectedColor": "#245C4A",
     "backgroundColor": "#FFFEFA",
     "borderStyle": "white",

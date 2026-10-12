@@ -3,7 +3,7 @@
   page .page-shell, page .pdf-page { width:100%; max-width:720px; margin-left:auto; margin-right:auto; }
   page .family-page, page .profile-page, page .person-list-page, page .examples-page { max-width:1120px; }
   page .page-shell > view, page .form-column { min-width:0; }
-  page .primary-button, page .secondary-button, page .danger-button { min-height:44px; font-size:16px; }
+  page .primary-button, page .secondary-button, page .danger-button { min-height:44px; font-size: var(--reading-font-16, 16px); }
   page input, page textarea { min-width:0; }
   page .field-input, page .nickname-input, page .person-search, page .search-input { min-height:44px; }
   page .empty-description { max-width:560px; }
@@ -12,7 +12,7 @@
   page .bottom-sheet { width:100%; max-width:560px; max-height:calc(100vh - 32px); padding:20px; border-radius:16px; overflow-y:auto; }
   page .sheet-handle { display:none; }
   page .page-shell .gender-avatar, page .bottom-sheet .gender-avatar { border-width:1.5px; }
-  page .page-shell .gender-badge, page .bottom-sheet .gender-badge { min-width:22px; height:17px; padding:0 5px; border-radius:9px; font-size:10px; }
+  page .page-shell .gender-badge, page .bottom-sheet .gender-badge { min-width:22px; height:17px; padding:0 5px; border-radius:9px; font-size: var(--reading-font-10, 14px); }
   page .person-sheet-name { white-space:normal; overflow-wrap:anywhere; }
   page .setting-title, page .setting-desc, page .info-value, page .member-name, page .family-option-name { overflow-wrap:anywhere; }
   page .submit-actions, page .purchase-dock { left:50%; right:auto; width:100%; max-width:720px; transform:translateX(-50%); }
@@ -25,10 +25,10 @@
   page .preview-actions { justify-content:center; }
   page .preview-button { max-width:340px; }
   page .launch-action-buttons { max-width:720px; margin:0 auto; }
-  page .term-note { display:block; margin:12px 0; color:#65706A; font-size:14px; line-height:1.6; }
+  page .term-note { display:block; margin:12px 0; color:#65706A; font-size: var(--reading-font-14, 16px); line-height:1.6; }
   page .graph-controls { right:12px; bottom:calc(60px + env(safe-area-inset-bottom)); gap:6px; }
-  page .graph-control { width:44px; height:44px; font-size:20px; }
-  page .graph-control-text { font-size:12px; }
+  page .graph-control { width:44px; height:44px; font-size: var(--reading-font-20, 20px); }
+  page .graph-control-text { font-size: var(--reading-font-12, 14px); }
   page .graph-help { max-width:560px; bottom:calc(12px + env(safe-area-inset-bottom)); }
   page .tree-toolbar { min-width:0; height:76px; padding:12px; }
   page .tree-page .graph-viewport { height:calc(100vh - 76px); }
@@ -74,4 +74,4 @@
   page .graph-help { display:none; }
 }
 
-.desktop-relation-remove { min-height:44px; padding:8px; margin-left:8px; color:#B43D3D; font-size:14px; }
+.desktop-relation-remove { min-height:44px; padding:8px; margin-left:8px; color:#B43D3D; font-size: var(--reading-font-14, 16px); }

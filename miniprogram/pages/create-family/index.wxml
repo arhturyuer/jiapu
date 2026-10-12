@@ -1,3 +1,5 @@
+
+<view class="reading-root {{elderMode ? 'reading-elder' : ''}} {{readingLarge ? 'reading-large' : ''}}" style="{{readingStyle}}{{readingDockStyle}}">
 <view class="create-page page-shell">
   <view class="step-header">
     <view class="step-progress">
@@ -13,11 +15,11 @@
     <text class="page-description">可以是自己，也可以是家里的长辈。以后随时能修改。</text>
     <view class="form-card surface-card">
       <text class="field-label">姓名或家人称呼</text>
-      <input class="field-input" placeholder="例如：张建国" value="{{startName}}" data-field="startName" bindinput="inputField" maxlength="30" focus />
+      <input aria-label="第一位家人的姓名，必填" class="field-input" placeholder="例如：张建国" value="{{startName}}" data-field="startName" bindinput="inputField" maxlength="30" focus />
       <text class="field-label second-label">性别</text>
       <view class="choice-row">
-        <view class="choice-item {{startGender === 'male' ? 'selected' : ''}}" data-gender="male" bindtap="chooseGender">男</view>
-        <view class="choice-item {{startGender === 'female' ? 'selected' : ''}}" data-gender="female" bindtap="chooseGender">女</view>
+        <view data-reading-control="true" aria-role="button" class="choice-item {{startGender === 'male' ? 'selected' : ''}}" data-gender="male" bindtap="chooseGender" aria-label="{{startGender === 'male' ? '已选择，' : ''}}男">男</view>
+        <view data-reading-control="true" aria-role="button" class="choice-item {{startGender === 'female' ? 'selected' : ''}}" data-gender="female" bindtap="chooseGender" aria-label="{{startGender === 'female' ? '已选择，' : ''}}女">女</view>
       </view>
     </view>
   </view>
@@ -27,19 +29,19 @@
     <text class="page-description">这些信息都可以跳过，创建后在家谱图上继续添加。</text>
     <view class="form-card surface-card">
       <text class="field-label">{{startName}}的父亲</text>
-      <input class="field-input" placeholder="可选" value="{{fatherName}}" data-field="fatherName" bindinput="inputField" maxlength="30" />
+      <input aria-label="父亲姓名，可选" class="field-input" placeholder="可选" value="{{fatherName}}" data-field="fatherName" bindinput="inputField" maxlength="30" />
       <text class="field-label second-label">{{startName}}的母亲</text>
-      <input class="field-input" placeholder="可选" value="{{motherName}}" data-field="motherName" bindinput="inputField" maxlength="30" />
+      <input aria-label="母亲姓名，可选" class="field-input" placeholder="可选" value="{{motherName}}" data-field="motherName" bindinput="inputField" maxlength="30" />
       <checkbox-group wx:if="{{hasBothParents}}" bindchange="chooseParentsAreSpouses">
         <label class="parents-spouse-choice"><checkbox value="parentsAreSpouses" checked="{{parentsAreSpouses}}" color="#245C4A" /><text>父母为夫妻</text></label>
       </checkbox-group>
       <text class="field-label second-label">{{startName}}的伴侣</text>
-      <input class="field-input" placeholder="可选" value="{{spouseName}}" data-field="spouseName" bindinput="inputField" maxlength="30" />
+      <input aria-label="伴侣姓名，可选" class="field-input" placeholder="可选" value="{{spouseName}}" data-field="spouseName" bindinput="inputField" maxlength="30" />
       <block wx:if="{{spouseName}}">
         <text class="field-label second-label">伴侣性别</text>
         <view class="choice-row">
-          <view class="choice-item {{spouseGender === 'male' ? 'selected' : ''}}" data-gender="male" bindtap="chooseSpouseGender">男</view>
-          <view class="choice-item {{spouseGender === 'female' ? 'selected' : ''}}" data-gender="female" bindtap="chooseSpouseGender">女</view>
+          <view data-reading-control="true" aria-role="button" class="choice-item {{spouseGender === 'male' ? 'selected' : ''}}" data-gender="male" bindtap="chooseSpouseGender" aria-label="{{spouseGender === 'male' ? '已选择，' : ''}}男">男</view>
+          <view data-reading-control="true" aria-role="button" class="choice-item {{spouseGender === 'female' ? 'selected' : ''}}" data-gender="female" bindtap="chooseSpouseGender" aria-label="{{spouseGender === 'female' ? '已选择，' : ''}}女">女</view>
         </view>
       </block>
     </view>
@@ -50,9 +52,9 @@
     <text class="page-description">名称会显示在家庭群分享卡片和家谱顶部。</text>
     <view class="form-card surface-card">
       <text class="field-label">家谱名称</text>
-      <input class="field-input" placeholder="例如：张氏家谱" value="{{familyName}}" data-field="familyName" bindinput="inputField" maxlength="40" />
+      <input aria-label="家谱名称" class="field-input" placeholder="例如：张氏家谱" value="{{familyName}}" data-field="familyName" bindinput="inputField" maxlength="40" />
       <text class="field-label second-label">一句介绍（可选）</text>
-      <textarea class="field-textarea" placeholder="例如：记录我们一家人的故事" value="{{description}}" data-field="description" bindinput="inputField" maxlength="200"></textarea>
+      <textarea aria-label="家谱说明" class="field-textarea" placeholder="例如：记录我们一家人的故事" value="{{description}}" data-field="description" bindinput="inputField" maxlength="200"></textarea>
     </view>
     <view class="preview-card surface-card">
       <text class="preview-label">预览</text>
@@ -67,4 +69,5 @@
     <button class="primary-button next-button" wx:if="{{step < 3}}" bindtap="nextStep">继续</button>
     <button class="primary-button next-button" wx:else loading="{{submitting}}" bindtap="createFamily">创建家谱</button>
   </view>
+</view>
 </view>

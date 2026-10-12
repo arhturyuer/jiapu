@@ -1,3 +1,4 @@
+const reading = require('../../utils/reading-preference');
 const personDate = require('../../utils/person-date');
 const deviceLayout = require('../../utils/device-layout');
 
@@ -59,12 +60,17 @@ Component({
     pickerValue: [0, 0, 0]
   },
   lifetimes: {
+    detached: function () { this._deviceHidden = true; reading.detach(this); },
     attached: function () {
+      this._deviceHidden = false;
+      reading.attach(this);
       const layout = deviceLayout.read();
       this.setData({ isDesktop: layout.desktop, isWide: layout.wide, summary: personDate.displayDraft(workingDraft(this.data.value)) });
     }
   },
   pageLifetimes: {
+    show: function () { this._deviceHidden = false; reading.attach(this); },
+    hide: function () { this._deviceHidden = true; reading.detach(this); },
     resize: function (event) { this.setData({ isWide: deviceLayout.read(null, event && event.size || event).wide }); }
   },
   methods: {

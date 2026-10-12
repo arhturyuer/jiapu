@@ -1,11 +1,11 @@
 .kinship-card { margin-bottom:20rpx; padding:18rpx 20rpx; border-radius:20rpx; background:#F3F6F2; }
 .kinship-card-list { height:180rpx; }
 .kinship-card-entry + .kinship-card-entry { margin-top:14rpx; padding-top:12rpx; border-top:1rpx solid #D8DED9; }
-.kinship-card-label { display:block; color:#245C4A; font-size:28rpx; font-weight:600; line-height:1.4; }
-.kinship-card-path,.kinship-card-reason { display:block; margin-top:6rpx; font-size:24rpx; line-height:1.4; word-break:break-all; }
+.kinship-card-label { display:block; color:#245C4A; font-size: var(--reading-font-14, 16px); font-weight:600; line-height:1.4; }
+.kinship-card-path,.kinship-card-reason { display:block; margin-top:6rpx; font-size: var(--reading-font-12, 14px); line-height:1.4; word-break:break-all; }
 .kinship-card-path,.kinship-card-reason { color:#65706A; }
-.person-node.node-vertical .node-kinship { flex-shrink:0; max-width:100%; font-size:20rpx; line-height:26rpx; }
-.person-node .node-kinship-multiple { flex-shrink:0; display:block; max-width:100%; color:#65706A; font-size:18rpx; line-height:22rpx; white-space:nowrap; }
+.person-node.node-vertical .node-kinship { flex-shrink:0; max-width:100%; font-size:calc(20rpx * var(--graph-content-scale, 1)); line-height:calc(26rpx * var(--graph-content-scale, 1)); }
+.person-node .node-kinship-multiple { flex-shrink:0; display:block; max-width:100%; color:#65706A; font-size:calc(18rpx * var(--graph-content-scale, 1)); line-height:calc(22rpx * var(--graph-content-scale, 1)); white-space:nowrap; }
 .person-node.node-vertical .node-name-vertical { flex-shrink:1; min-height:0; }
 .person-node .node-avatar { flex-shrink:0; }
 .person-sheet { overflow-y:auto; }
@@ -14,7 +14,6 @@
   .kinship-card { margin-bottom:10px; padding:9px 10px; border-radius:10px; }
   .kinship-card-list { height:90px; }
   .kinship-card-entry + .kinship-card-entry { margin-top:7px; padding-top:6px; border-top:0.5px solid #D8DED9; }
-  .kinship-card-label { font-size:14px; }
-  .kinship-card-path,.kinship-card-reason { margin-top:3px; font-size:12px; }
+  .kinship-card-path,.kinship-card-reason { margin-top:3px; }
 }
 /* large-screen:end */

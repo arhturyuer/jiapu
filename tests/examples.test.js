@@ -191,8 +191,8 @@ test('示例家谱竖屏区分创建引导与示例查看，横屏仅显示画�
   assert.doesNotMatch(page, /showShareSheet|closeShareSheet|分享示例家谱/);
   assert.doesNotMatch(source, /showShareSheet|startShare|closeShareSheet/);
   assert.doesNotMatch(style, /\.create \{ display:none/);
-  assert.match(style, /height:164rpx; min-height:164rpx/);
-  assert.match(treeStyle, /height: 164rpx;\n  min-height: 164rpx/);
+  assert.match(style, /height:calc\(164rpx \* var\(--graph-content-scale, 1\)\); min-height:calc\(164rpx \* var\(--graph-content-scale, 1\)\)/);
+  assert.match(treeStyle, /height: calc\(164rpx \* var\(--graph-content-scale, 1\)\);\n  min-height: calc\(164rpx \* var\(--graph-content-scale, 1\)\)/);
   assert.match(source, /fallbackGraphViewport/);
   assert.match(source, /setNavigationBarTitle\(\{ title: '有谱家谱·微信云开发·安全可靠' \}\)/);
 });

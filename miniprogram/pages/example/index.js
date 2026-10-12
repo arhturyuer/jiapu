@@ -1,3 +1,4 @@
+const readingGraph = require('../../utils/reading-graph');
 const deviceLayout = require('../../utils/device-layout');
 const pdfEntry = require('../../utils/pdf-entry');
 const launchAd = require('../../utils/launch-ad');
@@ -275,7 +276,7 @@ Page(launchAd.wrap(graphGesturePage.wrap({
     const nameLayout = optionsValue.nameLayout === 'vertical' ? 'vertical' : optionsValue.nameLayout === 'horizontal' ? 'horizontal' : this.data.nameLayout;
     if (!this._kinshipCache) this._kinshipCache = kinship.createKinshipCache();
     const kinshipDetails = mode === 'perspective' ? this._kinshipCache(this.data.rawPersons, this.data.rawRelations, viewpointId) : {};
-    const result = graphLayout.layoutGraph(this.data.rawPersons, this.data.rawRelations, { mode: mode, viewpointId: viewpointId, nameLayout: nameLayout, collapsedIds: collapsedIds, selectedPersonId: selectedPersonId, kinshipDetails: kinshipDetails });
+    const result = graphLayout.layoutGraph(this.data.rawPersons, this.data.rawRelations, { mode: mode, viewpointId: viewpointId, nameLayout: nameLayout, collapsedIds: collapsedIds, selectedPersonId: selectedPersonId, contentScale: this.data.graphContentScale || 1, kinshipDetails: kinshipDetails });
     const viewpoint = this.data.rawPersons.find(function (person) { return person._id === viewpointId; });
     const self = this;
     this._lastLayout = result;
@@ -303,7 +304,7 @@ Page(launchAd.wrap(graphGesturePage.wrap({
     }
     const viewport = this.getGraphViewport();
     this._graphViewport = viewport;
-    this.commitGraphTransform((options.initialView ? graphViewport.initialTransform : graphViewport.fitTransform)(this._lastLayout, viewport, { relations: this.data.rawRelations, fitAll: fitAll, focusPersonId: focusPersonId, currentScale: this.getGraphTransform().scale, minimumScale: this.data.graphScaleMin, minimumFocusScale: (options.minimumFocusScale || 0) * this.data.graphScaleMin / graphViewport.MIN_SCALE }));
+    this.commitGraphTransform((options.initialView ? graphViewport.initialTransform : graphViewport.fitTransform)(this._lastLayout, viewport, { initialNameSize: 16 * (this.data.graphContentScale || 1), nodeNameRpx: 28 * (this.data.graphContentScale || 1), relations: this.data.rawRelations, fitAll: fitAll, focusPersonId: focusPersonId, currentScale: this.getGraphTransform().scale, minimumScale: this.data.graphScaleMin, minimumFocusScale: (options.minimumFocusScale || 0) * this.data.graphScaleMin / graphViewport.MIN_SCALE }));
   },
   fitWholeGraph: function () { this.fitGraph('', true); },
   locateGraphFocus: function () { const id = this.data.selectedPersonId || this.data.viewpointId; this.fitGraph(id, !id, id ? { minimumFocusScale: 0.68 } : {}); },
@@ -437,10 +438,25 @@ Page(launchAd.wrap(graphGesturePage.wrap({
     if (this.data.loading || this.data.error || !this.data.example) return Promise.resolve();
     return adAccess.preloadMember(this, app, app.getCurrentFamily ? app.getCurrentFamily() : null);
   },
+  noop: function () {},
+  readingMoreAction: function (event) {
+    const action = event.currentTarget.dataset.action;
+    if (['fitWholeGraph', 'openDisplaySettings', 'generatePoster', 'openPdfExport', 'togglePageOrientation', 'toggleCleanScreen'].indexOf(action) < 0) return;
+    this.setData({ showReadingMore: false });
+    this[action]();
+  },
+  onReadingChange: readingGraph.changed,
+  lookClearly: readingGraph.lookClearly,
+  openReadingPeople: readingGraph.openPeople,
+  toggleReadingMore: function () { this.setData({ showReadingMore: !this.data.showReadingMore }); },
   showPerson: function (event) {
     const personId = event.currentTarget.dataset.id;
     const person = this.data.rawPersons.find(function (item) { return item._id === personId; });
     if (!person) return;
+    if (this.data.elderMode) {
+      this.renderGraph(this.data.viewMode, this.data.viewpointId, { preserveViewport: true, selectedPersonId: personId, statePatch: { selectedPersonId: personId } });
+      return this.openMemberActions(event);
+    }
     if (this.data.selectedPersonId === personId) return this.openMemberActions(event);
     this.renderGraph(this.data.viewMode, this.data.viewpointId, { preserveViewport: true, selectedPersonId: personId, statePatch: { selectedPersonId: personId, selectedPerson: this.decorateSelectedPerson(person), showMemberSheet: false } });
   },

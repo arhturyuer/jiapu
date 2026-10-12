@@ -36,6 +36,45 @@ const persons = [
   { _id: 'child', name: '孩子', gender: 'male' }
 ];
 
+test('保存结果持续显示并阻止重复添加，用户主动返回；审批结果不误报为已生效', async function (t) {
+  const previousWx = global.wx;
+  let back = 0, writes = 0;
+  global.wx = { showToast: function () {}, navigateBack: function () { back++; }, disableAlertBeforeUnload: function () {} };
+  t.after(function () { global.wx = previousWx; });
+  const page = createPage({ name: '虚构成员', gender: 'male', elderMode: true });
+  page.createNewPerson = function () { writes++; return Promise.resolve({ pending: true }); };
+  await page.submit();
+  assert.equal(page.data.readingSaved, true);
+  assert.equal(page.data.readingResultError, false);
+  assert.match(page.data.readingResult, /管理员审核/);
+  assert.equal(back, 0);
+  await page.submit();
+  assert.equal(writes, 1);
+  page.readingBack();
+  assert.equal(back, 1);
+});
+
+test('失败保留表单及错误反馈，重试成功；继续添加恢复空表单并保留上一项结果', async function (t) {
+  const previousWx = global.wx;
+  global.wx = { showToast: function () {}, disableAlertBeforeUnload: function () {} };
+  t.after(function () { global.wx = previousWx; });
+  const page = createPage({ name: '虚构成员', gender: 'male', elderMode: true });
+  let writes = 0;
+  page.createNewPerson = function () { writes++; return writes === 1 ? Promise.reject(new Error('test failure')) : Promise.resolve({ pending: false }); };
+  page.loadRelationContext = function () { return Promise.resolve(); };
+  await page.submit();
+  assert.equal(page.data.name, '虚构成员');
+  assert.equal(page.data.readingResultError, true);
+  assert.equal(page.data.readingSaved, false);
+  assert.equal(page.data.submitting, false);
+  await page.submit({ currentTarget: { dataset: { continue: true } } });
+  assert.equal(writes, 2);
+  assert.equal(page.data.name, '');
+  assert.equal(page.data.readingSaved, false);
+  assert.equal(page.data.readingResultError, false);
+  assert.equal(page.data.readingResult, '关系已保存');
+});
+
 test('添加子女时唯一伴侣默认成为另一位父母，多伴侣时不预选', function () {
   const page = createPage();
   page._graphPersons = persons;

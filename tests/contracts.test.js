@@ -18,9 +18,18 @@ test('页面注册、文件和 WXML 事件处理器保持一致', function () {
     const source = fs.readFileSync(base + '.js', 'utf8');
     const template = fs.readFileSync(base + '.wxml', 'utf8');
     const handlers = new Set(Array.from(template.matchAll(/(?:bind|catch)(?:tap|input|change|submit|confirm|blur)="([A-Za-z0-9_]+)"/g)).map(function (match) { return match[1]; }));
-    handlers.forEach(function (handler) {
-      assert.match(source, new RegExp('\\b' + handler + '\\s*:\\s*(?:async\\s+)?function\\b'), pagePath + ' 缺少事件处理器 ' + handler);
-    });
+    const previousPage = global.Page;
+    const previousGetApp = global.getApp;
+    let definition;
+    try {
+      global.getApp = function () { return { globalData: {} }; };
+      global.Page = function (value) { definition = value; };
+      delete require.cache[require.resolve(base + '.js')];
+      require(base + '.js');
+      handlers.forEach(function (handler) {
+        assert.equal(typeof definition[handler], 'function', pagePath + ' 缺少事件处理器 ' + handler);
+      });
+    } finally { global.Page = previousPage; global.getApp = previousGetApp; }
   });
 });
 
@@ -130,6 +139,7 @@ test('关于页使用正式版实际版本并按最新在前展示受控更新�
   const uploadScript = fs.readFileSync(path.join(root, 'deployment/upload-miniprogram.sh'), 'utf8');
   const verifier = fs.readFileSync(path.join(root, 'deployment/verify-release-note.mjs'), 'utf8');
   assert.deepEqual(releaseInfo.validateReleaseNotes(releaseNotes), [
+    { version: '1.6.12', summary: '新增长辈模式与字号设置，支持简化图谱操作、放大文字和按钮，优化成员填写及全页面阅读体验。' },
     { version: '1.6.11', summary: '适配 iPad 和电脑微信大屏，优化家谱浏览、成员编辑、日期选择及图片和 PDF 保存体验。' },
     { version: '1.6.10', summary: '新增添加到我的小程序引导，优化我的页反馈群二维码及成员表单固定保存底栏。' },
     { version: '1.6.9', summary: '新增家庭会员兑换码，支持后台批量生成与管理，会员页可兑换并区分购买和兑换记录。' },

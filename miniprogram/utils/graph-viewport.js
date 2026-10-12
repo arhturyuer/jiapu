@@ -66,7 +66,7 @@ function fitTransform(layout, viewport, options) {
 function initialTransform(layout, viewport, options) {
   const optionsValue = options || {};
   const rpxToPx = Number(viewport.rpxToPx) || REFERENCE_RPX_TO_PX;
-  const scale = clamp(INITIAL_NAME_SIZE / NODE_NAME_RPX / rpxToPx,
+  const scale = clamp((optionsValue.initialNameSize || INITIAL_NAME_SIZE) / (optionsValue.nodeNameRpx || NODE_NAME_RPX) / rpxToPx,
     optionsValue.minimumScale || minimumScaleForViewport(viewport),
     optionsValue.maximumScale || MAX_SCALE);
   const focusNode = findNode(layout, optionsValue.focusPersonId);

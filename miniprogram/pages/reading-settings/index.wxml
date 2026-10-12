@@ -1,0 +1,14 @@
+<view class="reading-root {{elderMode ? 'reading-elder' : ''}} {{readingLarge ? 'reading-large' : ''}}" style="{{readingStyle}}">
+  <view class="page-shell">
+    <view class="surface-card reading-settings-card">
+      <view class="reading-settings-header"><text class="section-title">长辈模式</text><switch aria-label="长辈模式" color="#245C4A" checked="{{elderMode}}" bindchange="toggleElder" /></view>
+      <text class="reading-settings-copy">简化操作，调大按钮与字号。仅改变本机显示，不改变家谱资料、其他家人的设置或会员权益。</text>
+    </view>
+    <view class="surface-card reading-settings-card"><text class="section-title">字号</text><text class="reading-settings-copy">手动选择后不再跟随微信字号。关闭长辈模式后，这里的字号选择仍然生效，家谱操作恢复普通模式。</text>
+      <view class="reading-font-options"><button wx:for="{{fontOptions}}" wx:key="label" data-scale="{{item.value}}" class="{{fontScale === item.value ? 'primary-button' : 'secondary-button'}}" aria-label="{{item.label + (fontScale === item.value ? '，已选择' : '')}}" bindtap="chooseScale">{{item.label}}{{fontScale === item.value ? ' ✓' : ''}}</button></view>
+    </view>
+    <view class="surface-card reading-settings-card"><text class="section-title">字号预览</text><text class="reading-settings-copy">从张建国看，张小明是孙子。</text><text>家谱资料已保存</text><text class="reading-settings-copy">当前正文约 {{readingBodySize}} 像素</text></view>
+    <text class="reading-result" wx:if="{{persistenceMessage}}">{{persistenceMessage}}</text>
+    <button class="secondary-button" bindtap="restoreDefault">恢复默认</button>
+  </view>
+</view>

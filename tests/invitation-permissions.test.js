@@ -127,8 +127,8 @@ test('家谱和家庭页为所有已加入角色提供不越权的分享选择�
   assert.doesNotMatch(membersTemplate + treeTemplate, /关闭分享卡片/);
   assert.match(membersTemplate, /<button class="invite-button" bindtap="openShareSheet">邀请家人<\/button>/);
   assert.match(membersTemplate, /data-role="member" bindtap="chooseShareRole" wx:if="\{\{currentRole !== 'viewer'\}\}"/);
-  assert.match(treeTemplate, /<view class="toolbar-share landscape-hidden" bindtap="startShare">分享<\/view>/);
-  assert.match(treeTemplate, /<view class="action-cell action-cell-wide" bindtap="shareSelectedPerson">/);
+  assert.match(treeTemplate, /<view[^>]*class="toolbar-share landscape-hidden" bindtap="startShare">分享<\/view>/);
+  assert.match(treeTemplate, /<view[^>]*class="action-cell action-cell-wide" bindtap="shareSelectedPerson">/);
   assert.match(treeTemplate, /data-role="member" bindtap="chooseShareRole" wx:if="\{\{currentRole !== 'viewer'\}\}"/);
   assert.match(membersTemplate, /class="sheet-mask" wx:if="\{\{showShareSheet\}\}" bindtap="closeShareSheet"/);
   assert.match(treeTemplate, /class="sheet-mask" wx:if="\{\{showShareSheet\}\}" bindtap="closeShareSheet"/);

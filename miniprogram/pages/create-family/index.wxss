@@ -26,13 +26,13 @@
   margin-top: 16rpx;
   display: block;
   color: #65706A;
-  font-size: 26rpx;
+  font-size: var(--reading-font-13, 14px);
 }
 
 .page-title {
   display: block;
   color: #202824;
-  font-size: 48rpx;
+  font-size: var(--reading-font-24, 24px);
   font-weight: 600;
   line-height: 1.4;
 }
@@ -102,7 +102,7 @@
   background: #F3F2EC;
   border: 2rpx solid #D8DED9;
   border-radius: 20rpx;
-  font-size: 28rpx;
+  font-size: var(--reading-font-14, 16px);
 }
 
 .choice-item.selected {
@@ -122,11 +122,11 @@
 .preview-label {
   margin-bottom: 20rpx;
   color: #65706A;
-  font-size: 26rpx;
+  font-size: var(--reading-font-13, 14px);
 }
 
 .preview-name {
-  font-size: 40rpx;
+  font-size: var(--reading-font-20, 20px);
   font-weight: 600;
 }
 
@@ -139,7 +139,7 @@
 .preview-count {
   margin-top: 24rpx;
   color: #245C4A;
-  font-size: 28rpx;
+  font-size: var(--reading-font-14, 16px);
 }
 
 .footer-actions {
@@ -168,8 +168,7 @@
   .step-header { margin-bottom: 26px; }
   .step-progress { gap: 6px; }
   .step-bar { height: 4px; border-radius: 4px; }
-  .step-count { margin-top: 8px; font-size: 13px; }
-  .page-title { font-size: 24px; }
+  .step-count { margin-top: 8px; }
   .page-description { margin-top: 8px; }
   .form-card { margin-top: 20px; padding: 16px; }
   .field-label { margin-bottom: 7px; }
@@ -179,12 +178,11 @@
   .field-input { height: 48px; padding: 0 12px; }
   .field-textarea { height: 100px; padding: 12px; }
   .choice-row { gap: 6px; }
-  .choice-item { min-height: 42px; padding: 0 6px; border: 1px solid #D8DED9; border-radius: 10px; font-size: 14px; }
+  .choice-item { min-height: 42px; padding: 0 6px; border: 1px solid #D8DED9; border-radius: 10px; }
   .preview-card { margin-top: 12px; padding: 16px; }
-  .preview-label { margin-bottom: 10px; font-size: 13px; }
-  .preview-name { font-size: 20px; }
+  .preview-label { margin-bottom: 10px; }
   .preview-desc, .preview-count { margin-top: 5px; }
-  .preview-count { margin-top: 12px; font-size: 14px; }
+  .preview-count { margin-top: 12px; }
   .footer-actions { padding: 10px 16px calc(12px + env(safe-area-inset-bottom)); gap: 8px; border-top: 1px solid #E1E4E0; }
   .back-button { width: 110px; }
 }

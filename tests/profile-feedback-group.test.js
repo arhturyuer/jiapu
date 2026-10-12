@@ -241,14 +241,15 @@ test('帮助区域共用于两种账户状态，保留原排列和隐私页跳�
   const style = fs.readFileSync(path.join(root, 'miniprogram/pages/profile/index.wxss'), 'utf8');
   const privacy = fs.readFileSync(path.join(root, 'miniprogram/pages/privacy/index.js'), 'utf8');
   assert.equal((template.match(/帮助与反馈/g) || []).length, 1);
-  assert.match(template, /<\/block>\s*<view class="section-block">\s*<view class="section-heading"><text class="section-title">帮助与反馈/);
+  assert.match(template, /<\/block>\s*<view class="section-block">\s*<template is="readingHelpEntry"/);
+  assert.match(template, /template name="readingHelpEntry"[\s\S]*帮助与反馈/);
   assert.match(template, /用户反馈群<\/text>[\s\S]*<text class="setting-desc" wx:else>长按识别二维码，进群交流、反馈问题<\/text>/);
   assert.match(template, /class="setting-desc" wx:if="{{feedbackError}}">{{feedbackError}}<\/text>/);
   assert.match(template, /mode="aspectFit" show-menu-by-longpress="{{true}}"/);
   assert.match(template, /binderror="feedbackQrError"/);
   assert.match(template, /wx:elif="{{feedbackError}}"[\s\S]*bindtap="loadFeedbackGroup"/);
   assert.match(template, /反馈群暂未开放[\s\S]*open-type="contact"/);
-  assert.ok(template.indexOf('帮助与反馈') < template.indexOf('ad-placement'));
+  assert.ok(template.indexOf('<template is="readingHelpEntry"') < template.indexOf('ad-placement'));
   assert.ok(template.indexOf('ad-placement') < template.indexOf('开发版测试工具'));
   assert.doesNotMatch(source, /showFeedbackGroup|\/pages\/feedback-group\/index/);
   assert.match(privacy, /showFeedbackGroup[\s\S]*\/pages\/feedback-group\/index/);

@@ -1,4 +1,6 @@
-<view class="loading-panel" wx:if="{{loading}}"><view class="loading-dot"></view><text>正在读取资料...</text></view>
+
+<view class="reading-root {{elderMode ? 'reading-elder' : ''}} {{readingLarge ? 'reading-large' : ''}}" style="{{readingStyle}}{{readingDockStyle}}">
+<view class="loading-panel" wx:if="{{loading}}"><view aria-hidden="true" class="loading-dot"></view><text>正在读取资料...</text></view>
 <view class="page-shell" wx:elif="{{error}}"><view class="empty-panel"><view class="empty-mark">!</view><text class="empty-title">无法打开人物资料</text><text class="empty-description">{{error}}</text><button class="secondary-button" bindtap="loadPerson">重新加载</button></view></view>
 <view class="detail-page page-shell" wx:elif="{{person}}">
   <view class="hero-card surface-card">
@@ -26,14 +28,14 @@
     <view class="section-heading"><text class="section-title">直接关系</text><text class="muted-text">{{relatives.length}} 人</text></view>
     <view class="relation-list surface-card" wx:if="{{relatives.length}}">
       <view class="relation-swipe" wx:for="{{relatives}}" wx:key="relationId">
-        <view class="relation-remove-action {{removingRelationId !== '' ? 'disabled' : ''}}" wx:if="{{isAdmin}}" data-relation-id="{{item.relationId}}" catchtap="removeRelation">
+        <view data-reading-control="true" aria-role="button" aria-hidden="{{openRelationId !== item.relationId}}" class="relation-remove-action {{removingRelationId !== '' ? 'disabled' : ''}}" wx:if="{{isAdmin && !elderMode}}" data-relation-id="{{item.relationId}}" catchtap="removeRelation">
           <text class="relation-remove-text">{{removingRelationId === item.relationId ? '移除中' : '移除关系'}}</text>
         </view>
-        <view class="relation-row {{openRelationId === item.relationId ? 'swiped' : ''}}" data-id="{{item.person._id}}" data-relation-id="{{item.relationId}}" bindtouchstart="onRelationTouchStart" bindtouchmove="onRelationTouchMove" bindtouchend="onRelationTouchEnd" bindtouchcancel="onRelationTouchCancel" bindtap="openRelative">
+        <view data-reading-control="true" aria-role="button" class="relation-row {{openRelationId === item.relationId ? 'swiped' : ''}}" data-id="{{item.person._id}}" data-relation-id="{{item.relationId}}" bindtouchstart="onRelationTouchStart" bindtouchmove="onRelationTouchMove" bindtouchend="onRelationTouchEnd" bindtouchcancel="onRelationTouchCancel" bindtap="openRelative">
           <image class="relation-avatar gender-avatar {{item.person.genderClass}}" wx:if="{{item.person.avatar}}" src="{{item.person.avatar}}" mode="aspectFill"></image>
           <view class="relation-avatar relation-placeholder gender-avatar {{item.person.genderClass}}" wx:else>{{item.initial}}</view>
           <view class="relation-copy"><view class="relation-name-row"><text class="relation-name">{{item.person.name}}</text><text class="gender-badge {{item.person.genderClass}}">{{item.person.genderText}}</text></view><text class="relation-label">{{item.label}}</text></view>
-          <text class="relation-arrow">›</text><button class="desktop-relation-remove" wx:if="{{isDesktop && isAdmin}}" data-relation-id="{{item.relationId}}" disabled="{{removingRelationId !== ''}}" catchtap="removeRelation">移除关系</button>
+          <text class="relation-arrow">›</text><button class="desktop-relation-remove" wx:if="{{(isDesktop || elderMode) && isAdmin}}" data-relation-id="{{item.relationId}}" disabled="{{removingRelationId !== ''}}" catchtap="removeRelation">移除关系</button>
         </view>
       </view>
     </view>
@@ -47,4 +49,5 @@
   </view>
   <button class="secondary-button report-button" bindtap="reportPerson">举报资料问题</button>
   <button class="secondary-button report-button" wx:if="{{person.avatarAssetId}}" bindtap="reportAvatar">举报人物头像</button>
+</view>
 </view>

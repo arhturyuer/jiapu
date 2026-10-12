@@ -1,3 +1,4 @@
+const formFeedback = require('../../utils/form-feedback');
 const platformCapabilities = require('../../utils/platform-capabilities');
 const launchAd = require('../../utils/launch-ad');
 const app = getApp();
@@ -46,8 +47,10 @@ Page(launchAd.wrap({
     }
     this.loadRelationContext();
   },
-  onUnload: function () { formState.clearLeaveAlert(this); if (this._existingTimer) clearTimeout(this._existingTimer); if (this._duplicateTimer) clearTimeout(this._duplicateTimer); },
-  markDirty: function () { if (!this.data.hasUnsavedChanges) this.setData({ hasUnsavedChanges: true }); formState.syncLeaveAlert(this, true, '新增成员信息尚未保存，确定离开吗？'); },
+  onShow: function () { if (this.data.readingSaved && !this.data.elderMode) formFeedback.returnAfter(this, 600); },
+  onHide: function () { formFeedback.clearReturn(this); },
+  onUnload: function () { formState.clearLeaveAlert(this); formFeedback.clearReturn(this); if (this._existingTimer) clearTimeout(this._existingTimer); if (this._duplicateTimer) clearTimeout(this._duplicateTimer); },
+  markDirty: function () { this.setData({ readingSaved: false, readingNameError: '', readingResult: '' }); if (!this.data.hasUnsavedChanges) this.setData({ hasUnsavedChanges: true }); formState.syncLeaveAlert(this, true, '新增成员信息尚未保存，确定离开吗？'); },
   clearDirty: function () { this.setData({ hasUnsavedChanges: false }); formState.clearLeaveAlert(this); },
   relationExists: function (type, firstId, secondId) {
     return (this._graphRelations || []).some(function (r) {
@@ -152,10 +155,13 @@ Page(launchAd.wrap({
   requestPayload: function () { return { familyId: this.data.familyId, anchorPersonId: this.data.anchorId, relationType: this.data.relationType, coParentId: this.data.coParentId, parentPartnerId: this.data.parentPartnerId, sharedParentIds: this.data.selectedSharedParentIds, sharedChildIds: this.data.selectedSharedChildIds }; },
   createNewPerson: function (avatarAssetId) { const dates = this.dateInputs(); return api.call('person.createRelated', Object.assign(this.requestPayload(), { idempotencyKey: this._submitRequestId, person: { name: this.data.name.trim(), gender: this.data.gender, lifeStatus: this.data.lifeStatus, birthDateInfo: dates.birth.info, deathDateInfo: this.data.lifeStatus === 'deceased' ? dates.death.info : null, birthPlace: this.data.birthPlace.trim(), avatarAssetId: avatarAssetId || '', bio: this.data.bio.trim() } })); },
   canSubmit: function () { if ((this._contextRequested && this.data.loadingContext) || this.data.contextError || this.data.siblingBlocked) return false; if (this.data.relationType === 'sibling' && !this.data.selectedSharedParentIds.length) return false; return this.data.entryMode === 'new' ? Boolean(this.data.name.trim() && personGender.isKnown(this.data.gender) && ['living', 'deceased'].includes(this.data.lifeStatus)) : Boolean(this.data.selectedExistingId); },
+  readingBack: formFeedback.back,
+  validateReadingName: function () { if (!this.data.elderMode) return; this.setData({ readingNameFocus: false, readingNameError: !String(this.data.name || '').trim() ? '请填写姓名' : '' }); },
   submit: function (event) {
     const self = this, continueAdding = Boolean(event && event.currentTarget && event.currentTarget.dataset.continue);
-    if (!this.canSubmit()) { wx.showToast({ title: this.data.siblingBlocked ? '请先添加父亲或母亲' : this.data.entryMode === 'new' && !personGender.isKnown(this.data.gender) ? '请选择成员性别' : '请完整选择成员和关系', icon: 'none' }); return; }
-    if (this.data.entryMode === 'new' && this.dateInputs().error) { wx.showToast({ title: this.dateInputs().error, icon: 'none' }); return; }
+    if (this.data.readingSaved) return Promise.resolve();
+    if (!this.canSubmit()) { formFeedback.error(this, this.data.siblingBlocked ? '请先添加父亲或母亲' : '请完整填写姓名、性别和关系', !String(this.data.name || '').trim() ? 'name' : ''); wx.showToast({ title: this.data.siblingBlocked ? '请先添加父亲或母亲' : this.data.entryMode === 'new' && !personGender.isKnown(this.data.gender) ? '请选择成员性别' : '请完整选择成员和关系', icon: 'none' }); return; }
+    if (this.data.entryMode === 'new' && this.dateInputs().error) { formFeedback.error(this, this.dateInputs().error); wx.showToast({ title: this.dateInputs().error, icon: 'none' }); return; }
     if (this.data.submitting || this.data.uploading) return;
     if (!this._submitRequestId) this._submitRequestId = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12);
     this.setData({ submitting: true, submitStage: this.data.entryMode === 'new' ? '正在添加成员…' : '正在关联…' });
@@ -169,7 +175,7 @@ Page(launchAd.wrap({
       }
       request = mediaPromise.then(function (media) { return self.createNewPerson(media ? media.assetId : ''); });
     }
-    return request.then(function (data) { self._submitRequestId = ''; if (!data.pending && app.invalidateFamilyData) app.invalidateFamilyData(self.data.familyId); if (data.pending && app.refreshPendingBadge) app.refreshPendingBadge({ force: true }).catch(function () {}); self.clearDirty(); wx.showToast({ title: data.pending ? '已提交管理员审核' : '关系已保存', icon: data.pending ? 'none' : 'success', duration: 1600 }); if (continueAdding) return self.resetForNext(); setTimeout(function () { wx.navigateBack(); }, 600); return data; }).catch(function (error) { if (error.code !== 'CLOUD_FUNCTION_TIMEOUT' && error.code !== 'CLOUD_CALL_FAILED') self._submitRequestId = ''; if (self.data.entryMode === 'new' && self._pendingAvatarMedia) self.setData({ avatarState: 'uploaded', avatarStateText: '头像已上传，再次保存时将直接重试绑定' }); wx.showToast({ title: api.userMessage(error, '添加失败'), icon: 'none' }); }).then(function (data) { self.setData({ submitting: false, uploading: false, submitStage: '' }); return data; });
+    return request.then(function (data) { self._submitRequestId = ''; if (!data.pending && app.invalidateFamilyData) app.invalidateFamilyData(self.data.familyId); if (data.pending && app.refreshPendingBadge) app.refreshPendingBadge({ force: true }).catch(function () {}); self.clearDirty(); wx.showToast({ title: data.pending ? '已提交管理员审核' : '关系已保存', icon: data.pending ? 'none' : 'success', duration: 1600 }); formFeedback.saved(self, data.pending ? '已提交管理员审核，确认后才会显示在家谱中' : '关系已保存', !continueAdding); if (continueAdding) return self.resetForNext(); if (!self.data.elderMode) formFeedback.returnAfter(self, 600); return data; }).catch(function (error) { if (error.code !== 'CLOUD_FUNCTION_TIMEOUT' && error.code !== 'CLOUD_CALL_FAILED') self._submitRequestId = ''; if (self.data.entryMode === 'new' && self._pendingAvatarMedia) self.setData({ avatarState: 'uploaded', avatarStateText: '头像已上传，再次保存时将直接重试绑定' }); formFeedback.error(self, api.userMessage(error, '添加失败')); wx.showToast({ title: api.userMessage(error, '添加失败'), icon: 'none' }); }).then(function (data) { self.setData({ submitting: false, uploading: false, submitStage: '' }); return data; });
   },
   resetForNext: function () { this._pendingAvatarMedia = null; this._selectedAvatarSize = 0; this._drafts = { new: {}, existing: {} }; this._genderTouched = false; this._lifeStatusTouched = false; this.setData({ entryMode: 'new', name: '', gender: defaultGender(this.data.relationType, this.data.anchorGender), lifeStatus: 'living', birthDraft: personDate.emptyDraft(), deathDraft: personDate.emptyDraft(), birthPlace: '', bio: '', avatar: '', selectedAvatarPath: '', avatarAssetId: '', avatarState: '', avatarStateText: '', selectedExistingId: '', selectedExistingPerson: null, existingKeyword: '', duplicateSuggestions: [], showMoreFields: false }); return this.loadRelationContext(); }
 }));

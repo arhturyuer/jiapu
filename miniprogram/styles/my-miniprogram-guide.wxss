@@ -19,8 +19,8 @@
   transform: translateX(-50%) rotate(45deg);
 }
 .my-miniprogram-guide-header { display: flex; align-items: flex-start; gap: 8px; }
-.my-miniprogram-guide-title { display: block; flex: 1; min-width: 0; padding-top: 6px; color: #245C4A; font-size: 15px; line-height: 1.5; font-weight: 600; overflow-wrap: break-word; }
-.my-miniprogram-guide-steps { display: block; margin-top: 6px; color: #53655C; font-size: 12px; line-height: 1.5; }
+.my-miniprogram-guide-title { display: block; flex: 1; min-width: 0; padding-top: 6px; color: #245C4A; font-size: var(--reading-font-15, 16px); line-height: 1.5; font-weight: 600; overflow-wrap: break-word; }
+.my-miniprogram-guide-steps { display: block; margin-top: 6px; color: #53655C; font-size: var(--reading-font-12, 14px); line-height: 1.5; }
 button.my-miniprogram-guide-close {
   position: static;
   flex: 0 0 44px;

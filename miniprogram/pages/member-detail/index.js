@@ -84,6 +84,7 @@ Page(launchAd.wrap({
   },
 
   onRelationTouchStart: function (event) {
+    if (this.data.elderMode) return;
     if (this.data.isDesktop || !this.data.isAdmin || this.data.removingRelationId) return;
     const touch = event.touches && event.touches[0];
     if (!touch) return;

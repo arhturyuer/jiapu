@@ -1,4 +1,6 @@
-<view class="loading-panel" wx:if="{{loading}}"><view class="loading-dot"></view><text>正在读取家庭权限...</text></view>
+
+<view class="reading-root {{elderMode ? 'reading-elder' : ''}} {{readingLarge ? 'reading-large' : ''}}" style="{{readingStyle}}{{readingDockStyle}}">
+<view class="loading-panel" wx:if="{{loading}}"><view aria-hidden="true" class="loading-dot"></view><text>正在读取家庭权限...</text></view>
 <view class="page-shell" wx:elif="{{error}}"><view class="empty-panel"><view class="empty-mark">!</view><text class="empty-title">无法打开</text><text class="empty-description">{{error}}</text><button class="secondary-button" bindtap="loadPage">重新加载</button></view></view>
 <view class="manage-page page-shell" wx:else>
   <view class="archive-card surface-card" wx:if="{{family.status === 'archived'}}">
@@ -12,8 +14,8 @@
     <view class="manage-section" wx:if="{{isAdmin}}">
       <view class="section-heading"><text class="section-title">家谱资料</text></view>
       <view class="form-card surface-card">
-        <text class="field-label">家谱名称</text><input class="field-input" maxlength="40" value="{{name}}" data-field="name" bindinput="inputField" />
-        <text class="field-label second-label">一句介绍</text><textarea class="field-textarea" maxlength="200" value="{{description}}" data-field="description" bindinput="inputField"></textarea>
+        <text class="field-label">家谱名称</text><input aria-label="姓名，必填" class="field-input" maxlength="40" value="{{name}}" data-field="name" bindinput="inputField" />
+        <text class="field-label second-label">一句介绍</text><textarea aria-label="家谱说明" class="field-textarea" maxlength="200" value="{{description}}" data-field="description" bindinput="inputField"></textarea>
         <button class="primary-button save-button" loading="{{saving}}" bindtap="saveFamily">保存资料</button>
       </view>
     </view>
@@ -24,7 +26,7 @@
         <view class="member-row" wx:for="{{collaborators}}" wx:key="_id">
           <view class="member-avatar">{{item.initial}}</view>
           <view class="member-copy"><text class="member-name">{{item.displayName}}</text><text class="member-role">{{item.roleText}}</text></view>
-          <view class="member-actions" wx:if="{{isAdmin}}"><text class="member-action" data-id="{{item._id}}" bindtap="changeRole">改角色</text><text class="member-action" wx:if="{{item.role !== 'admin'}}" data-id="{{item._id}}" bindtap="transferAdmin">设管理员</text><text class="member-action" wx:if="{{item.role !== 'admin'}}" data-id="{{item._id}}" bindtap="transferOwnership">转让</text></view>
+          <view class="member-actions" wx:if="{{isAdmin}}"><text data-reading-control="true" aria-role="button" class="member-action" data-id="{{item._id}}" bindtap="changeRole">改角色</text><text data-reading-control="true" aria-role="button" class="member-action" wx:if="{{item.role !== 'admin'}}" data-id="{{item._id}}" bindtap="transferAdmin">设管理员</text><text data-reading-control="true" aria-role="button" class="member-action" wx:if="{{item.role !== 'admin'}}" data-id="{{item._id}}" bindtap="transferOwnership">转让</text></view>
         </view>
       </view>
     </view>
@@ -41,11 +43,12 @@
     <view class="manage-section">
       <view class="section-heading"><text class="section-title">数据与退出</text></view>
       <view class="danger-zone surface-card">
-        <view class="danger-row" bindtap="copyFamily"><view><text class="danger-title">复制家谱</text><text class="danger-desc">复制成一份由你管理的新家谱</text></view><text class="danger-arrow">›</text></view>
-        <view class="danger-row" bindtap="reportFamily"><view><text class="danger-title">举报家谱描述</text><text class="danger-desc">向运营人员反馈不当内容</text></view><text class="danger-arrow">›</text></view>
-        <view class="danger-row" wx:if="{{isAdmin}}" bindtap="archiveFamily"><view><text class="danger-title">移入回收站</text><text class="danger-desc">{{archiving ? '正在移入回收站，请稍候' : '30 天内可以恢复'}}</text></view><text class="danger-arrow">›</text></view>
-        <view class="danger-row" bindtap="leaveFamily"><view><text class="danger-title">退出家谱</text><text class="danger-desc">退出后需要重新接受邀请</text></view><text class="danger-arrow">›</text></view>
+        <view data-reading-control="true" aria-role="button" class="danger-row" bindtap="copyFamily"><view><text class="danger-title">复制家谱</text><text class="danger-desc">复制成一份由你管理的新家谱</text></view><text class="danger-arrow">›</text></view>
+        <view data-reading-control="true" aria-role="button" class="danger-row" bindtap="reportFamily"><view><text class="danger-title">举报家谱描述</text><text class="danger-desc">向运营人员反馈不当内容</text></view><text class="danger-arrow">›</text></view>
+        <view data-reading-control="true" aria-role="button" class="danger-row" wx:if="{{isAdmin}}" bindtap="archiveFamily"><view><text class="danger-title">移入回收站</text><text class="danger-desc">{{archiving ? '正在移入回收站，请稍候' : '30 天内可以恢复'}}</text></view><text class="danger-arrow">›</text></view>
+        <view data-reading-control="true" aria-role="button" class="danger-row" bindtap="leaveFamily"><view><text class="danger-title">退出家谱</text><text class="danger-desc">退出后需要重新接受邀请</text></view><text class="danger-arrow">›</text></view>
       </view>
     </view>
   </block>
+</view>
 </view>

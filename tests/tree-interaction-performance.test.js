@@ -845,7 +845,7 @@ test('方向流光只使用 transform 和 opacity，不触发布局属性动画'
   assert.match(animationStyles, /opacity:/);
   assert.doesNotMatch(animationStyles, /(?:^|[;{])\s*(?:left|top)\s*:/m);
   assert.match(wxml, /class="flow-runner flow-step-\{\{item\.flowStep\}\}"/);
-  assert.match(wxml, /wx:if="\{\{item\.isAnimatedFlow\}\}"/);
+  assert.match(wxml, /wx:if="\{\{item\.isAnimatedFlow && !elderMode\}\}"/);
 });
 
 ['tree', 'example'].forEach(function (pageName) {

@@ -44,6 +44,7 @@ Page(launchAd.wrap({
     wx.navigateTo({ url: '/pages/example-person-detail/index?slug=' + encodeURIComponent(this.data.slug) + '&id=' + encodeURIComponent(event.currentTarget.dataset.id) + (this.data.shareSource ? '&source=share_menu' : '') });
   },
   onRelationTouchStart: function (event) {
+    if (this.data.elderMode) return;
     const touch = event.touches && event.touches[0]; if (!touch) return;
     this._relationTouch = { id: event.currentTarget.dataset.relationId, startX: touch.clientX, startY: touch.clientY, lastX: touch.clientX, horizontal: null, wasOpen: this.data.openRelationId === event.currentTarget.dataset.relationId };
   },

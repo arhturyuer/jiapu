@@ -1,0 +1,82 @@
+.reading-root { min-height:100vh; font-size:var(--reading-body,16px); line-height:1.5; }
+.reading-root button, .reading-root input, .reading-root textarea { font-size:var(--reading-body,16px); }
+.reading-large button { height:auto; padding:10px 12px; line-height:1.5; white-space:normal; overflow-wrap:anywhere; }
+.reading-elder label { min-height:60px; display:flex; align-items:center; }
+.reading-elder [data-reading-control] { min-height:60px; min-width:60px; white-space:normal; overflow-wrap:anywhere; }
+.reading-elder text[data-reading-control] { display:inline-flex; align-items:center; }
+.reading-large .field-input, .reading-large .nickname-input, .reading-large .person-search, .reading-large .search-input { height:calc(var(--reading-body,16px) * 1.5 + 24px); min-height:var(--reading-target,44px); }
+.reading-large .field-textarea { min-height:calc(var(--reading-body,16px) * 5 + 24px); }
+.reading-large .choice-item, .reading-large .entry-option, .reading-large .mode-item, .reading-large .family-switch { height:auto; min-height:var(--reading-target,44px); line-height:1.5; }
+.reading-large .choice-row, .reading-large .relation-picker, .reading-large .hero-tags, .reading-large .view-switch { flex-wrap:wrap; }
+.reading-large .mode-switch, .reading-large .entry-switch { height:auto; }
+.reading-large .form-page { padding-bottom:var(--reading-dock-space,calc(200px + env(safe-area-inset-bottom))); }
+.reading-large .submit-actions { height:auto; max-height:60vh; overflow-y:auto; }
+.reading-root .setting-copy, .reading-root .member-copy, .reading-root .relation-copy { min-width:0; }
+.reading-root .family-name, .reading-root .setting-title, .reading-root .setting-desc, .reading-root .info-value, .reading-root .member-name, .reading-root .existing-name, .reading-root .hero-name { white-space:normal; overflow-wrap:anywhere; text-overflow:clip; }
+.reading-large .tree-top-ad-close, .reading-large .member-sheet-ad-close { width:44px; min-width:44px; min-height:44px; }
+.reading-large .member-sheet-ad-header { min-height:44px; flex-wrap:wrap; }
+.reading-large .member-sheet-membership-link, .reading-large .tree-top-membership-link { white-space:normal; height:auto; }
+.reading-root .person-node .gender-badge { font-size:calc(20rpx * var(--graph-content-scale,1)); height:calc(34rpx * var(--graph-content-scale,1)); min-width:calc(44rpx * var(--graph-content-scale,1)); padding:0 calc(10rpx * var(--graph-content-scale,1)); }
+.reading-root .person-node .gender-node-badge { top:calc(-15rpx * var(--graph-content-scale,1)); left:calc(-12rpx * var(--graph-content-scale,1)); }
+.reading-root .person-node .gender-avatar { border-width:calc(3rpx * var(--graph-content-scale,1)); }
+.reading-large .gender-badge { height:auto; min-height:1.5em; line-height:1.5; }
+.reading-large .graph-control { width:auto; min-width:44px; min-height:44px; height:auto; }
+.reading-large .clean-screen-exit { width:auto; min-width:44px; height:auto; }
+.reading-large .submit-actions, .reading-large .launch-action-buttons { flex-direction:column; align-items:stretch; }
+.reading-large .submit-actions .submit-button { flex:none; }
+.reading-elder .choice-item, .reading-elder .entry-option { flex:1 1 100%; padding:10px; }
+.reading-large .entry-switch, .reading-large .choice-row { flex-wrap:wrap; }
+.reading-large .info-row { flex-direction:column; align-items:stretch; }
+.reading-large .info-label { width:auto; }
+.reading-large .info-value { text-align:left; }
+.reading-large .setting-row { gap:12px; padding:12px 0; flex-wrap:wrap; }
+.reading-elder .stats-grid, .reading-elder .benefit-grid, .reading-elder .plan-grid, .reading-elder .form-columns, .reading-elder .member-list { grid-template-columns:minmax(0,1fr); }
+.reading-elder .profile-form { margin-left:0; padding-top:160rpx; }
+.reading-large .tree-toolbar { height:auto; flex-wrap:wrap; }
+.reading-elder .tree-toolbar { min-height:76px; }
+.reading-large .person-sheet, .reading-large .perspective-sheet { max-width:100%; width:100%; height:auto; max-height:90vh; overflow-y:auto; }
+.reading-large .member-sheet-mask .person-sheet { width:100%; }
+.reading-large .member-name-row, .reading-large .relation-name-row, .reading-large .family-title-row, .reading-large .onboarding-row, .reading-large .family-progress-row { flex-wrap:wrap; }
+.reading-large .detail-actions, .reading-large .review-actions { flex-wrap:wrap; }
+.reading-elder .flow-runner { display:none; }
+.reading-root .reading-graph-tools { position:absolute; z-index:28; right:12px; bottom:calc(32px + env(safe-area-inset-bottom)); max-width:calc(100% - 24px); display:flex; flex-wrap:wrap; gap:8px; background:#fffefa; padding:8px; border-radius:16px; box-shadow:0 4px 18px rgba(23,35,31,.12); }
+.reading-root .reading-graph-tools button { min-width:60px; color:#245c4a; background:#e4efea; }
+.reading-root .reading-more { padding:8px; display:flex; flex-direction:column; gap:12px; }
+.reading-root .reading-result { padding:12px; margin:12px 0; color:#245c4a; background:#e4efea; border-radius:12px; font-size:var(--reading-body,16px); }
+.reading-root .reading-error { color:#b43d3d; background:#fff8f7; }
+.reading-large .purchase-dock { height:auto; max-height:60vh; overflow-y:auto; }
+.reading-large .membership-page { padding-bottom:var(--reading-dock-space,calc(200px + env(safe-area-inset-bottom))); }
+.reading-large .relation-row .desktop-relation-remove { height:auto; min-width:44px; white-space:normal; }
+.reading-elder .relation-row { transform:none; }
+.reading-large .date-panel { max-height:90vh; overflow-y:auto; }
+.reading-large .date-toolbar { flex-wrap:wrap; height:auto; }
+.reading-large .date-cancel, .reading-large .date-actions text { min-width:44px; min-height:44px; display:flex; align-items:center; }
+.reading-large .date-wheels { height:calc(var(--reading-body,16px) * 1.5 * 5 + 120px); }
+.reading-large .date-option { font-size:var(--reading-body,16px); height:calc(var(--reading-body,16px) * 1.5 + 24px); line-height:calc(var(--reading-body,16px) * 1.5 + 24px); }
+.reading-root .field-error { display:block; margin-top:8px; color:#b43d3d; font-size:var(--reading-body,16px); }
+.reading-root.reading-graph-page { height:100vh; min-height:0; display:flex; flex-direction:column; overflow:hidden; }
+.reading-graph-page > .tree-page, .reading-graph-page > .example-page { position:relative; flex:1; height:auto; min-height:0; display:flex; flex-direction:column; }
+.reading-graph-page .tree-toolbar, .reading-graph-page .example-header { flex:none; height:auto; flex-wrap:wrap; }
+.reading-graph-page .graph-viewport { flex:1; height:auto !important; min-height:0; }
+.reading-graph-page .graph-controls { position:absolute; }
+.reading-graph-page .loading-panel, .reading-graph-page .empty-panel { min-height:0; overflow-y:auto; }
+.reading-root .field-error:empty { display:none; }
+.reading-root .setting-share-hit { width:100%; height:100%; min-width:100%; min-height:100%; padding:0; }
+.reading-elder .relation-line, .reading-elder .relation-trunk, .reading-elder .relation-drop, .reading-elder .relation-rail { background:#657c70; }
+.reading-elder .relation-spouse { background:#526e5f; }
+.reading-elder .relation-flow { background:#245c4a; }
+.reading-large .launch-actions { max-height:65vh; overflow-y:auto; flex:none; }
+.reading-large .date-extra, .reading-large .example-create-actions, .reading-large .example-toolbar, .reading-large .search-box, .reading-large .family-progress-row, .reading-large .feedback-card { flex-wrap:wrap; }
+.reading-large .action-cell, .reading-large .family-option, .reading-large .perspective-option, .reading-large .child-order-item { height:auto; white-space:normal; }
+.reading-elder .action-grid, .reading-elder .membership-benefits, .reading-elder .family-page, .reading-elder .profile-page { grid-template-columns:minmax(0,1fr); }
+.reading-large .tree-top-ad-membership { white-space:normal; height:auto; }
+.reading-elder button { min-width:60px; min-height:60px; }
+.reading-elder .tree-top-ad-close, .reading-elder .member-sheet-ad-close { width:60px; min-width:60px; min-height:60px; }
+.reading-large [data-reading-control] { white-space:normal; overflow-wrap:anywhere; }
+.reading-large .graph-controls { max-height:calc(100% - 24px); overflow-y:auto; }
+.reading-large .graph-control { padding:8px; }
+/* large-screen:start — generated by scripts/generate-large-screen-styles.mjs */
+@media (min-width: 600px) {
+  .reading-elder .profile-form { padding-top:80px; }
+}
+/* large-screen:end */

@@ -1,5 +1,7 @@
+
+<view class="reading-root {{elderMode ? 'reading-elder' : ''}} {{readingLarge ? 'reading-large' : ''}}" style="{{readingStyle}}{{readingDockStyle}}">
 <view class="invite-page page-shell">
-  <view class="loading-panel" wx:if="{{loading}}"><view class="loading-dot"></view><text>正在打开家庭邀请...</text></view>
+  <view class="loading-panel" wx:if="{{loading}}"><view aria-hidden="true" class="loading-dot"></view><text>正在打开家庭邀请...</text></view>
 
   <view class="invalid-panel" wx:elif="{{invalid}}">
     <view class="invite-mark muted">谱</view>
@@ -19,4 +21,5 @@
     <button class="primary-button accept-button" loading="{{accepting}}" bindtap="acceptInvite">{{actionText}}</button>
     <text class="privacy-note">仅受邀家人可访问</text>
   </view>
+</view>
 </view>

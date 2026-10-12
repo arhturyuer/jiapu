@@ -1,3 +1,5 @@
+
+<view class="reading-root {{elderMode ? 'reading-elder' : ''}} {{readingLarge ? 'reading-large' : ''}}" style="{{readingStyle}}{{readingDockStyle}}">
 <view class="intro-page page-shell">
   <view class="intro-hero surface-card">
     <text class="intro-eyebrow">有谱家谱</text>
@@ -19,4 +21,5 @@
     <button class="primary-button intro-button" bindtap="openExamples">先看示例家谱</button>
     <button class="secondary-button intro-button" bindtap="createFamily">创建我的家谱</button>
   </view>
+</view>
 </view>

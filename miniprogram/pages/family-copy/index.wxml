@@ -1,9 +1,11 @@
-<view class="loading-panel" wx:if="{{loading}}"><view class="loading-dot"></view><text>正在读取家谱与复制状态...</text></view>
+
+<view class="reading-root {{elderMode ? 'reading-elder' : ''}} {{readingLarge ? 'reading-large' : ''}}" style="{{readingStyle}}{{readingDockStyle}}">
+<view class="loading-panel" wx:if="{{loading}}"><view aria-hidden="true" class="loading-dot"></view><text>正在读取家谱与复制状态...</text></view>
 <view class="page-shell" wx:elif="{{error}}"><view class="empty-panel"><text class="empty-title">暂时无法复制</text><text class="empty-description">{{error}}</text><button class="secondary-button" bindtap="loadPage">重新加载</button></view></view>
 <view class="page-shell copy-page" wx:else>
   <view class="surface-card copy-card" wx:if="{{family}}">
     <text class="card-title">{{family.name}}</text><text class="copy-note">{{family.personCount}} 位人物 · {{family.relationCount}} 条关系</text>
-    <text class="field-label">新家谱名称</text><input class="field-input" maxlength="40" value="{{name}}" disabled="{{running || submitting || uncertain}}" bindinput="inputName" />
+    <text class="field-label">新家谱名称</text><input aria-label="姓名，必填" class="field-input" maxlength="40" value="{{name}}" disabled="{{running || submitting || uncertain}}" bindinput="inputName" />
   </view>
   <view class="surface-card copy-card">
     <text class="card-title">创建一份独立家谱</text>
@@ -26,4 +28,5 @@
   </view>
   <view class="surface-card copy-card" wx:if="{{taskError}}"><text class="copy-note">{{taskError}}</text><button class="secondary-button" bindtap="refreshTask">重新读取状态</button></view>
   <button class="primary-button start-button" wx:if="{{family && !running}}" loading="{{submitting}}" disabled="{{submitting || running || taskError}}" bindtap="createCopy">{{uncertain ? '继续确认' : task && task.status === 'failed' ? '重新发起复制' : task && task.status === 'completed' ? '再复制一份' : '开始复制'}}</button>
+</view>
 </view>

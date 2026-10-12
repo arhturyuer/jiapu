@@ -1,0 +1,6 @@
+.reading-settings-card { padding:20px; margin-bottom:20px; }
+.reading-settings-header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.reading-settings-header .section-title { flex:1; min-width:0; overflow-wrap:anywhere; }
+.reading-settings-header switch { flex-shrink:0; }
+.reading-settings-copy { display:block; margin:12px 0; color:#65706a; font-size:var(--reading-small,14px); line-height:1.6; }
+.reading-font-options { display:flex; flex-direction:column; gap:12px; }

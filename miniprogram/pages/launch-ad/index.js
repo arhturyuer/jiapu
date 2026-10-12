@@ -1,9 +1,10 @@
+const deviceLayout = require('../../utils/device-layout');
 const app = getApp();
 const brand = require('../../config/brand');
 const launchAd = require('../../utils/launch-ad');
 const launchAdLayout = require('../../utils/launch-ad-layout');
 
-Page({
+Page(deviceLayout.wrap({
   data: { brandLogo: brand.logo, brandSlogan: brand.launchSlogan,
     adUnitId: '', familyId: '', startupVisible: false, retrying: false, adVisible: false, loaded: false, seconds: 5, returning: false,
     safeTop: 64, safeBottom: 0, windowWidth: 375, windowHeight: 667, contentHeight: 487, templateWidth: 375 },
@@ -31,12 +32,17 @@ Page({
   updateLayout: function (size) {
     const info = wx.getWindowInfo ? wx.getWindowInfo() : (wx.getSystemInfoSync ? wx.getSystemInfoSync() : {});
     const capsule = wx.getMenuButtonBoundingClientRect ? wx.getMenuButtonBoundingClientRect() : null;
-    const layout = launchAdLayout.fromWindow(Object.assign({}, info, size || {}), capsule, this._adRatio);
+    const layout = launchAdLayout.fromWindow(Object.assign({}, info, size || {}), capsule, this._adRatio, this.data.readingLarge ? this._readingActionsHeight : 0);
     this._windowSize = { width: layout.windowWidth, height: layout.windowHeight };
     this.setData(layout);
   },
   onResize: function (event) {
-    if (!this._hidden && !this._unloaded && !this._finished) this.updateLayout(event && event.size);
+    this._readingActionsHeight = 0;
+    if (!this._hidden && !this._unloaded && !this._finished) { this.updateLayout(event && event.size); this.inspectLayout(); }
+  },
+  onReadingChange: function () {
+    this._readingActionsHeight = 0;
+    if (this._windowSize && !this._hidden && !this._finished) { this.updateLayout(); this.inspectLayout(); }
   },
   onShow: function () {
     this._hidden = false;
@@ -91,6 +97,10 @@ Page({
         nodes[name] = rect ? { width: rect.width, height: rect.height, top: rect.top, bottom: rect.bottom } : null;
       });
       const rect = nodes.nativeAd && nodes.nativeAd.height > 0 ? nodes.nativeAd : nodes.template;
+      if (this.data.readingLarge && nodes.actions && nodes.actions.height > 0 && nodes.actions.height !== this._readingActionsHeight) {
+        this._readingActionsHeight = nodes.actions.height;
+        this.updateLayout();
+      }
       if (rect && rect.width > 0 && rect.height > 0) {
         this._adRatio = rect.height / rect.width;
         const width = launchAdLayout.fitWidth(this.data.windowWidth, this.data.contentHeight, this._adRatio);
@@ -138,4 +148,4 @@ Page({
     wx.navigateTo({ url: '/pages/membership/index?familyId=' + encodeURIComponent(family._id),
       fail: () => { this._buying = false; this.finish(); } });
   }
-});
+}));

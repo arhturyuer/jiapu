@@ -1,8 +1,8 @@
 .report-page { padding-bottom: calc(56rpx + env(safe-area-inset-bottom)); }
 .target-card { padding: 30rpx; display: flex; flex-direction: column; }
-.target-label { color: #65706A; font-size: 25rpx; }
-.target-name { margin-top: 8rpx; font-size: 38rpx; font-weight: 650; }
-.target-help { margin-top: 12rpx; color: #65706A; font-size: 25rpx; line-height: 1.6; }
+.target-label { color: #65706A; font-size: var(--reading-font-12_5, 14px); }
+.target-name { margin-top: 8rpx; font-size: var(--reading-font-19, 19px); font-weight: 650; }
+.target-help { margin-top: 12rpx; color: #65706A; font-size: var(--reading-font-12_5, 14px); line-height: 1.6; }
 .report-section { margin-top: 36rpx; }
 .report-section > .section-title { margin-bottom: 16rpx; display: block; }
 .reason-list { padding: 0 24rpx; }
@@ -16,9 +16,8 @@
 @media (min-width: 600px) {
   .report-page { padding-bottom: calc(28px + env(safe-area-inset-bottom)); }
   .target-card { padding: 15px; }
-  .target-label { font-size: 12.5px; }
-  .target-name { margin-top: 4px; font-size: 19px; }
-  .target-help { margin-top: 6px; font-size: 12.5px; }
+  .target-name { margin-top: 4px; }
+  .target-help { margin-top: 6px; }
   .report-section { margin-top: 18px; }
   .report-section > .section-title { margin-bottom: 8px; }
   .reason-list { padding: 0 12px; }

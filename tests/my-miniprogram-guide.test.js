@@ -402,8 +402,10 @@ test('我的页同组顺序为关于、分享、添加，入口只出现一次�
   assert.equal((template.match(/bindtap="showMyMiniProgramHelp"/g) || []).length, 1);
   const account = template.match(/<block wx:else>([\s\S]*?)<\/block>/)[1];
   assert.match(account, /关于有谱[\s\S]*分享有谱[\s\S]*bindtap="showMyMiniProgramHelp"/);
-  assert.match(account, /setting-share-row[^\n]+\n\s*<view class="setting-row" bindtap="showMyMiniProgramHelp"/);
-  const help = template.slice(template.indexOf('帮助与反馈'));
+  assert.match(account, /setting-share-row[^\n]+\n\s*<view[^>]*class="setting-row" bindtap="showMyMiniProgramHelp"/);
+  const help = template.slice(template.indexOf('<template is="readingHelpEntry"'));
+  const helpEntry = template.match(/<template name="readingHelpEntry">([\s\S]*?)<\/template>/)[1];
+  assert.doesNotMatch(helpEntry, /showMyMiniProgramHelp/);
   assert.doesNotMatch(help, /showMyMiniProgramHelp/);
 });
 

@@ -16,7 +16,7 @@ button.clean-screen-exit {
   background: rgba(255, 254, 250, 0.92);
   border: 1px solid #D8DED9;
   border-radius: 12px;
-  font-size: 14px;
+  font-size: var(--reading-font-14, 16px);
   line-height: 42px;
 }
 
