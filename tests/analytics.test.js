@@ -5,6 +5,8 @@ const vm = require('node:vm');
 const path = require('node:path');
 const analytics = require('../cloudfunctions/youpuOpsApi/analytics');
 const capture = require('../cloudfunctions/youpuUserApi/analytics');
+const requestContext = require('../cloudfunctions/youpuUserApi/request-context');
+const activityLedger = require('../miniprogram/utils/activity-ledger');
 const root = path.resolve(__dirname, '..');
 const now = new Date('2026-10-03T10:00:00Z');
 const time = day => day + 'T01:00:00+08:00';
@@ -141,6 +143,7 @@ test('自动采集故障不会把已提交的业务结果变成失败', async ()
   const expected = { family: { _id: 'f1' } };
   const context = {
     testAccounts: { run: async (context, callback) => callback(), usesTestIdentity: () => false }, recordBusinessActivity: async () => { throw new Error('store offline'); },
+    requestContext,
     exports: {}, Date, cleanText: value => value || '', randomToken: () => 'request',
     cloud: { getWXContext: () => ({ OPENID: 'fake' }) }, userId: () => 'u1',
     handlers: { 'family.create': async () => expected }, assert: (condition, code) => { if (!condition) throw Object.assign(new Error(code), { code }); },
@@ -162,6 +165,7 @@ test('客户端缓存访问每天按用户家谱上报一次，失败可重试�
   let fail = false;
   const context = {
     Date: class extends Date { static now() { return clock; } },
+    activityLedger,
     api: { call: async (type, input) => { assert.equal(type, 'analytics.track'); assert.equal(input.familyId, 'f1'); calls += 1; if (fail) throw new Error('offline'); } }
   };
   vm.runInNewContext('result = {' + source + '};', context);
@@ -266,6 +270,34 @@ test('快照下钻稳定跨chunk翻页、汇总缓存不重复扫描、筛选绑
   await assert.rejects(service.details(request), { code: 'ANALYTICS_SNAPSHOT_EXPIRED' });
 });
 
+test('报表同实例并发只构建一个快照，五分钟内命中、到期重建，失败可重试', async () => {
+  let clock = now;
+  const fixture = storageFixture({ system_config: [{ _id: 'analytics', trackingStartedAt: time('2026-09-01') }],
+    users: [{ _id: 'u1', createdAt: time('2026-10-01'), status: 'active' }] });
+  const service = createService(fixture, () => clock);
+  const filters = { startDay: '2026-10-01', endDay: '2026-10-01', window: 'day', paymentMode: 'live' };
+  const [first, shared] = await Promise.all([service.summary(filters), service.summary(filters)]);
+  assert.equal(first.snapshotId, shared.snapshotId);
+  assert.equal(fixture.tables.analytics_snapshots.length, 1);
+  const scans = fixture.reads();
+  clock = new Date(now.getTime() + 31000);
+  assert.equal((await service.summary(filters)).snapshotId, first.snapshotId);
+  assert.equal(fixture.reads(), scans);
+  clock = new Date(now.getTime() + 300000);
+  const fresh = await service.summary(filters);
+  assert.notEqual(fresh.snapshotId, first.snapshotId);
+  assert.equal(fixture.tables.analytics_snapshots.length, 2);
+  let fail = true;
+  const failing = createService({ ...fixture, listAll: async (...args) => {
+    if (fail) throw new Error('store offline');
+    return fixture.listAll(...args);
+  } }, () => clock);
+  const other = { ...filters, paymentMode: 'mock' };
+  await assert.rejects(failing.summary(other), /store offline/);
+  fail = false;
+  assert.ok((await failing.summary(other)).snapshotId);
+});
+
 test('清理后的家谱与成员事实仍统计首次加入，当前协作排除已删除家谱', async () => {
   const fixture = storageFixture({ system_config: [{ _id: 'analytics', trackingStartedAt: time('2026-09-01') }],
     users: [{ _id: 'u1', createdAt: time('2026-10-01') }, { _id: 'u2', createdAt: time('2026-10-01') }],
@@ -318,7 +350,7 @@ test('前台停留跨北京时间零点后仍采集用户与正在展示的缓�
   const methods = source.slice(source.indexOf('  recordVisit: function'), source.indexOf('  getPersonDetail: function'));
   let clock = Date.parse('2026-10-01T15:59:59Z'); const calls = [];
   const page = { route: 'pages/example/index', data: { loading: false, example: {}, slug: 'fixture' } };
-  const context = { Date: class extends Date { static now() { return clock; } }, getCurrentPages: () => [page], api: { call: async (_, payload) => { calls.push(payload.kind); } } };
+  const context = { activityLedger, Date: class extends Date { static now() { return clock; } }, getCurrentPages: () => [page], api: { call: async (_, payload) => { calls.push(payload.kind); } } };
   vm.runInNewContext('result = {' + methods + '};', context);
   const app = Object.assign(context.result, { globalData: { user: { _id: 'u1' }, loggedIn: true } });
   app.recordVisibleActivity(); app.recordVisibleActivity(); assert.deepEqual(calls, ['foreground', 'example']);
@@ -354,7 +386,7 @@ test('真实成员校验契约：显式家谱上报和旧客户端成功访问�
   const membershipSource = userSource.slice(userSource.indexOf('async function requireMembership('), userSource.indexOf('function normalizePersonDateFields'));
   const captureSource = userSource.slice(userSource.indexOf('async function analyticsTrack('), userSource.indexOf('const handlers ='));
   const db = {}; const records = []; const user = { _id: 'u1', status: 'active' };
-  const context = { db, ACTIVE_ROLES: ['admin', 'editor', 'viewer'], getOpenid: () => 'actor', userId: () => 'u1', cleanText: value => value || '',
+  const context = { requestContext, analytics: capture, db, ACTIVE_ROLES: ['admin', 'editor', 'viewer'], getOpenid: () => 'actor', userId: () => 'u1', cleanText: value => value || '',
     assert: (condition, code) => { if (!condition) throw Object.assign(new Error(code), { code }); },
     requireActiveUser: async () => user, maybeGet: async () => user,
     getFamily: async (scope, familyId) => { assert.equal(scope, db); assert.equal(typeof familyId, 'string'); return { _id: familyId }; },
@@ -381,4 +413,22 @@ test('当天新用户转化不混入昨日用户的今日行为，同一名新�
   for (const field of ['firstExampleViewedAt', 'firstCreatedFamilyAt', 'firstEnteredFamilyAt']) users[0][field] = '2026-10-04T03:10:00Z';
   const after = analytics.summarize(input, filters).totals;
   assert.deepEqual([after.exampleRate, after.createRate, after.enterRate], [100, 100, 100]);
+});
+
+test('报表构建只补查未读原始 ID，不复用加工对象或跨构建数据', async () => {
+  const fixture = storageFixture({
+    users: [{ _id: 'u1', status: 'active', createdAt: time('2026-10-01') }],
+    families: [{ _id: 'f1', creatorId: 'u1', status: 'active', createdAt: time('2026-10-01') }],
+    family_memberships: [{ _id: 'm1', familyId: 'f1', userId: 'u1', status: 'active', joinedAt: time('2026-10-01') }],
+    analytics_activity_daily: [{ _id: 'a1', day: '2026-10-01', kind: 'foreground', entityId: 'u1' }, { _id: 'a2', day: '2026-10-01', kind: 'family', entityId: 'f1' }]
+  });
+  const queried = []; const readByIds = fixture.listByIds;
+  fixture.listByIds = async (name, field, ids, ...args) => { queried.push({ name, field, ids }); return readByIds(name, field, ids, ...args); };
+  const service = createService(fixture, () => now); const filters = analytics.range({ startDay: '2026-10-01', endDay: '2026-10-03' }, now);
+  const first = await service.load(filters);
+  assert.equal(queried.filter(row => row.field === '_id').length, 0);
+  assert.equal(fixture.tables.users[0].firstCreatedFamilyAt, undefined);
+  fixture.tables.users[0].status = 'deleted'; fixture.tables.families[0].status = 'archived';
+  const second = await service.load(filters);
+  assert.equal(second.details.newUsers[0].status, 'deleted'); assert.equal(first.details.newUsers[0].status, 'active');
 });

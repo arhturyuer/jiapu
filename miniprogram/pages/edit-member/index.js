@@ -226,7 +226,7 @@ Page(launchAd.wrap({
       personId: this.data.personId,
       data: { avatarAssetId: media.assetId }
     }).then(function (data) {
-      if (!data.pending && data.person && app.applyPersonUpdate) app.applyPersonUpdate(self.data.familyId, data.person);
+      if (!app.handleFamilyMutation && !data.pending && data.person && app.applyPersonUpdate) app.applyPersonUpdate(self.data.familyId, data.person);
       if (data.pending && app.refreshPendingBadge) app.refreshPendingBadge({ force: true }).catch(function () {});
       self._pendingAvatarMedia = null;
       let presentation;
@@ -299,7 +299,7 @@ Page(launchAd.wrap({
       personId: this.data.personId,
       data: changes
     }).then(function (data) {
-      if (!data.pending && data.person && app.applyPersonUpdate) app.applyPersonUpdate(self.data.familyId, data.person);
+      if (!app.handleFamilyMutation && !data.pending && data.person && app.applyPersonUpdate) app.applyPersonUpdate(self.data.familyId, data.person);
       if (data.pending && app.refreshPendingBadge) app.refreshPendingBadge({ force: true }).catch(function () {});
       self._initialForm = current;
       self.setData({ submitting: false, hasFormChanges: false, canKeepUnknownGender: !personGender.isKnown(current.gender) }, function () { self.refreshFormState(); });

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { callOps, getErrorMessage } from '../cloudbase';
+import { createReportCache } from '../report-cache';
 type Value = number | null;
 interface DailyRow { [key: string]: Value | string | boolean; day: string; partial: boolean; activityComplete: boolean; mature: boolean }
 interface Filters { startDay: string; endDay: string; window: string; paymentMode: string }
@@ -26,6 +27,7 @@ const loading = ref(false); const error = ref(''); const report = ref<Report | n
 const trendError = ref('');
 const tab = ref('growth'); const metric = ref('newUsers'); const sortDescending = ref(true);
 let requestVersion = 0;
+const loadReport = createReportCache((filters: Filters) => callOps<Report>('analytics.summary', { ...filters }));
 const growth: Column[] = [
   { key: 'newUsers', label: '新用户' },
   { key: 'exampleRate', label: '示例体验率', format: 'rate', numerator: 'exampleUsers', denominator: 'newUsers' },
@@ -86,12 +88,12 @@ async function load() {
   const version = ++requestVersion; loading.value = true; emit('loading', true); error.value = ''; trendError.value = ''; closeDetails();
   const filters = { startDay: startDay.value, endDay: endDay.value, window: window.value, paymentMode: paymentMode.value };
   try {
-    const data = await callOps<Report>('analytics.summary', filters);
+    const data = await loadReport(filters);
     if (version !== requestVersion) return;
     report.value = data;
     trendReport.value = data;
     if (filters.startDay === filters.endDay) {
-      try { const trend = await callOps<Report>('analytics.summary', { ...filters, startDay: shift(filters.endDay, -29) }); if (version === requestVersion) trendReport.value = trend; }
+      try { const trend = await loadReport({ ...filters, startDay: shift(filters.endDay, -29) }); if (version === requestVersion) trendReport.value = trend; }
       catch (err) { if (version === requestVersion) trendError.value = getErrorMessage(err, '近 30 天趋势暂不可用'); }
     }
   } catch (err) { if (version === requestVersion) error.value = getErrorMessage(err, '数据读取失败，请重试'); }

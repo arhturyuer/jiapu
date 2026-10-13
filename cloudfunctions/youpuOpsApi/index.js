@@ -315,23 +315,12 @@ async function opsMutate(operator, action, event, handler) {
     const existing = await maybeGet('idempotency_records', recordId, transaction);
     if (existing && existing.status === 'completed') return existing.result || {};
     assert(!existing, 'REQUEST_IN_PROGRESS', '操作正在处理中，请勿重复提交');
+    const result = await handler(transaction);
     await transaction.collection('idempotency_records').doc(recordId).set({
       data: {
-        actorId: 'operator_' + operator._id,
-        action: action,
-        requestId: requestId,
-        status: 'processing',
-        createdAt: db.serverDate(),
-        updatedAt: db.serverDate()
-      }
-    });
-    const result = await handler(transaction);
-    await transaction.collection('idempotency_records').doc(recordId).update({
-      data: {
-        status: 'completed',
-        result: result || {},
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-        updatedAt: db.serverDate()
+        actorId: 'operator_' + operator._id, action: action, requestId: requestId,
+        status: 'completed', result: result || {}, createdAt: db.serverDate(),
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), updatedAt: db.serverDate()
       }
     });
     return result || {};
@@ -966,9 +955,12 @@ async function shareFunnelSummary(days) {
     const day = shareMetricDay(offset);
     kinds.forEach(function (entry) { keys.push([entry[0], day]); });
   }
-  const rows = await Promise.all(keys.map(function (entry) {
-    return maybeGet('share_metrics_daily', shareMetricId(entry[1], entry[0]));
-  }));
+  const ids = keys.map(entry => shareMetricId(entry[1], entry[0]));
+  const rows = [];
+  for (const batch of chunks(ids, 50)) {
+    const result = await db.collection('share_metrics_daily').where({ _id: _.in(batch) }).limit(batch.length).get();
+    rows.push(...(result.data || []));
+  }
   const totals = {};
   kinds.forEach(function (entry) { totals[entry[0]] = { prepared: 0, sent: 0, opened: 0, converted: 0 }; });
   rows.forEach(function (row) {
@@ -1101,17 +1093,18 @@ async function familiesList(event, context) {
   await requireOperator(context, ['super_admin', 'operator']);
   const where = event.status ? { status: cleanText(event.status, 30) } : {};
   const result = await page('families', where, event, 'createdAt');
-  const familyCounts = await Promise.all(result.items.map(async function (family) {
-    const counts = await Promise.all([
-      db.collection('family_memberships').where({ familyId: family._id, status: 'active' }).count(),
-      db.collection('persons').where({ familyId: family._id, status: 'active' }).count()
-    ]);
-    return { familyId: family._id, userCount: counts[0].total || 0, memberCount: counts[1].total || 0 };
-  }));
-  const countsByFamilyId = familyCounts.reduce(function (map, item) {
-    map[item.familyId] = item;
-    return map;
-  }, {});
+  const ids = result.items.map(family => family._id);
+  const countsByFamilyId = {};
+  if (ids.length) {
+    const aggregate = db.command.aggregate;
+    const results = await Promise.all(['family_memberships', 'persons'].map(name => db.collection(name).aggregate()
+      .match({ familyId: _.in(ids), status: 'active' })
+      .group({ _id: '$familyId', total: aggregate.sum(1) }).limit(ids.length).end()));
+    ids.forEach(id => { countsByFamilyId[id] = { userCount: 0, memberCount: 0 }; });
+    results.forEach((result, index) => (result.list || []).forEach(row => {
+      if (countsByFamilyId[row._id]) countsByFamilyId[row._id][index ? 'memberCount' : 'userCount'] = Number(row.total) || 0;
+    }));
+  }
   result.items = result.items.map(function (family) {
     return publicFamily(family, countsByFamilyId[family._id]);
   });

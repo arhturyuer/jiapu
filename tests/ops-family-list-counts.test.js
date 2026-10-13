@@ -10,8 +10,6 @@ test('运营家谱列表返回并展示加入用户数与谱内成员数', funct
 
   assert.match(opsApi, /userCount: Number\(stats\.userCount\) \|\| 0/);
   assert.match(opsApi, /memberCount: Number\(stats\.memberCount\) \|\| 0/);
-  assert.match(opsApi, /collection\('family_memberships'\)\.where\(\{ familyId: family\._id, status: 'active' \}\)\.count\(\)/);
-  assert.match(opsApi, /collection\('persons'\)\.where\(\{ familyId: family\._id, status: 'active' \}\)\.count\(\)/);
   assert.match(admin, /<th v-if="activeModule === 'families'">用户数<\/th>/);
   assert.match(admin, /<th v-if="activeModule === 'families'">成员数<\/th>/);
   assert.match(admin, /row\.userCount \|\| 0/);

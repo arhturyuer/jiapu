@@ -139,6 +139,7 @@ test('关于页使用正式版实际版本并按最新在前展示受控更新�
   const uploadScript = fs.readFileSync(path.join(root, 'deployment/upload-miniprogram.sh'), 'utf8');
   const verifier = fs.readFileSync(path.join(root, 'deployment/verify-release-note.mjs'), 'utf8');
   assert.deepEqual(releaseInfo.validateReleaseNotes(releaseNotes), [
+  { version: '1.6.14', summary: '减少家谱浏览和编辑时的重复请求，优化登录恢复、显示设置保存及家庭看板加载。' },
     { version: '1.6.13', summary: '修复成员生卒日期保存失败，优化保存错误提示，修复日期确认后意外弹出键盘。' },
     { version: '1.6.12', summary: '新增长辈模式与字号设置，支持简化图谱操作、放大文字和按钮，优化成员填写及全页面阅读体验。' },
     { version: '1.6.11', summary: '适配 iPad 和电脑微信大屏，优化家谱浏览、成员编辑、日期选择及图片和 PDF 保存体验。' },
@@ -298,7 +299,7 @@ test('我的页具备账户三态、独立个人资料和受控媒体展示', fu
   const userApi = fs.readFileSync(path.join(root, 'cloudfunctions/youpuUserApi/index.js'), 'utf8');
   assert.match(profile, /accountState === 'pending_delete'/);
   assert.doesNotMatch(profile, /loadFamilyPages|loadFamilies|familyList|archivedFamilies/);
-  assert.match(profile, /api\.getMediaPresentation/);
+  assert.match(profile, /profileImages\.getAvatar/);
   assert.match(template, /账户正在注销冷静期/);
   assert.match(template, /profile-card/);
   assert.match(template, /账户与隐私/);
@@ -420,7 +421,7 @@ test('用户反馈群二维码由运营后台受控替换并在小程序双入�
   assert.match(feedbackPage, /长按识别二维码/);
   assert.match(feedbackPage, /show-menu-by-longpress="{{true}}"/);
   assert.match(feedbackPage, /反馈群暂未开放/);
-  assert.match(feedbackSource, /api\.call\('feedbackGroup\.get'/);
+  assert.match(feedbackSource, /profileImages\.getFeedback\(app/);
   assert.match(feedbackSource, /wx\.previewImage/);
   assert.match(userApi, /async function feedbackGroupGet/);
   assert.match(userApi, /'feedbackGroup\.get': feedbackGroupGet/);

@@ -1011,3 +1011,27 @@ test('通过平台验收的真实与示例弹框关闭保留就绪实例，换�
     assert.equal(item.data.memberAdMounted, false, '离页始终清理实例');
   }
 });
+
+test('图谱偏好五次 500ms 调整合并一次；重置后丢弃待保存值与旧重试', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const calls = []; const app = { _sessionVersion: 0, updatePreference() {} };
+  t.mock.method(api, 'call', async (type, payload) => { calls.push({ ...payload }); return { preference: { nameLayout: payload.nameLayout, viewMode: payload.viewMode, lastViewPersonId: payload.personId } }; });
+  const page = createPage(app).page; const family = { _id: 'f1' }; page.data.currentFamily = family;
+  page._confirmedGraphPreference = { nameLayout: 'horizontal', viewMode: 'full', lastViewPersonId: '' };
+  page._lastSavedGraphPreference = JSON.stringify({ familyId: 'f1', viewMode: 'full', personId: '', nameLayout: 'horizontal' });
+  for (let i = 0; i < 5; i++) { page.saveGraphPreference(family, i % 2 ? 'horizontal' : 'vertical', 'perspective', 'parent'); t.mock.timers.tick(500); }
+  assert.equal(calls.length, 0); t.mock.timers.tick(1000); await page._graphPreferenceInFlight;
+  assert.equal(calls.length, 1); assert.equal(calls[0].nameLayout, 'vertical'); assert.equal(calls[0].personId, 'parent');
+  page.saveGraphPreference(family, 'vertical', 'perspective', 'parent'); await page.flushGraphPreference(); assert.equal(calls.length, 1);
+  page.saveGraphPreference(family, 'horizontal', 'full', ''); app._sessionVersion++; await page.flushGraphPreference(); assert.equal(calls.length, 1);
+});
+
+test('图谱保存传输失败沿用原幂等键；离页失败不回填视图', async t => {
+  const app = { _sessionVersion: 0, updatePreference() {} }; const page = createPage(app).page; const calls = [];
+  page.data.currentFamily = { _id: 'f1' }; page._confirmedGraphPreference = { nameLayout: 'horizontal', viewMode: 'full', lastViewPersonId: '' };
+  const previousWx = global.wx; t.after(() => { global.wx = previousWx; }); global.wx = { showToast() {} };
+  t.mock.method(api, 'call', async (type, payload) => { calls.push(payload); if (calls.length === 1) throw new Error('transport'); return { preference: { nameLayout: 'vertical', viewMode: 'full', lastViewPersonId: '' } }; });
+  page._unloaded = true; page.setData = () => { throw new Error('unloaded view'); };
+  page.saveGraphPreference(page.data.currentFamily, 'vertical', 'full', ''); await page.flushGraphPreference();
+  await page.flushGraphPreference(); assert.equal(calls.length, 2); assert.equal(calls[0].idempotencyKey, calls[1].idempotencyKey);
+});

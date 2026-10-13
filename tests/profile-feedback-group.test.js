@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const environment = require('../miniprogram/config/env');
+const imageCache = require('../miniprogram/utils/profile-image-cache');
 
 const root = path.resolve(__dirname, '..');
 const source = fs.readFileSync(path.join(root, 'miniprogram/pages/profile/index.js'), 'utf8');
@@ -26,6 +27,7 @@ function harness(accountState = 'active') {
     isCacheFresh: () => true,
     getProfileData: load => load(),
     getCurrentFamily: () => null,
+    setUser(user) { this.globalData.user = user; },
     clearTestSession() { this.globalData.user = null; }
   };
   const api = {
@@ -39,9 +41,18 @@ function harness(accountState = 'active') {
     showToast() {},
     reLaunch: options => { visits.push(options); return Promise.resolve(); }
   };
+  const storage = new Map(), files = new Set();
+  wx.env = { USER_DATA_PATH: '/test-user' };
+  wx.getStorageSync = key => storage.get(key);
+  wx.setStorageSync = (key, value) => storage.set(key, value);
+  wx.removeStorageSync = key => storage.delete(key);
+  wx.getFileSystemManager = () => ({ accessSync(file) { assert.ok(files.has(file)); }, unlinkSync: file => files.delete(file) });
+  wx.downloadFile = options => { files.add(options.filePath); options.success({ statusCode: 200 }); };
+  const cache = imageCache.createCache(wx, api);
   const dependencies = {
     '../../utils/launch-ad': { wrap: definition => definition },
     '../../utils/api': api,
+    '../../utils/profile-image-cache': cache,
     '../../utils/privacy': {},
     '../../utils/platform-capabilities': require('../miniprogram/utils/platform-capabilities'),
     '../../utils/form-state': { clearLeaveAlert() {} },
@@ -56,28 +67,115 @@ function harness(accountState = 'active') {
   }, { filename: 'profile/index.js' });
   page.data = { ...page.data };
   page.setData = patch => { updates.push(patch); Object.assign(page.data, patch); };
-  return { page, app, api, wx, calls, previews, updates, visits };
+  function feedbackPage() {
+    let definition;
+    vm.runInNewContext(fs.readFileSync(path.join(root, 'miniprogram/pages/feedback-group/index.js'), 'utf8'), {
+      getApp: () => app, Page: value => { definition = value; }, wx,
+      require(name) { assert.ok(dependencies[name], name); return dependencies[name]; }
+    });
+    definition.data = { ...definition.data };
+    definition.setData = patch => Object.assign(definition.data, patch);
+    return definition;
+  }
+  return { page, app, api, wx, calls, previews, updates, visits, cache, files, feedbackPage };
 }
 
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
-test('反馈二维码独立于已缓存资料，每次显示和返回页面均获取运营最新配置', async () => {
+test('我的和独立反馈群页共享一次获取，首次登录后也能正常完成并恢复图片失败', async () => {
+  const h = harness();
+  h.app.globalData.user = null;
+  h.app.ensureLogin = () => { h.app.globalData.user = { _id: 'new-user' }; return Promise.resolve(); };
+  const feedback = h.feedbackPage();
+  await Promise.all([h.page.loadFeedbackGroup(), feedback.loadFeedbackGroup()]);
+  assert.deepEqual(h.calls, ['feedbackGroup.get']);
+  assert.equal(feedback.data.qrCodeUrl, h.page.data.feedbackQrCodeUrl);
+  feedback.qrError({ currentTarget: { dataset: { url: feedback.data.qrCodeUrl } } });
+  assert.match(feedback.data.error, /重新加载/);
+  await feedback.loadFeedbackGroup({ type: 'tap' });
+  assert.equal(h.calls.length, 2);
+  assert.equal(feedback.data.loading, false);
+});
+
+test('长期头像不随资料刷新、昵称或家谱变化回源；文件丢失后恢复', async () => {
+  const h = harness();
+  h.app.globalData.user.avatarAssetId = 'a1';
+  let presentations = 0;
+  h.api.getMediaPresentation = async () => { presentations += 1; return { a1: { status: 'approved', url: 'https://example.test/a1' } }; };
+  await h.page.loadPage();
+  const local = h.page.data.avatarUrl;
+  assert.ok(h.files.has(local));
+  for (let i = 0; i < 5; i++) {
+    h.app.globalData.user.nickName = '改名' + i;
+    h.app.globalData.currentFamily = { _id: 'family-' + i };
+    await h.page.loadPage({ force: true });
+  }
+  assert.equal(presentations, 1);
+  h.files.delete(local);
+  await h.page.loadPage();
+  assert.equal(presentations, 2);
+  assert.ok(h.files.has(h.page.data.avatarUrl));
+});
+
+test('更新头像失败保留旧缓存，成功替换且资料迟到响应不覆盖新图', async () => {
+  const h = harness();
+  h.app.globalData.user.avatarAssetId = 'a1';
+  h.api.getMediaPresentation = async ids => ({ [ids[0]]: { status: 'approved', url: 'https://example.test/' + ids[0] } });
+  await h.page.loadPage();
+  const old = h.page.data.avatarUrl;
+  h.api.call = () => Promise.reject(new Error('save failed'));
+  await assert.rejects(h.page.saveProfileAvatar({ assetId: 'a2', previewUrl: 'local-preview', moderationStatus: 'approved' }));
+  assert.equal(h.cache.peekAvatar(h.app, 'a1').url, old);
+  const delayed = deferred();
+  h.app.getProfileData = () => delayed.promise;
+  const loading = h.page.loadPage({ force: true });
+  h.api.call = async () => ({ user: { _id: 'fictional-user', nickName: '测试用户', avatarAssetId: 'a2' }, moderationStatus: 'approved' });
+  await h.page.saveProfileAvatar({ assetId: 'a2', previewUrl: 'local-preview', moderationStatus: 'approved' });
+  const fresh = h.page.data.avatarUrl;
+  delayed.resolve({ user: { _id: 'fictional-user', avatarAssetId: 'a1' }, avatarAssetId: 'a1' });
+  await loading;
+  assert.equal(h.page.data.avatarUrl, fresh);
+  assert.equal(h.files.has(old), false);
+  assert.ok(h.files.has(fresh));
+});
+
+test('头像解码错误仅自动重取一次，旧图片错误和隐藏回调不清理新缓存', async () => {
+  const h = harness();
+  h.app.globalData.user.avatarAssetId = 'a1';
+  let presentations = 0;
+  h.api.getMediaPresentation = async () => { presentations += 1; return { a1: { status: 'approved', url: 'https://example.test/a1' } }; };
+  await h.page.loadPage();
+  const old = { currentTarget: { dataset: { asset: 'a1', url: h.page.data.avatarUrl } } };
+  h.page.avatarError(old); await flush();
+  assert.equal(presentations, 2);
+  const current = h.page.data.avatarUrl;
+  h.page.avatarError(old);
+  assert.equal(h.page.data.avatarUrl, current);
+  h.page.avatarError({ currentTarget: { dataset: { asset: 'a1', url: current } } }); await flush();
+  assert.equal(presentations, 2);
+});
+
+test('反馈二维码独立于资料缓存，切回页面命中本地缓存且不清空或显示加载提示', async () => {
   const h = harness();
   h.page._hasLoaded = true;
   h.page.data.loading = false;
+  h.page.data.user = h.app.globalData.user;
+  h.page.data.avatarAssetId = '';
   h.app.getProfileData = () => { throw new Error('不应刷新已缓存资料'); };
   h.page.onShow();
   await flush();
   assert.deepEqual(h.calls, ['feedbackGroup.get']);
-  assert.equal(h.page.data.feedbackQrCodeUrl, qr.qrCodeUrl);
+  const cachedUrl = h.page.data.feedbackQrCodeUrl;
+  assert.match(cachedUrl, /youpu-profile-image-/);
   assert.equal(h.page.data.feedbackLoading, false);
   h.page.onHide();
   h.api.call = type => { h.calls.push(type); return Promise.resolve({ available: true, qrCodeUrl: 'https://example.test/replaced.png' }); };
   h.page.onShow();
-  assert.equal(h.page.data.feedbackQrCodeUrl, '');
+  assert.equal(h.page.data.feedbackQrCodeUrl, cachedUrl);
+  assert.equal(h.page.data.feedbackLoading, false);
   await flush();
-  assert.deepEqual(h.calls, ['feedbackGroup.get', 'feedbackGroup.get']);
-  assert.equal(h.page.data.feedbackQrCodeUrl, 'https://example.test/replaced.png');
+  assert.deepEqual(h.calls, ['feedbackGroup.get']);
+  assert.equal(h.page.data.feedbackQrCodeUrl, cachedUrl);
 });
 
 test('二维码未返回时个人资料已显示，正常及注销冷静期账户均可读取', async () => {
@@ -93,7 +191,7 @@ test('二维码未返回时个人资料已显示，正常及注销冷静期账�
     request.resolve(qr);
     await flush();
     assert.equal(h.page.data.feedbackAvailable, true);
-    assert.equal(h.page.data.feedbackQrCodeUrl, qr.qrCodeUrl);
+    assert.match(h.page.data.feedbackQrCodeUrl, /youpu-profile-image-/);
   }
 });
 
@@ -102,7 +200,7 @@ test('未配置及不完整配置清除旧二维码，进入不可用状态', as
   await h.page.loadFeedbackGroup();
   for (const config of [{ available: false, qrCodeUrl: '' }, { available: true, qrCodeUrl: '' }, { available: false, qrCodeUrl: qr.qrCodeUrl }]) {
     h.api.call = () => Promise.resolve(config);
-    await h.page.loadFeedbackGroup();
+    await h.page.loadFeedbackGroup({ force: true });
     assert.equal(h.page.data.feedbackLoading, false);
     assert.equal(h.page.data.feedbackAvailable, false);
     assert.equal(h.page.data.feedbackError, '');
@@ -115,7 +213,7 @@ test('请求或登录失败结束加载，重试成功恢复二维码且不设�
     const h = harness();
     if (failure === 'request') h.api.call = () => Promise.reject(new Error('网络失败'));
     else h.app.ensureLogin = () => Promise.reject(new Error('登录失败'));
-    await h.page.loadFeedbackGroup();
+    await h.page.loadFeedbackGroup({ force: true });
     assert.equal(h.page.data.feedbackLoading, false);
     assert.ok(h.page.data.feedbackError);
     assert.equal(h.page.data.error, '');
@@ -135,13 +233,13 @@ test('新请求优先，旧成功或失败不覆盖已替换二维码', async ()
     const pending = h.page.loadFeedbackGroup();
     await flush();
     h.api.call = () => Promise.resolve({ available: true, qrCodeUrl: 'https://example.test/new.png' });
-    await h.page.loadFeedbackGroup();
+    await h.page.loadFeedbackGroup({ force: true });
     const count = h.updates.length;
     if (rejectOld) old.reject(new Error('旧请求失败'));
     else old.resolve(qr);
     await pending;
     assert.equal(h.updates.length, count);
-    assert.equal(h.page.data.feedbackQrCodeUrl, 'https://example.test/new.png');
+    assert.match(h.page.data.feedbackQrCodeUrl, /youpu-profile-image-/);
   }
 });
 
@@ -173,7 +271,7 @@ test('隐藏和卸载后丢弃迟到结果，登录等待期间离页不再发�
 test('当前图片失败可重试，同一 URL 的旧图片错误也不会污染新请求', async () => {
   const h = harness();
   await h.page.loadFeedbackGroup();
-  const event = { currentTarget: { dataset: { version: h.page.data.feedbackVersion, url: qr.qrCodeUrl } } };
+  const event = { currentTarget: { dataset: { version: h.page.data.feedbackVersion, url: h.page.data.feedbackQrCodeUrl } } };
   h.page.feedbackQrError(event);
   assert.equal(h.page.data.feedbackAvailable, false);
   assert.equal(h.page.data.feedbackQrCodeUrl, '');
@@ -181,7 +279,7 @@ test('当前图片失败可重试，同一 URL 的旧图片错误也不会污染
   await h.page.loadFeedbackGroup();
   h.page.feedbackQrError(event);
   assert.equal(h.page.data.feedbackAvailable, true);
-  const current = { currentTarget: { dataset: { version: h.page.data.feedbackVersion, url: qr.qrCodeUrl } } };
+  const current = { currentTarget: { dataset: { version: h.page.data.feedbackVersion, url: h.page.data.feedbackQrCodeUrl } } };
   h.page.onHide();
   h.page.feedbackQrError(current);
   assert.equal(h.page.data.feedbackError, '');
@@ -195,8 +293,8 @@ test('点击当前二维码使用原生可长按预览，不可用及离页后�
   h.page.previewFeedbackQrCode();
   assert.equal(h.previews.length, 1);
   const options = h.previews[0];
-  assert.equal(options.current, qr.qrCodeUrl);
-  assert.deepEqual(Array.from(options.urls), [qr.qrCodeUrl]);
+  assert.equal(options.current, h.page.data.feedbackQrCodeUrl);
+  assert.deepEqual(Array.from(options.urls), [h.page.data.feedbackQrCodeUrl]);
   assert.equal(options.showmenu, true);
   h.page.onHide();
   h.page.previewFeedbackQrCode();
@@ -231,7 +329,7 @@ test('账户重置丢弃旧响应，取消或失败后恢复读取，成功后�
       assert.equal(h.visits[0].url, '/pages/tree/index');
     } else {
       assert.equal(h.page.data.feedbackAvailable, true);
-      assert.equal(h.calls.at(-1), 'feedbackGroup.get');
+      assert.equal(h.calls.filter(type => type === 'feedbackGroup.get').length, 0);
     }
   }
 });

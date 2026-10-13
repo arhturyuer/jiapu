@@ -37,7 +37,7 @@ function server(role = 'admin') {
     }
   };
   const context = {
-    db, _: db.command, personDate: serverDate, domain,
+    db, _: db.command, personDate: serverDate, domain, requestContext: require('../cloudfunctions/youpuUserApi/request-context'),
     cleanDate: domain.cleanDate, cleanText: domain.cleanText,
     assert: function (condition, code, message) { if (!condition) throw Object.assign(new Error(message), { code }); },
     getOpenid: () => 'fake-actor', userId: () => 'fake-user',
@@ -52,7 +52,7 @@ function server(role = 'admin') {
     requireActiveUser: async () => {},
     requireMembership: async () => {
       context.assert(['admin', 'member'].includes(role), 'NO_PERMISSION', 'no permission');
-      return { membership: { role, displayName: '' } };
+      return { family: db.get('families', 'fake-family'), membership: { role, displayName: '' } };
     },
     testAccounts: { usesTestIdentity: () => true }, cloud: { getWXContext: () => ({}) },
     requireOwnedMedia: async () => {}, moderateText: async () => {},
@@ -63,7 +63,7 @@ function server(role = 'admin') {
     sourcePart(source, 'function cleanGender(', '\nfunction cleanPersonIds('),
     sourcePart(source, 'function publicPerson(', '\nfunction profileMissingFields('),
     sourcePart(source, 'function normalizePersonDateFields(', '\nasync function requireOwnedMedia('),
-    sourcePart(source, 'async function audit(', '\nasync function createPersonTx('),
+    sourcePart(source, 'function publicFamilyCounters(', '\nasync function createPersonTx('),
     sourcePart(source, 'async function personUpdate(', '\nasync function personDelete('),
     sourcePart(source, 'async function changeReview(', '\nfunction invitationState(')
   ].join('\n'), context);

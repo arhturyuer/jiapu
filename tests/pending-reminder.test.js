@@ -118,8 +118,10 @@ test('切换家谱后旧响应不能覆盖新角标，退出清除角标', async
   try {
     const app = setup.app;
     app.setCurrentFamily({ _id: 'family-1', status: 'active' });
+    await new Promise(resolve => setTimeout(resolve, 5));
     const oldRequest = requests[0];
     app.setCurrentFamily({ _id: 'family-2', status: 'active' });
+    await new Promise(resolve => setTimeout(resolve, 5));
     assert.equal(requests[1].familyId, 'family-2');
     requests[1].resolve({ count: 2 });
     await app._pendingBadgeRequest.promise;

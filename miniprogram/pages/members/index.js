@@ -89,6 +89,7 @@ Page(launchAd.wrap({
   },
 
   onPullDownRefresh: function () {
+    if (app.invalidateMembershipStatus) app.invalidateMembershipStatus(this.data.currentFamily && this.data.currentFamily._id);
     this.loadDashboard({ force: true }).then(function () { wx.stopPullDownRefresh(); });
   },
 
@@ -158,7 +159,8 @@ Page(launchAd.wrap({
         self.setData({ systemShareCard: card });
       });
       app.setCurrentFamily(data.family);
-      if (app.setPendingBadgeCount) app.setPendingBadgeCount(data.family._id, data.family.currentRole === 'viewer' ? 0 : data.stats.pendingCount);
+      if (app.seedFamilyStatus) app.seedFamilyStatus(data.family._id, data);
+      else if (app.setPendingBadgeCount) app.setPendingBadgeCount(data.family._id, data.family.currentRole === 'viewer' ? 0 : data.stats.pendingCount);
       self._hasLoaded = true;
       return adAccess.refresh(self, app, 'family', data.family);
     }).catch(function (error) {
@@ -256,9 +258,11 @@ Page(launchAd.wrap({
     }).then(function (data) {
       if (!data) return;
       wx.showToast({ title: decision === 'approve' ? '已通过' : '已拒绝', icon: 'success' });
-      app.invalidateFamilyData(self.data.currentFamily && self.data.currentFamily._id);
-      if (app.refreshPendingBadge) app.refreshPendingBadge({ force: true }).catch(function () {});
-      self.loadDashboard({ force: true });
+      const familyId = data.familyId || self.data.currentFamily && self.data.currentFamily._id;
+      if (!app.handleFamilyMutation) {
+        if (data.approved) app.invalidateFamilyData(familyId); else app.invalidateCache({ dashboard: familyId });
+      }
+      self.loadDashboard({ refreshDashboard: true });
     }).catch(function (error) {
       wx.showToast({ title: api.userMessage(error, '处理失败'), icon: 'none' });
     });

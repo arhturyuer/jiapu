@@ -10,6 +10,11 @@ if (args.length > 1 || (args.length === 1 && args[0] !== '--build-admin')) {
   process.exit(2);
 }
 const buildAdmin = args[0] === '--build-admin';
+const testConcurrency = process.env.CHECK_TEST_CONCURRENCY || '4';
+if (!/^[1-4]$/.test(testConcurrency)) {
+  console.error('CHECK_TEST_CONCURRENCY 仅允许 1～4；默认 4，性能耗时门槛不变。');
+  process.exit(2);
+}
 const buildEnv = process.env.VITE_CLOUDBASE_ENV || '';
 if (buildAdmin && (!buildEnv || /REPLACE_WITH|YOUR_|<|>|\s/.test(buildEnv))) {
   console.error('--build-admin 必须显式提供有效的 VITE_CLOUDBASE_ENV；仅用于本地构建，不连接云端。');
@@ -42,7 +47,7 @@ try {
   if (!tests.length) throw new Error('未找到自动化测试，已阻止空检查通过。');
   // Bound CPU contention: cold-start performance assertions keep their original
   // wall-clock limits while the full suite avoids flooding desktop processes.
-  run(node, ['--test', '--test-concurrency=4', ...tests.map(function (file) { return resolve(root, file); })]);
+  run(node, ['--test', '--test-concurrency=' + testConcurrency, ...tests.map(function (file) { return resolve(root, file); })]);
   // The build script already includes vue-tsc; avoid running it twice.
   run(pnpm, ['run', buildAdmin ? 'build' : 'typecheck'], resolve(root, 'admin'));
   console.log('本地代码、文档、测试和后台' + (buildAdmin ? '构建' : '类型检查') + '通过；未执行云端或微信操作。');

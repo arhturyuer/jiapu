@@ -8,6 +8,7 @@ const jobDispatcher = require('./job-dispatcher');
 const subscriptionNotification = require('./subscription-notification');
 const stagingAccountReset = require('./staging-account-reset');
 const analytics = require('./analytics');
+const requestContext = require('./request-context');
 const familyCopy = require('./family-copy');
 const pdfExport = require('./pdf-export');
 
@@ -104,8 +105,10 @@ function assert(condition, code, message, details) {
   if (!condition) throw new BusinessError(code, message, details);
 }
 
-function success(data) {
-  return { success: true, data: data || {} };
+function success(data, meta) {
+  const result = { success: true, data: data || {} };
+  if (meta) result.meta = meta;
+  return result;
 }
 
 function cleanText(value, maxLength) {
@@ -596,6 +599,8 @@ async function listPage(collectionName, where, event, allowedSortFields) {
 }
 
 async function ensureUser(openid, scope) {
+  const remembered = scope && scope !== db ? requestContext.transactionActor(scope, userId(openid)) : requestContext.user(userId(openid));
+  if (remembered) return remembered;
   if (!scope) {
     const existing = await maybeGet(db, 'users', userId(openid));
     if (existing) return existing;
@@ -628,6 +633,7 @@ async function requireActiveUser(openid) {
   }
   assert(user.status !== 'frozen', 'ACCOUNT_FROZEN', '账户暂时无法使用，请联系微信客服');
   assert(user.status === 'active', 'ACCOUNT_UNAVAILABLE', '账户当前不可用');
+  requestContext.rememberUser(user);
   return user;
 }
 
@@ -647,13 +653,16 @@ async function getMembership(scope, familyId, openid) {
 
 async function requireMembership(familyId, roles, scope, openidOverride, options) {
   const openid = openidOverride || getOpenid();
-  const family = await getFamily(scope || db, familyId, options);
-  const membership = await getMembership(scope || db, familyId, openid);
+  const remembered = (!scope || scope === db) && requestContext.access(familyId, userId(openid));
+  const family = remembered ? remembered.family : await getFamily(scope || db, familyId, options);
+  const membership = remembered ? remembered.membership : await getMembership(scope || db, familyId, openid);
   assert(membership, 'NO_FAMILY_ACCESS', '你还不是这个家谱的成员');
   if (roles && roles.length) {
     assert(domain.roleAllows(membership.role, roles), 'NO_PERMISSION', '当前身份不能执行这个操作');
   }
-  return { openid: openid, membership: membership, family: family };
+  const access = { openid: openid, membership: membership, family: family };
+  if (!scope || scope === db) requestContext.rememberAccess(access);
+  return access;
 }
 
 function normalizePersonDateFields(source, result) {
@@ -804,9 +813,21 @@ async function moderateText(openid, values) {
   }
 }
 
+function publicFamilyCounters(family, personsDelta, relationsDelta, revisionDelta = 1) {
+  return { familyId: family._id, personCount: Number(family.personCount || 0) + personsDelta,
+    relationCount: Number(family.relationCount || 0) + relationsDelta, relationRevision: Number(family.relationRevision || 0) + revisionDelta };
+}
+
+async function updateFamilyContent(scope, familyId, options) {
+  const data = Object.assign({}, options.data);
+  if (!requestContext.hasFamilyRevision(scope, familyId)) data.contentRevision = _.inc(1);
+  await scope.collection('families').doc(familyId).update({ data });
+  requestContext.markFamilyRevision(scope, familyId);
+}
+
 async function audit(scope, data) {
   if (data.familyId && ['family.update', 'person.create_related', 'person.update', 'person.delete', 'relation.link_existing', 'relation.remove', 'relation.reorder_children', 'change.approve'].includes(data.action)) {
-    await scope.collection('families').doc(data.familyId).update({ data: { contentRevision: _.inc(1) } });
+    if (!requestContext.hasFamilyRevision(scope, data.familyId)) await updateFamilyContent(scope, data.familyId, { data: {} });
   }
   await scope.collection('audit_logs').add({
     data: {
@@ -842,23 +863,13 @@ async function mutate(type, event, openid, handler) {
     if (testAccounts.usesTestIdentity(cloud.getWXContext() || {})) {
       await transaction.collection('users').doc(actor._id).update({ data: { updatedAt: db.serverDate() } });
     }
+    requestContext.rememberTransactionActor(transaction, actor);
+    const result = await handler(transaction);
     await transaction.collection('idempotency_records').doc(recordId).set({
       data: {
-        actorId: userId(openid),
-        action: type,
-        requestId: requestId,
-        status: 'processing',
-        createdAt: db.serverDate(),
-        updatedAt: db.serverDate()
-      }
-    });
-    const result = await handler(transaction);
-    await transaction.collection('idempotency_records').doc(recordId).update({
-      data: {
-        status: 'completed',
-        result: result || {},
-        updatedAt: db.serverDate(),
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+        actorId: userId(openid), action: type, requestId: requestId,
+        status: 'completed', result: result || {}, createdAt: db.serverDate(),
+        updatedAt: db.serverDate(), expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
       }
     });
     return result || {};
@@ -1084,9 +1095,12 @@ async function linkExistingTx(transaction, familyId, anchorPersonId, relatedPers
   return { person: related, relationCount: createdCount };
 }
 
+async function authIdentity() { return { userId: userId(getOpenid()) }; }
+
 async function authLogin() {
   const openid = getOpenid();
   const user = await ensureUser(openid);
+  requestContext.rememberUser(user);
   let deletion = null;
   if (user.status === 'pending_delete') {
     deletion = await maybeGet(db, 'account_deletion_requests', 'del_' + userId(openid));
@@ -1479,7 +1493,7 @@ async function familyUpdate(event) {
   await moderateText(openid, [name, description]);
   return mutate('family.update', event, openid, async function (transaction) {
     const access = await requireMembership(event.familyId, ['admin'], transaction, openid);
-    await transaction.collection('families').doc(event.familyId).update({
+    await updateFamilyContent(transaction, event.familyId, {
       data: { name: name, description: description, updatedAt: db.serverDate() }
     });
     await audit(transaction, {
@@ -1612,7 +1626,7 @@ async function graphGet(event) {
       profileMissingFields: profileMissingFields(person)
     };
   });
-  return {
+  const result = {
     family: publicFamily(family, access.membership.role),
     persons: compactPersons,
     relations: visibleRelations.map(function (relation) {
@@ -1631,6 +1645,12 @@ async function graphGet(event) {
     preference: normalizeFamilyPreference(preference),
     currentRole: access.membership.role
   };
+  if (event.includeStatus === true) {
+    result.membershipStatus = await membershipStatus({ familyId: event.familyId });
+    result.pendingCount = (await changePendingCount({ familyId: event.familyId })).count;
+    result.statusAsOf = new Date().toISOString();
+  }
+  return result;
 }
 
 async function familyDashboard(event) {
@@ -1639,21 +1659,14 @@ async function familyDashboard(event) {
   const access = await requireMembership(event.familyId, ACTIVE_ROLES, db, openid);
   const family = access.family;
   const memberships = await listAll('family_memberships', { familyId: event.familyId, status: 'active' }, 500);
-  const persons = await listAll('persons', { familyId: event.familyId, status: 'active' }, GRAPH_PERSON_LIMIT);
-  const completedFields = persons.reduce(function (total, person) {
-    return total
-      + (person.name ? 1 : 0)
-      + (person.gender && person.gender !== 'unknown' ? 1 : 0)
-      + (person.birthDate || person.birthDateInfo ? 1 : 0)
-      + (person.avatarAssetId ? 1 : 0)
-      + (person.bio || person.birthPlace ? 1 : 0);
-  }, 0);
-  const completion = persons.length ? Math.round(completedFields / (persons.length * 5) * 100) : 0;
+  const completion = await require('./dashboard-completion').readCompletion(db, event.familyId, GRAPH_PERSON_LIMIT, assert);
   const pendingWhere = access.membership.role === 'admin'
     ? { familyId: event.familyId, status: 'pending' }
     : { familyId: event.familyId, status: 'pending', createdBy: userId(openid) };
   const pending = await listAll('change_requests', pendingWhere, 500);
   return {
+    membershipStatus: await membershipStatus({ familyId: event.familyId }),
+    statusAsOf: new Date().toISOString(),
     family: publicFamily(family, access.membership.role),
     stats: {
       personCount: family.personCount || 0,
@@ -1956,7 +1969,7 @@ async function personCreateRelated(event) {
       openid,
       Object.assign({}, payload, { relations: relations })
     );
-    await transaction.collection('families').doc(event.familyId).update({
+    await updateFamilyContent(transaction, event.familyId, {
       data: {
         personCount: _.inc(1),
         relationCount: _.inc(created.relationCount),
@@ -1974,7 +1987,7 @@ async function personCreateRelated(event) {
       summary: '添加家庭成员',
       requestId: event.requestId
     });
-    return { pending: false, person: created.person, relationCount: created.relationCount };
+    return { pending: false, person: created.person, relationCount: created.relationCount, familyCounters: publicFamilyCounters(access.family, 1, created.relationCount) };
   });
 }
 
@@ -2046,7 +2059,7 @@ async function relationLinkExisting(event) {
       openid,
       relations
     );
-    await transaction.collection('families').doc(familyId).update({
+    await updateFamilyContent(transaction, familyId, {
       data: {
         relationCount: _.inc(linked.relationCount),
         relationRevision: _.inc(1),
@@ -2063,7 +2076,7 @@ async function relationLinkExisting(event) {
       summary: '关联已有家庭成员',
       requestId: event.requestId
     });
-    return { pending: false, person: publicPerson(linked.person), relationCount: linked.relationCount };
+    return { familyCounters: publicFamilyCounters(access.family, 0, linked.relationCount), pending: false, person: publicPerson(linked.person), relationCount: linked.relationCount };
   });
 }
 
@@ -2129,7 +2142,7 @@ async function relationReorderChildren(event) {
     }
     assert(Number(access.family.relationRevision || 0) === requestedRevision, 'GRAPH_CHANGED', '家谱关系刚有变化，请刷新后重试');
     await applyChildOrderTx(transaction, familyId, parentPersonId, orderedChildIds);
-    await transaction.collection('families').doc(familyId).update({
+    await updateFamilyContent(transaction, familyId, {
       data: { relationRevision: _.inc(1), updatedAt: db.serverDate() }
     });
     await audit(transaction, {
@@ -2142,7 +2155,7 @@ async function relationReorderChildren(event) {
       summary: '调整子女排行',
       requestId: event.requestId
     });
-    return { pending: false, parentPersonId: parentPersonId, relationRevision: requestedRevision + 1 };
+    return { pending: false, parentPersonId: parentPersonId, relationRevision: requestedRevision + 1, familyCounters: publicFamilyCounters(access.family, 0, 0) };
   });
 }
 
@@ -2171,7 +2184,7 @@ async function relationRemove(event) {
     await transaction.collection('relations').doc(relation._id).update({
       data: { status: 'deleted', deletedAt: db.serverDate(), updatedAt: db.serverDate() }
     });
-    await transaction.collection('families').doc(relation.familyId).update({
+    await updateFamilyContent(transaction, relation.familyId, {
       data: {
         relationCount: _.inc(-1),
         relationRevision: _.inc(1),
@@ -2188,7 +2201,7 @@ async function relationRemove(event) {
       summary: '移除家庭成员关系',
       requestId: event.requestId
     });
-    return { removed: true, relationId: relation._id };
+    return { removed: true, relationId: relation._id, familyCounters: publicFamilyCounters(access.family, 0, -1) };
   });
 }
 
@@ -2267,7 +2280,7 @@ async function personDelete(event) {
         data: { status: 'deleted', deletedAt: db.serverDate(), updatedAt: db.serverDate() }
       });
     }
-    await transaction.collection('families').doc(person.familyId).update({
+    await updateFamilyContent(transaction, person.familyId, {
       data: {
         personCount: _.inc(-1),
         relationCount: _.inc(-related.length),
@@ -2285,7 +2298,7 @@ async function personDelete(event) {
       summary: '删除家庭成员',
       requestId: event.requestId
     });
-    return { deleted: true };
+    return { deleted: true, familyCounters: publicFamilyCounters(access.family, -1, -related.length) };
   });
 }
 
@@ -2332,6 +2345,7 @@ async function changeReview(event) {
     assert(request.status === 'pending', 'REQUEST_REVIEWED', '这条申请已经处理');
     const approved = event.decision === 'approve';
     let createdPerson = null;
+    let familyCounters = null;
     if (approved && request.type === 'create_related') {
       assert(Number(access.family.personCount || 0) < GRAPH_PERSON_LIMIT, 'FAMILY_PERSON_LIMIT', '单个家谱最多支持 500 人');
       assert(graphSnapshot && Number(access.family.relationRevision || 0) === graphSnapshot.relationRevision, 'GRAPH_CHANGED', '家谱关系刚刚发生变化，请重试');
@@ -2344,7 +2358,7 @@ async function changeReview(event) {
         openid,
         Object.assign({}, relatedOptions(request.payload), { relations: graphSnapshot.relations })
       );
-      await transaction.collection('families').doc(request.familyId).update({
+      await updateFamilyContent(transaction, request.familyId, {
         data: {
           personCount: _.inc(1),
           relationCount: _.inc(createdPerson.relationCount),
@@ -2352,6 +2366,7 @@ async function changeReview(event) {
           updatedAt: db.serverDate()
         }
       });
+      familyCounters = publicFamilyCounters(access.family, 1, createdPerson.relationCount);
       createdPerson = createdPerson.person;
     }
     if (approved && request.type === 'link_existing_relation') {
@@ -2368,7 +2383,8 @@ async function changeReview(event) {
         graphSnapshot.relations
       );
       createdPerson = linked.person;
-      await transaction.collection('families').doc(request.familyId).update({
+      familyCounters = publicFamilyCounters(access.family, 0, linked.relationCount);
+      await updateFamilyContent(transaction, request.familyId, {
         data: {
           relationCount: _.inc(linked.relationCount),
           relationRevision: _.inc(1),
@@ -2377,6 +2393,7 @@ async function changeReview(event) {
       });
     }
     if (approved && request.type === 'update_person') {
+      familyCounters = publicFamilyCounters(access.family, 0, 0, 0);
       const person = await mustGet(transaction, 'persons', request.payload.personId, 'PERSON_NOT_FOUND', '成员不存在');
       assert(person.familyId === request.familyId, 'CROSS_FAMILY_RELATION', '申请数据异常');
       if (request.payload.changes.gender !== undefined) assertGenderChangeAllowed(person.gender, request.payload.changes.gender);
@@ -2386,6 +2403,7 @@ async function changeReview(event) {
       });
     }
     if (approved && request.type === 'reorder_children') {
+      familyCounters = publicFamilyCounters(access.family, 0, 0);
       const requestedIds = request.payload && Array.isArray(request.payload.orderedChildIds) ? request.payload.orderedChildIds : [];
       assert(graphSnapshot && Number(access.family.relationRevision || 0) === graphSnapshot.relationRevision
         && request.payload && Number(request.payload.relationRevision) === graphSnapshot.relationRevision,
@@ -2396,7 +2414,7 @@ async function changeReview(event) {
       assert(orderedChildIds.length === requestedIds.length, 'INVALID_CHILD_ORDER', '子女排行不完整');
       validateChildOrder(parent._id, orderedChildIds, graphSnapshot.relations);
       await applyChildOrderTx(transaction, request.familyId, parent._id, orderedChildIds);
-      await transaction.collection('families').doc(request.familyId).update({
+      await updateFamilyContent(transaction, request.familyId, {
         data: { relationRevision: _.inc(1), updatedAt: db.serverDate() }
       });
     }
@@ -2419,7 +2437,7 @@ async function changeReview(event) {
       summary: approved ? '通过修改申请' : '拒绝修改申请',
       requestId: event.requestId
     });
-    return { approved: approved, person: createdPerson ? publicPerson(createdPerson) : null };
+    return { familyId: request.familyId, familyCounters: familyCounters, approved: approved, person: createdPerson ? publicPerson(createdPerson) : null };
   });
 }
 
@@ -2864,8 +2882,11 @@ async function mediaPrepare(event) {
   const kind = ['user_avatar', 'person_avatar'].includes(event.kind) ? event.kind : 'person_avatar';
   if (event.familyId) await requireMembership(event.familyId, ['admin', 'member'], db, openid);
   return mutate('media.prepare', event, openid, async function (transaction) {
-    const result = await transaction.collection('media_assets').add({
+    const assetId = 'ma_' + randomToken(24);
+    const cloudPath = ['staging', user._id, assetId + '.' + extension].join('/');
+    await transaction.collection('media_assets').doc(assetId).set({
       data: {
+        cloudPath: cloudPath,
         ownerId: user._id,
         familyId: cleanText(event.familyId, 80),
         kind: kind,
@@ -2875,9 +2896,7 @@ async function mediaPrepare(event) {
         updatedAt: db.serverDate()
       }
     });
-    const cloudPath = ['staging', user._id, result._id + '.' + extension].join('/');
-    await transaction.collection('media_assets').doc(result._id).update({ data: { cloudPath: cloudPath } });
-    return { assetId: result._id, cloudPath: cloudPath, maxBytes: 5 * 1024 * 1024 };
+    return { assetId: assetId, cloudPath: cloudPath, maxBytes: 5 * 1024 * 1024 };
   });
 }
 
@@ -3833,27 +3852,36 @@ async function analyticsTrack(event) {
     const result = await db.collection('example_templates').where({ slug: slug, status: 'published' }).limit(1).get();
     assert(result.data && result.data.length, 'EXAMPLE_NOT_FOUND', '示例暂不可用');
   }
-  await analyticsTracker.record(user, familyId, kind === 'family', kind === 'example');
+  const recorded = await analyticsTracker.record(user, familyId, kind === 'family', kind === 'example');
+  requestContext.rememberActivity({ day: recorded && recorded.day || analytics.day(new Date()), kind, targetId: kind === 'family' ? familyId : kind === 'example' ? cleanText(event.slug, 80) : '' });
   return { recorded: true };
 }
 
 // Old clients contribute successful business calls; cached displays are captured
 // explicitly by the new client. Analytics failures never change a business result.
 async function recordBusinessActivity(type, request, data) {
-  if (type === 'analytics.track' || type === 'account.resetTest') return;
+  if (['analytics.track', 'account.resetTest', 'auth.identity'].includes(type)) return;
   const openid = getOpenid();
-  const user = await maybeGet(db, 'users', userId(openid));
+  const actorId = userId(openid);
+  const user = requestContext.user(actorId) || await maybeGet(db, 'users', actorId);
   if (!user || user.status !== 'active') return;
   let familyId = cleanText(request.familyId || data && data.family && data.family._id, 80);
   if (familyId) {
-    try { await requireMembership(familyId, ACTIVE_ROLES, db, openid); }
+    try { if (!requestContext.access(familyId, actorId)) await requireMembership(familyId, ACTIVE_ROLES, db, openid); }
     catch (error) { familyId = ''; }
   }
-  await analyticsTracker.record(user, familyId, Boolean(familyId && ['graph.get', 'family.dashboard'].includes(type)), type === 'examples.get');
+  const entered = Boolean(familyId && ['graph.get', 'family.dashboard'].includes(type));
+  const example = type === 'examples.get';
+  const recorded = await analyticsTracker.record(user, familyId, entered, example);
+  const day = recorded && recorded.day || analytics.day(new Date());
+  requestContext.rememberActivity({ day, kind: 'foreground', targetId: '' });
+  if (entered) requestContext.rememberActivity({ day, kind: 'family', targetId: familyId });
+  if (example) requestContext.rememberActivity({ day, kind: 'example', targetId: cleanText(request.slug || data && data.example && data.example.slug, 80) });
 }
 
 const handlers = {
   'analytics.track': analyticsTrack,
+  'auth.identity': authIdentity,
   'auth.login': authLogin,
   'auth.updateProfile': authUpdateProfile,
   'auth.updateAvatar': authUpdateAvatar,
@@ -3942,7 +3970,7 @@ exports.main = async function (event) {
     const handler = handlers[type];
     assert(handler, 'UNKNOWN_ACTION', '暂不支持这个操作');
     if (type === 'account.resetTest') testAccounts.assertAllowed(context, request);
-    return await testAccounts.run(context, async function () {
+    return await requestContext.run(() => testAccounts.run(context, async function () {
       anonymousActorId = context.OPENID ? userId(context.OPENID) : '';
       if (MUTATION_TYPES.has(type)) request.requestId = requestId;
       if (type !== 'account.resetTest' && MUTATION_TYPES.has(type) && testAccounts.usesTestIdentity(context) && request.testActorId) {
@@ -3950,11 +3978,14 @@ exports.main = async function (event) {
       }
       if (RATE_LIMITS[type]) await enforceRateLimit(getOpenid(), type);
       const data = await handler(request);
+      // Mutations may revoke membership or change account/family state. Capture
+      // only fresh post-commit state; never reuse a transaction's old snapshot.
+      if (MUTATION_TYPES.has(type)) requestContext.invalidate();
       try { await recordBusinessActivity(type, request, data); }
       catch (error) { console.warn(JSON.stringify({ requestId, type: 'analytics_capture_failed', action: type, code: error.code || 'CAPTURE_FAILED' })); }
       console.log(JSON.stringify({ requestId: requestId, actorId: anonymousActorId, action: type, success: true, durationMs: Date.now() - startedAt, resultCode: 'OK' }));
-      return success(data);
-    });
+      return success(data, { actorId: anonymousActorId, activityReceipts: requestContext.activityReceipts() });
+    }));
   } catch (error) {
     console.error(JSON.stringify({
       requestId: requestId,

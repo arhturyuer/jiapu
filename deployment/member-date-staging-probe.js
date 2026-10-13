@@ -6,6 +6,7 @@ const vm = require('vm');
 const domain = require('./domain');
 const personDate = require('./person-date');
 const stagingAccounts = require('./staging-account-reset');
+const requestContext = require('./request-context');
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
@@ -16,7 +17,7 @@ const names = [
   'getOpenid', 'maybeGet', 'mustGet', 'listAll', 'ensureUser', 'requireActiveUser', 'getFamily',
   'getMembership', 'requireMembership', 'publicPerson', 'normalizePersonDateFields', 'clearDeathDate',
   'assertPersonDates', 'changesAffectPersonDates', 'normalizePerson', 'normalizePersonChanges',
-  'requireOwnedMedia', 'moderateText', 'audit', 'mutate', 'personUpdate', 'changeReview',
+  'requireOwnedMedia', 'moderateText', 'publicFamilyCounters', 'updateFamilyContent', 'audit', 'mutate', 'personUpdate', 'changeReview',
   'notificationEventId', 'recordNotificationEvent'
 ];
 
@@ -52,7 +53,7 @@ function fixture(run) {
 function contextFor(f, env) {
   const fakeContext = { OPENID: f.actor, ENV: env };
   const context = {
-    db, _: db.command, crypto, domain, personDate, process,
+    db, _: db.command, crypto, domain, personDate, process, requestContext,
     cloud: { getWXContext: () => fakeContext, openapi: cloud.openapi },
     // Notifications are outside the date transaction under test.
     notificationTemplateIds: () => ({}), ACTIVE_ROLES: ['admin', 'member', 'viewer']

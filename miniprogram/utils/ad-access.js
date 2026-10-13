@@ -36,6 +36,7 @@ function scheduleExpiry(page, app, cache, expiresAt) {
     if (page._memberAdCache !== cache || page._adPageHidden || page._unloaded) return;
     if (Date.now() < expiresAt) return scheduleExpiry(page, app, cache, expiresAt);
     hide(page, true);
+    if (app.invalidateMembershipStatus) app.invalidateMembershipStatus(cache.familyId);
     preloadMember(page, app, app.getCurrentFamily(), true);
   }, Math.min(delay, 2147483647));
   if (cache.expiryTimer.unref) cache.expiryTimer.unref();
@@ -62,8 +63,10 @@ function hide(page, member, reservedFamily, keepRequest) {
   page.setData(patch);
 }
 
-// Share only in-flight requests, not rights across page entries or different families.
+// The application shares short-lived display rights across pages. Privileged
+// operations still obtain fresh server-side authorization.
 function familyStatus(page, app, family) {
+  if (app.getMembershipStatus) return app.getMembershipStatus(family._id);
   const current = app.getCurrentFamily();
   const key = memberKey(app, current && current._id === family._id ? current : family);
   if (page._adMembershipRequest && page._adMembershipRequest.key === key) return page._adMembershipRequest.promise;
@@ -136,6 +139,7 @@ function error(page, member, event) {
 function memberKey(app, family) {
   const membership = family.membership || {};
   return JSON.stringify([app.globalData && app.globalData.environment,
+    app.globalData && app.globalData.user && app.globalData.user._id || '',
     commerceConfig.resolveBanner(app.globalData && app.globalData.environment, 'memberSheet'),
     family._id, family.status, membership.active, Boolean(membership.lifetime), membership.expiresAt || '', eligible(family)]);
 }

@@ -98,12 +98,13 @@ test('个人头像保存不会覆盖未保存名字', async function () {
   const previousCall = api.call;
   const calls = [];
   const app = {
-    setUser: function (user) { this.user = user; }
+    globalData: { env: 'fixture', user: { _id: 'u1', avatarAssetId: '' } },
+    setUser: function (user) { this.user = user; this.globalData.user = user; }
   };
   api.call = function (type, payload) {
     calls.push({ type: type, payload: payload });
     if (type === 'auth.updateAvatar') {
-      return Promise.resolve({ user: { nickName: '旧名字', avatarAssetId: 'avatar-new' }, moderationStatus: 'approved' });
+      return Promise.resolve({ user: { _id: 'u1', nickName: '旧名字', avatarAssetId: 'avatar-new' }, moderationStatus: 'approved' });
     }
     return Promise.resolve({ user: { nickName: payload.nickName, avatarAssetId: 'avatar-new' } });
   };

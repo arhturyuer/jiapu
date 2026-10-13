@@ -483,6 +483,8 @@ test('启动刷新沿用有效家谱选择规则，其他会员家谱不影响�
   app.assertSessionVersion = function () {};
   app.setCurrentFamily = function (family) { this.globalData.currentFamily = family; };
   app.getCurrentFamily = definition.getCurrentFamily;
+  app.loginScope = definition.loginScope;
+  app.ensureDataScope = definition.ensureDataScope;
   const paid = { _id: 'paid', status: 'active', membership: { active: true, lifetime: true } };
   const free = { _id: 'free', status: 'active', membership: { active: false } };
   let families = [paid, free];

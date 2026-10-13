@@ -23,7 +23,7 @@ function loadApp() {
 function createApp() {
   const definition = loadApp();
   const app = Object.assign({}, definition);
-  app.globalData = Object.assign({}, definition.globalData);
+  app.globalData = Object.assign({}, definition.globalData, { accountState: 'active' });
   app.dataCache = {
     familyPages: { active: { data: null, updatedAt: 0, invalidated: false, promise: null, version: 0, promiseVersion: -1 }, all: { data: null, updatedAt: 0, invalidated: false, promise: null, version: 0, promiseVersion: -1 } },
     graph: {}, dashboard: {}, profile: { data: null, updatedAt: 0, invalidated: false, promise: null, version: 0, promiseVersion: -1 }
@@ -205,7 +205,7 @@ test('业务缓存只保存在小程序进程内', function () {
   assert.equal(restarted.isCacheFresh('graph', 'f1'), false);
 });
 
-test('登录校验仍按 60 秒刷新，不继承一小时业务缓存', async function () {
+test('登录资料按 24 小时到期，强制刷新不继承业务缓存', async function () {
   const api = require('../miniprogram/utils/api');
   const originalCall = api.call;
   const previousWx = global.wx;
@@ -222,7 +222,7 @@ test('登录校验仍按 60 秒刷新，不继承一小时业务缓存', async f
     app.loginUpdatedAt = Date.now();
     await app.ensureLogin();
     assert.equal(calls, 0);
-    app.loginUpdatedAt = Date.now() - 61 * 1000;
+    app.loginUpdatedAt = Date.now() - 24 * 60 * 60 * 1000 - 1;
     await app.ensureLogin();
     assert.equal(calls, 1);
   } finally {

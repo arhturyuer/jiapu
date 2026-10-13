@@ -21,7 +21,7 @@ function createTracker(db, now = () => new Date()) {
       const date = day(now());
       if (cachedDay !== date) { cachedDay = date; seen.clear(); }
       const cacheKey = JSON.stringify([user._id, familyId || '', Boolean(entered), Boolean(example)]);
-      if (seen.has(cacheKey)) return;
+      if (seen.has(cacheKey)) return { day: date };
       await db.runTransaction(async scope => {
         for (const [kind, entityId] of [['user', user._id], ...(familyId ? [['family', familyId]] : [])]) {
           const key = id(kind, date, entityId);
@@ -29,11 +29,12 @@ function createTracker(db, now = () => new Date()) {
             await scope.collection('analytics_activity_daily').doc(key).set({ data: { day: date, kind, entityId, createdAt: db.serverDate() } });
           }
         }
-        if (entered) await firstConversion(db, scope, user._id, 'firstEnteredFamilyAt');
-        if (example) await firstConversion(db, scope, user._id, 'firstExampleViewedAt');
+        if (entered && !user.firstEnteredFamilyAt) await firstConversion(db, scope, user._id, 'firstEnteredFamilyAt');
+        if (example && !user.firstExampleViewedAt) await firstConversion(db, scope, user._id, 'firstExampleViewedAt');
       });
       if (seen.size >= 5000) seen.clear();
       seen.add(cacheKey);
+      return { day: date };
     }
   };
 }

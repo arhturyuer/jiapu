@@ -33,6 +33,7 @@ for (const path of ['index.js', 'domain.js', 'person-date.js', 'staging-account-
   hashes[path] = { deployed: hash(readFileSync(resolve(download, path))), local: hash(readFileSync(resolve(root, 'cloudfunctions/youpuUserApi', path))) };
 }
 for (const path of ['domain.js', 'person-date.js', 'staging-account-reset.js', 'package.json']) copyFileSync(resolve(download, path), resolve(directory, path));
+copyFileSync(resolve(root, 'cloudfunctions/youpuUserApi/request-context.js'), resolve(directory, 'request-context.js'));
 copyFileSync(resolve(download, 'index.js'), resolve(directory, 'source-index.js'));
 copyFileSync(resolve(root, 'deployment/member-date-staging-probe.js'), resolve(directory, 'index.js'));
 const secret = randomBytes(32).toString('hex');

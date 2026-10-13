@@ -2,6 +2,7 @@ const platformCapabilities = require('../../utils/platform-capabilities');
 const launchAd = require('../../utils/launch-ad');
 const app = getApp();
 const api = require('../../utils/api');
+const profileImages = require('../../utils/profile-image-cache');
 const privacy = require('../../utils/privacy');
 const formState = require('../../utils/form-state');
 const adAccess = require('../../utils/ad-access');
@@ -15,34 +16,13 @@ function canResetTestAccount() {
     app.globalData.environment === 'staging' && app.globalData.env === runtime.environment.cloudEnv;
 }
 
-var AVATAR_CACHE_KEY = 'youpu_avatar_cache';
-
 function getCachedAvatarUrl(assetId) {
-  if (!assetId) return '';
-  try {
-    var cache = wx.getStorageSync(AVATAR_CACHE_KEY) || {};
-    var entry = cache[assetId];
-    if (entry && entry.url) return entry.url;
-  } catch (e) { /* ignore */ }
-  return '';
+  const cached = profileImages.peekAvatar(app, assetId);
+  return cached && cached.url || '';
 }
 
-function cacheAvatarUrl(assetId, url) {
-  if (!assetId || !url) return;
-  try {
-    var cache = wx.getStorageSync(AVATAR_CACHE_KEY) || {};
-    cache[assetId] = { url: url, time: Date.now() };
-    wx.setStorageSync(AVATAR_CACHE_KEY, cache);
-  } catch (e) { /* ignore */ }
-}
-
-function clearCachedAvatarUrl(assetId) {
-  if (!assetId) return;
-  try {
-    var cache = wx.getStorageSync(AVATAR_CACHE_KEY) || {};
-    delete cache[assetId];
-    wx.setStorageSync(AVATAR_CACHE_KEY, cache);
-  } catch (e) { /* ignore */ }
+function profileSession() {
+  return JSON.stringify([app.globalData.env || '', app.globalData.user && app.globalData.user._id || '', app._sessionVersion || 0]);
 }
 
 Page(launchAd.wrap({
@@ -87,20 +67,26 @@ Page(launchAd.wrap({
     if (app.refreshPendingBadge) app.refreshPendingBadge().catch(function () {});
   },
 
-  onHide: function () { myMiniProgramGuide.dismissManual(this); this._feedbackHidden = true; this._feedbackVersion = (this._feedbackVersion || 0) + 1; this._adPageHidden = true; adAccess.hide(this, false); },
+  onHide: function () { myMiniProgramGuide.dismissManual(this); this._pageVersion = (this._pageVersion || 0) + 1; this._feedbackHidden = true; this._feedbackVersion = (this._feedbackVersion || 0) + 1; this._adPageHidden = true; adAccess.hide(this, false); },
   onUnload: function () { myMiniProgramGuide.dismissManual(this); this._feedbackHidden = true; this._feedbackVersion = (this._feedbackVersion || 0) + 1; this._adPageHidden = true; adAccess.hide(this, false); this._unloaded = true; this._pageVersion = (this._pageVersion || 0) + 1; formState.clearLeaveAlert(this); },
 
-  loadFeedbackGroup: function () {
+  loadFeedbackGroup: function (options) {
     const self = this;
     if (this._unloaded || this._feedbackHidden || this.data.resettingTestAccount) return Promise.resolve();
     const version = this._feedbackVersion = (this._feedbackVersion || 0) + 1;
-    this.setData({ feedbackLoading: true, feedbackError: '', feedbackAvailable: false, feedbackQrCodeUrl: '', feedbackVersion: version });
+    const force = Boolean(options && (options.force || options.type === 'tap'));
+    const cached = !force && profileImages.peekFeedback(app);
+    this.setData({ feedbackLoading: !cached, feedbackError: '', feedbackAvailable: Boolean(cached), feedbackQrCodeUrl: cached ? cached.qrCodeUrl : '', feedbackVersion: version });
+    const scope = JSON.stringify([app.globalData.env, app._sessionVersion || 0]);
+    let actor = app.globalData.user && app.globalData.user._id || '';
     function isCurrent() {
-      return !self._unloaded && !self._feedbackHidden && !self.data.resettingTestAccount && version === self._feedbackVersion;
+      return scope === JSON.stringify([app.globalData.env, app._sessionVersion || 0]) && (!actor || actor === (app.globalData.user && app.globalData.user._id || '')) &&
+        !self._unloaded && !self._feedbackHidden && !self.data.resettingTestAccount && version === self._feedbackVersion;
     }
     return app.ensureLogin().then(function () {
       if (!isCurrent()) return null;
-      return api.call('feedbackGroup.get');
+      actor = app.globalData.user && app.globalData.user._id || '';
+      return profileImages.getFeedback(app, { force: force });
     }).then(function (data) {
       if (!isCurrent() || !data) return;
       self.setData({
@@ -118,6 +104,7 @@ Page(launchAd.wrap({
     const dataset = event.currentTarget.dataset;
     if (this._unloaded || this._feedbackHidden || this.data.resettingTestAccount ||
       Number(dataset.version) !== this._feedbackVersion || dataset.url !== this.data.feedbackQrCodeUrl) return;
+    profileImages.discardFeedback(app);
     this.setData({ feedbackAvailable: false, feedbackQrCodeUrl: '', feedbackError: '二维码加载失败，请重新加载' });
   },
 
@@ -131,7 +118,13 @@ Page(launchAd.wrap({
     const config = options || {};
     const version = this._pageVersion = (this._pageVersion || 0) + 1;
     const hasContent = this._hasLoaded && !this.data.loading;
-    if (!config.force && hasContent && app.isCacheFresh('profile')) return Promise.resolve();
+    const currentUser = app.globalData.user || {};
+    const cachedAvatar = getCachedAvatarUrl(currentUser.avatarAssetId);
+    if (!config.force && hasContent && app.isCacheFresh('profile') && this.data.user && this.data.user._id === currentUser._id &&
+      this.data.avatarAssetId === (currentUser.avatarAssetId || '') && (!currentUser.avatarAssetId || cachedAvatar)) {
+      if (cachedAvatar && this.data.avatarUrl !== cachedAvatar) this.setData({ avatarUrl: cachedAvatar });
+      return Promise.resolve();
+    }
     if (!hasContent) this.setData({ loading: true, error: '' });
     else this.setData({ error: '' });
     return app.getProfileData(function () {
@@ -148,20 +141,23 @@ Page(launchAd.wrap({
           pending: false, user: user, accountState: accountState, deletion: deletion,
           nickName: user.nickName || '', avatarUrl: cachedUrl, avatarAssetId: user.avatarAssetId || '',
         };
-        if (!user.avatarAssetId) return pageData;
-        return api.getMediaPresentation([user.avatarAssetId]).then(function (presentation) {
-          const item = presentation[user.avatarAssetId] || {};
-          const freshUrl = item.url || '';
-          if (freshUrl) cacheAvatarUrl(user.avatarAssetId, freshUrl);
-          const unavailable = item.status === 'rejected' || item.status === 'deleted';
-          if (unavailable) clearCachedAvatarUrl(user.avatarAssetId);
-          pageData.avatarUrl = unavailable ? '' : (freshUrl || cachedUrl);
-          return pageData;
-        }).catch(function () {
-          return pageData;
-        });
+        return pageData;
       });
     }, config).then(function (pageData) {
+      if (self._unloaded || version !== self._pageVersion || self.data.resettingTestAccount) return null;
+      const session = profileSession();
+      if (!app.globalData.user || pageData.user._id !== app.globalData.user._id || (pageData.user.avatarAssetId || '') !== (app.globalData.user.avatarAssetId || '')) return null;
+      if (pageData.pending) return pageData;
+      const assetId = pageData.user.avatarAssetId || '';
+      profileImages.replaceAvatar(app, assetId);
+      return profileImages.getAvatar(app, assetId).then(function (item) {
+        if (session !== profileSession() || version !== self._pageVersion) return null;
+        const unavailable = item.status === 'rejected' || item.status === 'deleted';
+        const preview = self.data.avatarAssetId === assetId ? self.data.avatarUrl : '';
+        return Object.assign({}, pageData, { avatarUrl: unavailable ? '' : (item.url || preview || '') });
+      }).catch(function () { return session === profileSession() && version === self._pageVersion ? Object.assign({}, pageData, { avatarUrl: getCachedAvatarUrl(assetId) }) : null; });
+    }).then(function (pageData) {
+      if (!pageData) return;
       if (self._unloaded || version !== self._pageVersion || self.data.resettingTestAccount) return;
       if (pageData.pending) {
         const cachedUrl = getCachedAvatarUrl(pageData.user.avatarAssetId);
@@ -215,29 +211,37 @@ Page(launchAd.wrap({
 
   saveProfileAvatar: function (media) {
     const self = this;
+    const session = profileSession();
+    this._pageVersion = (this._pageVersion || 0) + 1;
     this.setData({ avatarUrl: media.previewUrl || this.data.avatarUrl, avatarAssetId: media.assetId, savingAvatar: true }, function () { self.refreshProfileState(); });
     return api.call('auth.updateAvatar', { avatarAssetId: media.assetId }).then(function (data) {
+      if (session !== profileSession() || self._unloaded) return data;
       self._pendingAvatarMedia = null;
       app.setUser(data.user);
+      profileImages.replaceAvatar(app, media.assetId);
       const approved = (data.moderationStatus || media.moderationStatus) === 'approved';
       // Fetch the fresh presentation URL for approved avatars
       const fetchPresentation = approved
-        ? api.getMediaPresentation([media.assetId]).then(function (result) {
-            const item = result[media.assetId] || {};
-            return item.url || '';
-          }).catch(function () { return ''; })
+        ? profileImages.getAvatar(app, media.assetId).then(function (item) { return item.url || ''; }).catch(function () { return ''; })
         : Promise.resolve('');
       return fetchPresentation.then(function (freshUrl) {
-        if (freshUrl) {
-          cacheAvatarUrl(media.assetId, freshUrl);
-        } else if (media.previewUrl) {
-          cacheAvatarUrl(media.assetId, media.previewUrl);
-        }
+        if (session !== profileSession() || self._unloaded || (app.globalData.user && app.globalData.user.avatarAssetId) !== media.assetId) return data;
         self.setData({ user: data.user, savingAvatar: false, avatarUrl: freshUrl || media.previewUrl || self.data.avatarUrl }, function () { self.refreshProfileState(); });
         wx.showToast({ title: freshUrl ? '头像已更新' : '头像已保存，等待审核', icon: freshUrl ? 'success' : 'none' });
         return data;
       });
     });
+  },
+
+  avatarError: function (event) {
+    const dataset = event.currentTarget.dataset;
+    if (this._unloaded || this._feedbackHidden || this.data.savingAvatar || dataset.asset !== this.data.avatarAssetId || dataset.url !== this.data.avatarUrl) return;
+    profileImages.discardAvatar(app, this.data.avatarAssetId);
+    this.setData({ avatarUrl: '' });
+    const retryKey = profileSession() + '|' + this.data.avatarAssetId;
+    if (this._avatarRetryKey === retryKey) return;
+    this._avatarRetryKey = retryKey;
+    this.loadPage({ force: true });
   },
 
   saveProfile: function () {

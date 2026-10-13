@@ -75,7 +75,9 @@ test('连续开关合并保存并更新家谱偏好缓存', async function () {
     resolveSave({ preference: { nameLayout: 'horizontal', showChildRankBadge: true, showGenderBadge: false, showGenderColors: false } });
     await saving;
     assert.equal(page.data.saving, false);
-    assert.deepEqual(calls[0], { type: 'family.setPreference', payload: { familyId: 'family-1', showGenderBadge: false, showGenderColors: false } });
+    assert.equal(typeof calls[0].payload.idempotencyKey, 'string');
+    const { idempotencyKey, ...fields } = calls[0].payload;
+    assert.deepEqual(fields, { familyId: 'family-1', showGenderColors: false });
     assert.equal(updates.length, 1);
   } finally {
     api.call = previousCall;
@@ -299,7 +301,9 @@ test('智能收起开关保存 false 并更新家谱偏好缓存', async functio
   page.data.familyId = 'family-1';
   api.call = function (type, payload) {
     assert.equal(type, 'family.setPreference');
-    assert.deepEqual(payload, { familyId: 'family-1', autoCollapseEnabled: false });
+    assert.equal(typeof payload.idempotencyKey, 'string');
+    const { idempotencyKey, ...fields } = payload;
+    assert.deepEqual(fields, { familyId: 'family-1', autoCollapseEnabled: false });
     return Promise.resolve({ preference: { autoCollapseEnabled: false } });
   };
   try {
@@ -310,4 +314,51 @@ test('智能收起开关保存 false 并更新家谱偏好缓存', async functio
   } finally {
     api.call = previousCall;
   }
+});
+
+test('五次间隔 500ms 调整合并为一次提交，最终无变化不请求', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const calls = [];
+  t.mock.method(api, 'call', async (type, payload) => { calls.push(payload); return { preference: payload }; });
+  const page = loadPage({ updatePreference() {} });
+  page.data.familyId = 'family-1';
+  page._confirmedPreference = { nameLayout: 'horizontal', showGenderBadge: false, showGenderColors: true, showChildRankBadge: false, autoCollapseEnabled: true };
+  for (const [field, value] of [['showGenderBadge', true], ['showGenderColors', false], ['showChildRankBadge', true], ['autoCollapseEnabled', false], ['nameLayout', 'vertical']]) {
+    page.savePreference(field, value); t.mock.timers.tick(500);
+  }
+  assert.equal(calls.length, 0); t.mock.timers.tick(1000); await page._preferenceInFlight;
+  assert.equal(calls.length, 1); assert.equal(calls[0].nameLayout, 'vertical'); assert.equal(calls[0].autoCollapseEnabled, false);
+  page.savePreference('nameLayout', 'horizontal'); page.savePreference('nameLayout', 'vertical');
+  t.mock.timers.tick(1500); await Promise.resolve(); assert.equal(calls.length, 1);
+});
+
+test('失败重试复用幂等键，成功后才确认偏好', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const previousWx = global.wx; global.wx = { showToast() {} }; t.after(() => { global.wx = previousWx; });
+  const calls = []; let fail = true;
+  t.mock.method(api, 'call', async (type, payload) => { calls.push(payload); if (fail) throw new Error('offline'); return { preference: payload }; });
+  const page = loadPage({ updatePreference() {} }); page.data.familyId = 'family-1'; page._confirmedPreference = { nameLayout: 'horizontal' };
+  page.savePreference('nameLayout', 'vertical'); await page.flushPreference();
+  assert.equal(page.data.nameLayout, 'horizontal'); assert.equal(page._confirmedPreference.nameLayout, 'horizontal');
+  fail = false; await page.flushPreference();
+  assert.equal(calls.length, 2); assert.equal(calls[0].idempotencyKey, calls[1].idempotencyKey); assert.equal(page._confirmedPreference.nameLayout, 'vertical');
+});
+
+test('业务拒绝不会在离页时自动重试；会话变化清除未确认的旧偏好', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const previousWx = global.wx; global.wx = { showToast() {} }; t.after(() => { global.wx = previousWx; });
+  const app = { _sessionVersion: 0, updatePreference() {} }; const page = loadPage(app);
+  page.data.familyId = 'family-1'; page._confirmedPreference = { nameLayout: 'horizontal' };
+  const calls = []; let business = true;
+  t.mock.method(api, 'call', async (type, payload) => { calls.push(payload); const error = new Error('fixture refused'); error.isBusinessError = business; throw error; });
+  page.savePreference('nameLayout', 'vertical'); await page.flushPreference(); page.onHide();
+  assert.equal(calls.length, 1); assert.equal(page._retryPreference, null);
+  business = false; page.savePreference('nameLayout', 'vertical'); await page.flushPreference();
+  app._sessionVersion++; await page.flushPreference(); assert.equal(calls.length, 2); assert.equal(page._retryPreference, null);
+});
+
+test('会话重置前尚未发出的显示设置不在新账号提交', async t => {
+  const calls = []; const app = { _sessionVersion: 0, updatePreference() {} }; const page = loadPage(app); page.data.familyId = 'f1';
+  t.mock.method(api, 'call', async (type, payload) => { calls.push(payload); return { preference: payload }; });
+  page.savePreference('nameLayout', 'vertical'); app._sessionVersion++; await page.flushPreference(); assert.equal(calls.length, 0);
 });

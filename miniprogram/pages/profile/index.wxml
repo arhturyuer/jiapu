@@ -37,7 +37,7 @@
   <block wx:else>
     <view class="profile-card surface-card">
       <button class="avatar-btn {{savingAvatar ? 'avatar-btn-loading' : ''}}" bindtap="chooseAvatar" hover-class="avatar-btn-active" loading="{{savingAvatar}}">
-        <image class="profile-avatar" wx:if="{{avatarUrl}}" src="{{avatarUrl}}" mode="aspectFill"></image>
+        <image class="profile-avatar" wx:if="{{avatarUrl}}" src="{{avatarUrl}}" mode="aspectFill" binderror="avatarError" data-asset="{{avatarAssetId}}" data-url="{{avatarUrl}}"></image>
         <view class="profile-avatar profile-placeholder" wx:else>我</view>
       </button>
       <view class="profile-form">

@@ -141,6 +141,7 @@ Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap({
   },
 
   onUnload: function () {
+    this._unloaded = true;
     this.cancelNewFamilyTour();
     this._adPageHidden = true;
     adAccess.hide(this, true);
@@ -155,6 +156,8 @@ Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap({
   },
 
   onPullDownRefresh: function () {
+    if (app.invalidateMembershipStatus) app.invalidateMembershipStatus(this.data.currentFamily && this.data.currentFamily._id);
+    if (app.refreshPendingBadge) app.refreshPendingBadge({ force: true }).catch(function () {});
     this.loadPage(null, { force: true }).then(function () {
       wx.stopPullDownRefresh();
     });
@@ -215,8 +218,10 @@ Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap({
         return null;
       }
       const graphScope = myMiniProgramGuide.scope(app);
-      return app.getGraph(currentFamily._id, config).then(function (data) {
+      return app.getGraph(currentFamily._id, { force: Boolean(config.force || config.refreshGraph) }).then(function (data) {
         if (requestId !== self._loadRequestId) return null;
+        self._confirmedGraphPreference = data.preference;
+        if (data.preference) self._lastSavedGraphPreference = JSON.stringify({ familyId: currentFamily._id, viewMode: data.preference.viewMode, personId: data.preference.lastViewPersonId || '', nameLayout: data.preference.nameLayout });
         const persons = (data.persons || []).map(function (person) {
           return personGender.decorate(Object.assign({}, person, {
             avatar: '',
@@ -729,6 +734,7 @@ Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap({
 
   saveGraphPreference: function (family, nameLayout, viewMode, personId) {
     if (!family) return;
+    this._pendingGraphPreferenceVersion = app._sessionVersion || 0;
     this._pendingGraphPreference = {
       familyId: family._id,
       viewMode: viewMode || this.data.viewMode,
@@ -740,25 +746,43 @@ Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap({
     this._graphPreferenceTimer = setTimeout(function () {
       self._graphPreferenceTimer = null;
       self.flushGraphPreference();
-    }, 500);
+    }, 1500);
   },
 
   flushGraphPreference: function () {
     if (this._graphPreferenceTimer) clearTimeout(this._graphPreferenceTimer);
     this._graphPreferenceTimer = null;
-    if (this._graphPreferenceInFlight || !this._pendingGraphPreference) return this._graphPreferenceInFlight || Promise.resolve();
-    const payload = this._pendingGraphPreference;
-    this._pendingGraphPreference = null;
-    if (JSON.stringify(payload) === this._lastSavedGraphPreference) return Promise.resolve();
+    if (this._graphPreferenceInFlight || (!this._pendingGraphPreference && !this._retryGraphPreference)) return this._graphPreferenceInFlight || Promise.resolve();
+    if (this._pendingGraphPreference && this._pendingGraphPreferenceVersion !== (app._sessionVersion || 0)) this._pendingGraphPreference = null;
+    if (this._retryGraphPreference && this._retryGraphPreferenceVersion !== (app._sessionVersion || 0)) this._retryGraphPreference = null;
+    if (!this._retryGraphPreference && !this._pendingGraphPreference) return Promise.resolve();
+    const retry = this._retryGraphPreference;
+    const pending = this._pendingGraphPreference;
+    if (!retry) this._pendingGraphPreference = null;
+    if (!retry && JSON.stringify(pending) === this._lastSavedGraphPreference) return Promise.resolve();
+    const payload = retry || Object.assign({ idempotencyKey: api.requestId() }, pending);
+    const savedKey = JSON.stringify({ familyId: payload.familyId, viewMode: payload.viewMode, personId: payload.personId, nameLayout: payload.nameLayout });
+    this._retryGraphPreference = null;
     const self = this;
+    const operationVersion = app._sessionVersion || 0;
     this._graphPreferenceInFlight = api.call('family.setPreference', payload).then(function (data) {
-      self._lastSavedGraphPreference = JSON.stringify(payload);
+      if (self.data.currentFamily && self.data.currentFamily._id === payload.familyId) {
+        self._lastSavedGraphPreference = savedKey; self._confirmedGraphPreference = data.preference;
+      }
       if (data.preference) app.updatePreference(payload.familyId, data.preference);
-    }).catch(function () {
-      // A failed preference write leaves the last confirmed cache untouched.
+    }).catch(function (error) {
+      self._retryGraphPreference = !error.isBusinessError && operationVersion === (app._sessionVersion || 0) ? payload : null;
+      self._retryGraphPreferenceVersion = operationVersion;
+      if (error.isBusinessError || operationVersion !== (app._sessionVersion || 0)) self._pendingGraphPreference = null;
+      const previous = self._confirmedGraphPreference;
+      if (!self._unloaded && !self._pendingGraphPreference && previous && self.data.currentFamily && self.data.currentFamily._id === payload.familyId) {
+        self.setData({ nameLayout: previous.nameLayout, viewMode: previous.viewMode, viewpointId: previous.lastViewPersonId || '' });
+        self.renderGraph(previous.viewMode, previous.lastViewPersonId || '');
+      }
+      if (!self._unloaded) wx.showToast({ title: api.userMessage(error, '显示设置未保存，请重试'), icon: 'none' });
     }).then(function () {
       self._graphPreferenceInFlight = null;
-      if (self._pendingGraphPreference) return self.flushGraphPreference();
+      if (self._pendingGraphPreference && !self._retryGraphPreference) return self.flushGraphPreference();
     });
     return this._graphPreferenceInFlight;
   },
@@ -1018,8 +1042,8 @@ Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap({
       self.setData({ childOrderSaving: false });
       self.closeChildOrderSheet();
       if (!data.pending) {
-        app.invalidateFamilyData(self.data.currentFamily._id);
-        return self.loadPage(null, { force: true });
+        if (!app.handleFamilyMutation) app.invalidateFamilyData(self.data.currentFamily._id);
+        return self.loadPage(null, { refreshGraph: true });
       }
       return data;
     }).catch(function (error) {

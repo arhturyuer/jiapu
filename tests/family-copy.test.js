@@ -183,15 +183,15 @@ test('超过单次时间预算保存检查点后续派发，断点继续不重�
 
 test('资料修改审计在同一事务更新 contentRevision，拒绝和邀请不更新', async () => {
   const source = fs.readFileSync('cloudfunctions/youpuUserApi/index.js', 'utf8');
-  const code = source.slice(source.indexOf('async function audit('), source.indexOf('async function mutate('));
+  const code = source.slice(source.indexOf('async function updateFamilyContent('), source.indexOf('async function mutate('));
   const db = createDatabase(); db.put('families', 'source', { status: 'active' });
-  const context = { db, _: db.command, userId: value => value, cleanText: value => value };
+  const context = { db, _: db.command, userId: value => value, cleanText: value => value, requestContext: require('../cloudfunctions/youpuUserApi/request-context') };
   // Audit add is independent of the family revision assertions.
-  const scope = { collection: name => name === 'audit_logs' ? { add: async () => {} } : db.collection(name) };
+  const scope = () => ({ collection: name => name === 'audit_logs' ? { add: async () => {} } : db.collection(name) });
   vm.runInNewContext(code, context);
-  for (const action of ['family.update', 'person.create_related', 'person.update', 'person.delete', 'relation.link_existing', 'relation.remove', 'relation.reorder_children', 'change.approve']) await context.audit(scope, { familyId: 'source', action });
+  for (const action of ['family.update', 'person.create_related', 'person.update', 'person.delete', 'relation.link_existing', 'relation.remove', 'relation.reorder_children', 'change.approve']) await context.audit(scope(), { familyId: 'source', action });
   assert.equal(db.get('families', 'source').contentRevision, 8);
-  for (const action of ['change.reject', 'invite.create', 'family.archive']) await context.audit(scope, { familyId: 'source', action });
+  for (const action of ['change.reject', 'invite.create', 'family.archive']) await context.audit(scope(), { familyId: 'source', action });
   assert.equal(db.get('families', 'source').contentRevision, 8);
 });
 

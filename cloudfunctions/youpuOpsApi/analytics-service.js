@@ -2,6 +2,7 @@ const analytics = require('./analytics');
 const crypto = require('crypto');
 const LIMIT = 20000;
 const CHUNK = 100;
+const REPORT_CACHE_TTL = 5 * 60 * 1000;
 const USER_METRICS = new Set(['newUsers', 'enteredUsers', 'exampleUsers', 'createdUsers', 'joinedUsers', 'activeUsers', 'payingUsers']);
 const FAMILY_METRICS = new Set(['newFamilies', 'familiesWithRelatives', 'collaborativeFamilies', 'activeFamilies', 'payingFamilies', 'activeMemberFamilies']);
 const ORDER_METRICS = new Set(['orders', 'convertedOrders', 'paidOrders', 'refundOrders']);
@@ -9,24 +10,45 @@ function mergeFirst(row, field, at) {
   if (Number.isFinite(analytics.ms(at)) && (!row[field] || analytics.ms(at) < analytics.ms(row[field]))) row[field] = at;
 }
 function createService({ db, command: _, listAll, listByIds: readByIds, maybeGet }, now = () => new Date()) {
-  async function listByIds(...args) {
+  const summaryRequests = new Map();
+  async function readByIdsChecked(...args) {
     const rows = await readByIds(...args);
     if (rows.length > LIMIT) analytics.fail('RESULT_LIMIT_EXCEEDED', '关联记录超过统计上限，请缩小日期范围');
     return rows;
   }
   const between = (start, end) => _.gte(new Date(start)).and(_.lt(new Date(end)));
   async function load(filters) {
+    // Full, unmodified documents only. This cache lives for one build; records
+    // enriched below are separate copies and never become source documents.
+    const raw = new Map();
+    function remember(name, rows) {
+      if (!raw.has(name)) raw.set(name, new Map());
+      for (const row of rows) if (row._id) raw.get(name).set(row._id, structuredClone(row));
+      return rows;
+    }
+    async function readAll(name, where, limit) { return remember(name, await listAll(name, where, limit)); }
+    async function listByIds(name, field, ids, where, limit) {
+      if (field !== '_id' || Object.keys(where || {}).length) return remember(name, await readByIdsChecked(name, field, ids, where, limit));
+      const unique = Array.from(new Set(ids.filter(Boolean)));
+      const known = raw.get(name) || new Map();
+      const missing = unique.filter(id => !known.has(id));
+      if (missing.length) remember(name, await readByIdsChecked(name, field, missing, where, limit));
+      const documents = raw.get(name) || new Map();
+      const rows = unique.filter(id => documents.has(id)).map(id => structuredClone(documents.get(id)));
+      if (rows.length > LIMIT) analytics.fail('RESULT_LIMIT_EXCEEDED', '关联记录超过统计上限，请缩小日期范围');
+      return rows;
+    }
     const [users, currentFamilies, history, activity, created, paid, refunds, metadata, lifetime, fixed] = await Promise.all([
-      listAll('users', { createdAt: between(filters.start, filters.end) }, LIMIT),
-      listAll('families', { createdAt: between(filters.start, filters.end) }, LIMIT),
-      listAll('analytics_history', { kind: 'family', createdAt: between(filters.start, filters.end) }, LIMIT),
-      listAll('analytics_activity_daily', { day: _.gte(filters.startDay).and(_.lte(filters.endDay)) }, LIMIT),
-      listAll('payment_orders', { createdAt: between(filters.start, filters.end) }, LIMIT),
-      listAll('payment_orders', { paidAt: between(filters.start, filters.end) }, LIMIT),
-      listAll('payment_orders', { refundedAt: between(filters.start, filters.end) }, LIMIT),
+      readAll('users', { createdAt: between(filters.start, filters.end) }, LIMIT),
+      readAll('families', { createdAt: between(filters.start, filters.end) }, LIMIT),
+      readAll('analytics_history', { kind: 'family', createdAt: between(filters.start, filters.end) }, LIMIT),
+      readAll('analytics_activity_daily', { day: _.gte(filters.startDay).and(_.lte(filters.endDay)) }, LIMIT),
+      readAll('payment_orders', { createdAt: between(filters.start, filters.end) }, LIMIT),
+      readAll('payment_orders', { paidAt: between(filters.start, filters.end) }, LIMIT),
+      readAll('payment_orders', { refundedAt: between(filters.start, filters.end) }, LIMIT),
       maybeGet('system_config', 'analytics'),
-      listAll('families', { status: 'active', proLifetime: true }, LIMIT),
-      listAll('families', { status: 'active', proExpiresAt: _.gt(new Date(filters.asOf)) }, LIMIT)
+      readAll('families', { status: 'active', proLifetime: true }, LIMIT),
+      readAll('families', { status: 'active', proExpiresAt: _.gt(new Date(filters.asOf)) }, LIMIT)
     ]);
     const families = analytics.unique(history.map(row => Object.assign({}, row, { _id: row.entityId })).concat(currentFamilies));
     const [createdFamilies, createdHistory, userMembers, familyMembers, historyMembers, historyUserMembers, userJoins, familyJoins] = await Promise.all([
@@ -110,6 +132,13 @@ function createService({ db, command: _, listAll, listByIds: readByIds, maybeGet
   async function summary(event) {
     const filters = analytics.range(event, now());
     const key = 'report_' + analytics.fingerprint(Object.assign({}, filters, { asOf: event.asOf ? filters.asOf : 0 }), 'summary');
+    if (summaryRequests.has(key)) return summaryRequests.get(key);
+    const request = buildSummary(filters, key);
+    summaryRequests.set(key, request);
+    try { return await request; }
+    finally { if (summaryRequests.get(key) === request) summaryRequests.delete(key); }
+  }
+  async function buildSummary(filters, key) {
     const cached = await maybeGet('analytics_reports', key);
     if (cached && analytics.ms(cached.expiresAt) > filters.asOf) return cached.report;
     const result = await load(filters);
@@ -140,7 +169,7 @@ function createService({ db, command: _, listAll, listByIds: readByIds, maybeGet
     }
     for (let offset = 0; offset < writes.length; offset += 8) await Promise.all(writes.slice(offset, offset + 8).map(write => write()));
     await db.collection('analytics_snapshots').doc(snapshotId).set({ data: { filters: report.filters, asOf: report.asOf, counts, expiresAt } });
-    await db.collection('analytics_reports').doc(key).set({ data: { report, expiresAt: new Date(filters.asOf + 30000) } });
+    await db.collection('analytics_reports').doc(key).set({ data: { report, expiresAt: new Date(filters.asOf + REPORT_CACHE_TTL) } });
     return report;
   }
   async function details(event) {

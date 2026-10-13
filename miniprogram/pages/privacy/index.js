@@ -57,7 +57,7 @@ Page(launchAd.wrap({
   loadAccount: function () {
     const self = this;
     this.setData({ loading: true, error: '' });
-    return api.call('auth.login').then(function (data) {
+    return app.ensureLogin({ force: true }).then(function (data) {
       app.globalData.accountState = data.accountState;
       app.globalData.deletion = data.deletion || null;
       self.setData({

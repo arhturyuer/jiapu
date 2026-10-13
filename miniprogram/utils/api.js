@@ -49,6 +49,10 @@ function call(type, data) {
   payload.requestId = payload.idempotencyKey || requestId();
   delete payload.idempotencyKey;
   payload.type = type;
+  const appAtStart = typeof getApp === 'function' ? getApp() : null;
+  if (appAtStart && appAtStart.ensureDataScope) appAtStart.ensureDataScope();
+  const identity = appAtStart ? { version: appAtStart._sessionVersion || 0, actor: appAtStart.globalData && appAtStart.globalData.user && appAtStart.globalData.user._id || '',
+    environment: appAtStart.globalData && appAtStart.globalData.environment + '|' + appAtStart.globalData.env } : null;
   const runtime = environmentConfig.resolveRuntimeEnvironment(typeof wx === 'undefined' ? null : wx);
   if (runtime.active === 'staging' && runtime.runtimeVersion === 'develop' && typeof getApp === 'function') {
     const app = getApp();
@@ -89,7 +93,32 @@ function call(type, data) {
       }
       Promise.resolve(cloudRequest).then(function (response) {
         const result = response.result || {};
+        const liveApp = typeof getApp === 'function' && getApp();
+        if (liveApp && identity && (identity.version !== (liveApp._sessionVersion || 0) || identity.environment !== (liveApp.globalData && liveApp.globalData.environment + '|' + liveApp.globalData.env))) {
+          const stale = new Error('账户或环境已变化，请重新进入'); stale.code = 'ACCOUNT_SESSION_CHANGED'; stale.isBusinessError = true;
+          finish(reject, stale); return;
+        }
         if (result.success) {
+          if (typeof getApp === 'function') {
+            const app = getApp();
+            const currentActor = app && app.globalData && app.globalData.user && app.globalData.user._id || '';
+            if (app && identity && (identity.version !== (app._sessionVersion || 0) || identity.environment !== (app.globalData && app.globalData.environment + '|' + app.globalData.env) ||
+              (type !== 'auth.login' && type !== 'auth.identity' && ((identity.actor && identity.actor !== (app.globalData && app.globalData.user && app.globalData.user._id || '')) || result.meta && result.meta.actorId && identity.actor && result.meta.actorId !== identity.actor || result.meta && result.meta.actorId && currentActor && result.meta.actorId !== currentActor)))) {
+              const stale = new Error('账户或环境已变化，请重新进入'); stale.code = 'ACCOUNT_SESSION_CHANGED'; stale.isBusinessError = true;
+              if (result.meta && result.meta.actorId && identity.actor && result.meta.actorId !== identity.actor && app.clearCachedAccess) app.clearCachedAccess('');
+              finish(reject, stale); return;
+            }
+            if (app && app.handleFamilyMutation) app.handleFamilyMutation(type, payload, result.data || {});
+            if (app && app.confirmActivityReceipts) app.confirmActivityReceipts(result.meta, identity, result.data, type);
+            if (app && app.invalidateMembershipStatus && ['membership.redeem', 'payment.reconcileNow', 'payment.mockComplete', 'payment.mockRefund',
+              'family.archive', 'family.restore', 'membership.leave', 'membership.transferAdmin', 'membership.updateRole',
+              'account.requestDeletion', 'account.cancelDeletion', 'account.resetTest'].indexOf(type) >= 0) {
+              app.invalidateMembershipStatus(payload.familyId || '');
+            }
+            if (app && ['account.requestDeletion', 'account.cancelDeletion', 'account.resetTest'].indexOf(type) >= 0) {
+              if (app.clearLoginCache) app.clearLoginCache(); else app.loginUpdatedAt = 0;
+            }
+          }
           finish(resolve, result.data || {});
           return;
         }
@@ -111,17 +140,23 @@ function call(type, data) {
           return invoke(retriesLeft - 1);
         });
       }
-      if (['NO_FAMILY_ACCESS', 'NO_PERMISSION', 'UNAUTHENTICATED', 'ACCOUNT_FROZEN', 'ACCOUNT_UNAVAILABLE'].indexOf(error.code) >= 0 && typeof getApp === 'function') {
+      if (['NO_FAMILY_ACCESS', 'NO_PERMISSION', 'UNAUTHENTICATED', 'ACCOUNT_FROZEN', 'ACCOUNT_UNAVAILABLE', 'ACCOUNT_PENDING_DELETE', 'FAMILY_NOT_FOUND', 'FAMILY_FROZEN', 'FAMILY_ARCHIVED'].indexOf(error.code) >= 0 && typeof getApp === 'function') {
         const app = getApp();
         if (app && typeof app.clearCachedAccess === 'function') {
-          if (error.code === 'NO_FAMILY_ACCESS') app.clearCachedAccess(payload.familyId || '');
+          if (['NO_FAMILY_ACCESS', 'FAMILY_NOT_FOUND', 'FAMILY_FROZEN', 'FAMILY_ARCHIVED'].indexOf(error.code) >= 0) app.clearCachedAccess(payload.familyId || '');
           else if (error.code === 'NO_PERMISSION' && typeof app.invalidateFamilyData === 'function') {
             clearMediaUrlCache();
             const family = app.globalData && app.globalData.currentFamily;
             if (payload.personId && typeof app.invalidateCache === 'function') app.invalidateCache({ personDetail: payload.personId });
             if (payload.familyId || family) app.invalidateFamilyData(payload.familyId || family._id);
           }
-          else if (error.code !== 'NO_PERMISSION') app.clearCachedAccess('');
+          else if (error.code !== 'NO_PERMISSION') {
+            app.clearCachedAccess('');
+            if (app.globalData) {
+              app.globalData.accountState = error.code === 'ACCOUNT_PENDING_DELETE' ? 'pending_delete' : error.code === 'ACCOUNT_FROZEN' ? 'frozen' : 'unavailable';
+              app.globalData.deletion = error.code === 'ACCOUNT_PENDING_DELETE' ? error.details : null;
+            }
+          }
         }
       }
       throw error;

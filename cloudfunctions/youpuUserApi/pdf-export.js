@@ -75,8 +75,7 @@ function createService(options) {
     return task;
   }
   async function taskFor(event, user) {
-    const actor = await read(db, 'users', user._id);
-    const id = event.taskId || actor.latestPdfTaskId;
+    const id = event.taskId || user.latestPdfTaskId;
     if (!id) return null;
     assert(typeof id === 'string' && id.length <= 80, 'PDF_NOT_FOUND', 'PDF 任务不存在');
     const task = await read(db, 'export_tasks', id);

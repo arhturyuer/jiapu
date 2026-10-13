@@ -6,6 +6,8 @@ const subscriptionNotification = require('./subscription-notification');
 const familyCopy = require('./family-copy');
 const pdfExport = require('./pdf-export');
 const jobDispatcher = require('./job-dispatcher');
+const retentionCleanup = require('./retention-cleanup');
+const maintenanceBatch = require('./maintenance-batch');
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
@@ -183,6 +185,7 @@ async function updateManyStable(collectionName, where, data, limit) {
 }
 
 async function removeMany(collectionName, where, limit) {
+  if (retentionCleanup.supports(collectionName) && where && where.expiresAt) return retentionCleanup.removeExpired(db, collectionName, where, limit);
   let removed = 0;
   const hardLimit = limit || 2000;
   while (removed < hardLimit) {
@@ -315,25 +318,27 @@ async function anonymizeUser(request) {
     return true;
   });
   if (!claimed) return { userId: request.userId, skipped: true, reason: 'already_claimed' };
+  const claim = { kind: 'account', requestId: request._id, userId: user._id };
+  const updateClaimed = (name, where, data, limit) => maintenanceBatch.apply(db, name, where, data, limit, claim);
   await closeUserMemberships(user._id);
-  await updateMany('invitations', { createdBy: user._id, status: 'active' }, {
+  await updateClaimed('invitations', { createdBy: user._id, status: 'active' }, {
     status: 'revoked',
     revokedReason: 'account_deleted',
     revokedAt: db.serverDate(),
     updatedAt: db.serverDate()
   }, 1000);
-  await updateMany('audit_logs', { actorId: user._id }, {
+  await updateClaimed('audit_logs', { actorId: user._id }, {
     actorId: anonymousActor,
     actorName: '已注销用户'
   }, 5000);
-  await updateMany('payment_orders', { payerUserId: user._id }, {
+  await updateClaimed('payment_orders', { payerUserId: user._id }, {
     payerUserId: anonymousActor,
     payerAnalyticsId: user._id,
     payerAnonymizedAt: db.serverDate(),
     updatedAt: db.serverDate()
   }, 1000);
   for (const name of ['membership_codes', 'membership_redemptions']) {
-    await updateMany(name, { redeemedBy: user._id }, {
+    await updateClaimed(name, { redeemedBy: user._id }, {
       redeemedBy: anonymousActor, redeemedAnonymizedAt: db.serverDate(), updatedAt: db.serverDate()
     }, 50000);
   }
@@ -454,6 +459,8 @@ async function preserveFamilyAnalytics(family) {
 async function purgeFamily(family, allowResume) {
   const claimed = await claimFamilyDeletion(family._id, allowResume);
   if (!claimed) return { familyId: family._id, skipped: true };
+  const claim = { kind: 'family', familyId: family._id };
+  const updateClaimed = (name, where, data, limit) => maintenanceBatch.apply(db, name, where, data, limit, claim);
   await preserveFamilyAnalytics(family);
   const deletedFiles = await deleteFamilyMediaFiles(family._id);
   const deletedBackupFiles = await deleteFamilyBackupFiles(family._id);
@@ -474,20 +481,21 @@ async function purgeFamily(family, allowResume) {
   ];
   const removed = {};
   for (const collectionName of collections) {
-    removed[collectionName] = await removeMany(collectionName, { familyId: family._id }, 5000);
+    removed[collectionName] = await maintenanceBatch.apply(db, collectionName, { familyId: family._id }, null, 5000, claim, 'remove');
   }
-  await updateMany('payment_orders', { familyId: family._id, status: 'pending' }, {
+  await updateClaimed('payment_orders', { familyId: family._id, status: 'pending' }, {
     status: 'closed', closeReason: 'family_deleted', closedAt: db.serverDate(), updatedAt: db.serverDate()
   }, 5000);
-  await updateManyStable('payment_orders', { familyId: family._id }, {
+  await updateClaimed('payment_orders', { familyId: family._id }, {
     familyDeletedAt: db.serverDate(), updatedAt: db.serverDate()
   }, 5000);
-  await updateManyStable('membership_redemptions', { familyId: family._id }, {
+  await updateClaimed('membership_redemptions', { familyId: family._id }, {
     familyDeletedAt: db.serverDate(), familyName: '', updatedAt: db.serverDate()
   }, 50000);
-  await updateManyStable('membership_codes', { redeemedFamilyId: family._id }, {
+  await updateClaimed('membership_codes', { redeemedFamilyId: family._id }, {
     familyDeletedAt: db.serverDate(), updatedAt: db.serverDate()
   }, 50000);
+  await maintenanceBatch.verifyClaim(db, claim);
   await db.collection('families').doc(family._id).remove();
   return { familyId: family._id, deletedFiles: deletedFiles, deletedBackupFiles: deletedBackupFiles, removed: removed };
 }

@@ -57,6 +57,7 @@ process.exit(99);
     CHECK_LOG: path.join(root, 'calls.log'), PATH: path.join(root, 'bin') + ':' + process.env.PATH
   });
   for (const key of Object.keys(env)) {
+    if (key === 'CHECK_TEST_CONCURRENCY') delete env[key];
     if (/^(STAGING_|VP_|BOOTSTRAP_|VITE_|ALLOW_PRODUCTION|DEPLOYMENT_TARGET|TARGET_ENV_ID|PREFLIGHT_MODE|FAIL_STAGE)/.test(key)) delete env[key];
   }
   return {
@@ -98,6 +99,18 @@ test('构建必须显式指定有效环境，未知参数在任何检查阶段�
   assert.equal(admin.length, 1);
   assert.deepEqual(admin[0].args, ['run', 'build']);
   assert.equal(admin[0].env, 'cloud1-fixture-staging');
+});
+
+test('检查并发默认四个，可降低至一个，非法或超过四个在检查前拒绝', function (t) {
+  const f = fixture(t);
+  const serial = f.run([], { CHECK_TEST_CONCURRENCY: '1' });
+  assert.equal(serial.result.status, 0, serial.result.stdout + serial.result.stderr);
+  assert.ok(serial.calls.some(call => call.args[0] === '--test' && call.args[1] === '--test-concurrency=1'));
+  for (const value of ['0', '5', '-1', '1.5', 'unknown']) {
+    const { result, calls } = f.run([], { CHECK_TEST_CONCURRENCY: value });
+    assert.equal(result.status, 2);
+    assert.equal(calls.length, 1);
+  }
 });
 
 test('语法、文档、测试和后台检查失败均阻止后续阶段并传播退出状态', function (t) {
