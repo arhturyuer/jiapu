@@ -5,6 +5,7 @@ const jobsModule = require('../cloudfunctions/youpuJobs/pdf-export');
 const renderer = require('../cloudfunctions/youpuJobs/pdf/render');
 const { inflateSync } = require('node:zlib');
 const { createDatabase } = require('./helpers/family-copy-db');
+const layoutSnapshot = require('../miniprogram/utils/pdf-layout-snapshot');
 const CODE_BASE64 = '/9j/2wBDAAMCAgMCAgMDAwMEAwMEBQgFBQQEBQoHBwYIDAoMDAsKCwsNDhIQDQ4RDgsLEBYQERMUFRUVDA8XGBYUGBIUFRT/2wBDAQMEBAUEBQkFBQkUDQsNFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBT/wAARCAB4AFADASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFgEBAQEAAAAAAAAAAAAAAAAAAAYI/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAwDAQACEQMRAD8AnQCabdAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAf//Z';
 function check(condition, code) { if (!condition) throw Object.assign(new Error(code), { code }); }
 function harness(role = 'viewer', render, posterCode) {
@@ -42,6 +43,74 @@ function harness(role = 'viewer', render, posterCode) {
   const input = { source: 'family', familyId: 'family', format: 'poster', requestId: 'first', display: {} };
   return { db, files, service, worker, input, calls, actor: value => { actor = value; } };
 }
+function attachSnapshot(h) {
+  const data = jobsModule.normalize({ persons: h.db.all('persons'), relations: h.db.all('relations') }, 500);
+  h.input.layoutSnapshot = layoutSnapshot.create(data.persons, data.relations, 'horizontal', 0);
+}
+test('v1 与 v2 压缩快照任务均可创建和执行，压缩元数据不能冒充版本', async () => {
+  for (const version of [1, 2]) {
+    const h = harness();
+    const data = jobsModule.normalize({ persons: h.db.all('persons'), relations: h.db.all('relations') }, 500);
+    h.input.layoutSnapshot = layoutSnapshot.create(data.persons, data.relations, 'horizontal', 0, version);
+    const task = await h.service.create(h.input);
+    const saved = h.db.get('export_tasks', task.taskId).layoutSnapshot;
+    assert.equal(saved.version, version);
+    assert.equal(jobsModule.unpackLayout(saved).version, version);
+    assert.equal((await h.worker.process(task.taskId)).completed, true);
+    assert.throws(() => jobsModule.unpackLayout({ ...saved, version: version === 1 ? 2 : 1 }), { code: 'PDF_LAYOUT_INVALID' });
+  }
+});
+test('新版完整快照参与幂等与私有任务保存，公共状态不泄露快照', async () => {
+  const h = harness('viewer', async data => {
+    assert.deepEqual(data.posterLayout.nodes.map(n => n._id), h.input.layoutSnapshot.ids);
+    return { bytes: Buffer.from('%PDF'), personCount: data.persons.length, relationCount: data.relations.length, pageCount: 1 };
+  });
+  attachSnapshot(h);
+  const first = await h.service.create(h.input); const duplicate = await h.service.create(h.input);
+  assert.equal(first.taskId, duplicate.taskId); assert.equal(first.layoutSnapshot, undefined);
+  assert.deepEqual(jobsModule.unpackLayout(h.db.get('export_tasks', first.taskId).layoutSnapshot), h.input.layoutSnapshot);
+  assert.equal((await h.worker.process(first.taskId)).completed, true);
+  assert.equal((await h.service.status({ taskId: first.taskId })).task.layoutSnapshot, undefined);
+  h.db.put('families', 'family', { ...h.db.get('families', 'family'), contentRevision: 1 });
+  assert.equal((await h.service.create(h.input)).taskId, first.taskId, '已完成任务幂等重发仍返回原文件');
+  await assert.rejects(h.service.create({ ...h.input, layoutSnapshot: { ...h.input.layoutSnapshot, sourceRevision: 1 } }), { code: 'PDF_REQUEST_CHANGED' });
+});
+test('创建前快照不匹配不计额度，执行与免费重试均拒绝旧资料版本', async () => {
+  const h = harness(); attachSnapshot(h);
+  const corrupt = structuredClone(h.input); corrupt.layoutSnapshot.nodes.pop();
+  await assert.rejects(h.service.create(corrupt), { code: 'PDF_LAYOUT_INVALID' });
+  assert.equal(h.db.get('users', 'actor').pdfCount, undefined);
+  const task = await h.service.create(h.input);
+  h.db.put('families', 'family', { ...h.db.get('families', 'family'), contentRevision: 1 });
+  assert.equal((await h.worker.process(task.taskId)).code, 'PDF_GRAPH_CHANGED');
+  await assert.rejects(h.service.create({ ...h.input, retryTaskId: task.taskId, requestId: 'retry' }), { code: 'PDF_GRAPH_CHANGED' });
+  assert.equal(h.db.get('users', 'actor').pdfCount, 1);
+});
+test('新版快照在绘制或上传期间资料改变时不得保留成品', async () => {
+  const h = harness('viewer', async () => {
+    h.db.put('families', 'family', { ...h.db.get('families', 'family'), contentRevision: 1 });
+    return { bytes: Buffer.from('%PDF'), pageCount: 1 };
+  });
+  attachSnapshot(h); const task = await h.service.create(h.input);
+  assert.equal((await h.worker.process(task.taskId)).code, 'PDF_GRAPH_CHANGED'); assert.equal(h.files.size, 0);
+  const h2 = harness(); attachSnapshot(h2); const task2 = await h2.service.create(h2.input);
+  const worker = jobsModule.createWorker({ db: h2.db, cloud: {
+    uploadFile: async () => { h2.files.set('file', true); h2.db.put('families', 'family', { ...h2.db.get('families', 'family'), contentRevision: 1 }); return { fileID: 'file' }; },
+    deleteFile: async () => h2.files.clear()
+  }, render: async () => ({ bytes: Buffer.from('%PDF'), pageCount: 1 }) });
+  assert.equal((await worker.process(task2.taskId)).code, 'PDF_GRAPH_CHANGED'); assert.equal(h2.files.size, 0);
+});
+test('新版公开示例沿用客户端投影，旧任务仍沿用兼容路径', async () => {
+  const h = harness();
+  const content = { persons: [{ _id: 'a', name: '  示例人物  ', gender: 'male', avatarAssetId: 'private' }, { _id: 'b', name: '子女', gender: 'male' }], relations: [{ _id: 'r', type: 'parent_child', fromPersonId: 'a', toPersonId: 'b', childOrder: 9 }] };
+  h.db.put('example_templates', 'example', { slug: 'example', status: 'published', publishedVersion: 2, publishedContent: content });
+  const projection = require('../cloudfunctions/youpuUserApi/pdf-graph-source').exampleGraph(content);
+  const layout = layoutSnapshot.create(projection.persons, projection.relations, 'horizontal', 2);
+  const task = await h.service.create({ source: 'example', slug: 'example', format: 'poster', requestId: 'example', layoutSnapshot: layout });
+  const data = await h.worker.snapshot(h.db.get('export_tasks', task.taskId));
+  assert.equal(data.persons[0].name, '示例人物'); assert.equal(data.persons[0].avatarAssetId, ''); assert.equal(data.relations[0].childOrder, null);
+  assert.equal((await h.worker.process(task.taskId)).completed, true);
+});
 test('有效头像经真实解码嵌入横排矢量 PDF，非法与跨谱头像不下载', async () => {
   const h = harness();
   const { createImageProcessor } = require('../cloudfunctions/youpuJobs/pdf/avatar');

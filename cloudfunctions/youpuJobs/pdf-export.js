@@ -1,5 +1,8 @@
 const crypto = require('crypto');
+const { gunzipSync } = require('node:zlib');
 const { createImageProcessor } = require('./pdf/avatar');
+const graphSource = require('./pdf/source/pdf-graph-source');
+const layoutSnapshot = require('./pdf/shared/pdf-layout-snapshot');
 async function read(scope, name, id) {
   try { return (await scope.collection(name).doc(id).get()).data || null; }
   catch (error) {
@@ -8,11 +11,11 @@ async function read(scope, name, id) {
   }
 }
 const ROLES = ['admin', 'member', 'viewer'];
-const PERSON_FIELDS = ['_id', 'name', 'gender', 'lifeStatus', 'birthDate', 'deathDate', 'birthDateInfo', 'deathDateInfo', 'birthDateRange', 'deathDateRange', 'birthPlace', 'bio', 'avatarAssetId'];
-const RELATION_FIELDS = ['_id', 'type', 'fromPersonId', 'toPersonId', 'childOrder', 'childOrderUpdatedAt'];
 const MESSAGES = {
   PDF_ACCESS_CHANGED: '家谱、会员或访问权限已变化，请返回确认',
-  PDF_GRAPH_CHANGED: '家谱正在修改，请稍后重试',
+  PDF_GRAPH_CHANGED: '家谱图已变化，请返回家谱刷新后重新生成',
+  PDF_LAYOUT_INVALID: '家谱图已变化，请返回家谱刷新后重新生成',
+  PDF_LAYOUT_UNSUPPORTED: '请更新小程序后重新生成家谱图',
   PDF_LIMIT_EXCEEDED: '家谱超过当前导出容量，请联系微信客服',
   PDF_INVALID_GRAPH: '家谱关系资料异常，请联系管理员检查',
   PDF_EMPTY: '家谱暂无成员，请先添加',
@@ -21,8 +24,16 @@ const MESSAGES = {
   PDF_AVATAR_RUNTIME_UNAVAILABLE: '照片处理服务暂不可用，请稍后重试'
 };
 function fail(code) { throw Object.assign(new Error(MESSAGES[code] || MESSAGES.PDF_FAILED), { code }); }
-function fields(row, keys) { return Object.fromEntries(keys.filter(key => row[key] !== undefined).map(key => [key, row[key]])); }
 function membershipActive(family) { return family && (family.proLifetime === true || new Date(family.proExpiresAt).getTime() > Date.now()); }
+function unpackLayout(value) {
+  if (!value || !value.encoding) return value;
+  try {
+    if (value.encoding !== 'gzip-base64' || (value.version !== 1 && value.version !== 2) || typeof value.data !== 'string' || value.data.length > 768000) fail('PDF_LAYOUT_INVALID');
+    const decoded = JSON.parse(gunzipSync(Buffer.from(value.data, 'base64'), { maxOutputLength: 768000 }).toString('utf8'));
+    if (decoded.sourceRevision !== value.sourceRevision || decoded.version !== value.version) fail('PDF_LAYOUT_INVALID');
+    return decoded;
+  } catch (error) { fail('PDF_LAYOUT_INVALID'); }
+}
 async function rows(db, name, where, limit) {
   const result = []; let cursor = '';
   while (true) {
@@ -38,8 +49,8 @@ function normalize(snapshot, limit) {
   if (snapshot.persons.length > limit || snapshot.relations.length > 2000) fail('PDF_LIMIT_EXCEEDED');
   const ids = new Set(snapshot.persons.map(p => p._id));
   if (ids.size !== snapshot.persons.length || snapshot.persons.some(p => !p.name || !p._id)) fail('PDF_INVALID_GRAPH');
-  snapshot.persons = snapshot.persons.map(p => fields(p, PERSON_FIELDS));
-  snapshot.relations = snapshot.relations.filter(r => ids.has(r.fromPersonId) && ids.has(r.toPersonId)).map(r => fields(r, RELATION_FIELDS));
+  snapshot.persons = snapshot.persons.map(graphSource.familyPerson);
+  snapshot.relations = snapshot.relations.filter(r => ids.has(r.fromPersonId) && ids.has(r.toPersonId)).map(graphSource.familyRelation);
   if (snapshot.relations.some(r => !['spouse', 'parent_child'].includes(r.type) || r.fromPersonId === r.toPersonId)) fail('PDF_INVALID_GRAPH');
   return snapshot;
 }
@@ -65,7 +76,8 @@ function createWorker(options) {
       const source = await authorize(task);
       if (task.source === 'example') {
         const content = source.publishedContent;
-        return normalize({ name: source.title || content.family && content.family.name || '示例家谱', description: source.description || content.family && content.family.description || '', persons: content.persons || [], relations: content.relations || [], exportedAt: new Date().toISOString(), sourceRevision: source.publishedVersion || 0 }, 200);
+        const projected = task.layoutSnapshot ? graphSource.exampleGraph(content) : { persons: content.persons || [], relations: content.relations || [] };
+        return normalize(Object.assign({ name: source.title || content.family && content.family.name || '示例家谱', description: source.description || content.family && content.family.description || '', exportedAt: new Date().toISOString(), sourceRevision: Number(source.publishedVersion || 0) }, projected), 200);
       }
       const persons = await rows(db, 'persons', { familyId: task.familyId, status: 'active' }, 500);
       const relations = await rows(db, 'relations', { familyId: task.familyId, status: 'active' }, 2000);
@@ -117,17 +129,18 @@ function createWorker(options) {
     try {
       const data = await snapshot(task);
       if (!data.persons.length) fail('PDF_EMPTY');
+      if (task.layoutSnapshot) data.posterLayout = layoutSnapshot.restore(unpackLayout(task.layoutSnapshot), data.persons, data.relations, data.sourceRevision, task.display.nameLayout);
       await update(task, { progress: 20 });
       const assets = await loadAvatars(task, data);
       await update(task, { progress: 50 });
       const miniCode = task.miniCodeBase64 ? Buffer.from(task.miniCodeBase64, 'base64') : null;
       const result = await render(data, task.format, task.display, assets, miniCode);
-      await authorize(task);
+      await verifyRevision(task, data.sourceRevision);
       const fileName = String(data.name).replace(/[\\/:*?"<>|\x00-\x1f]/g, '_').slice(0, 40) + '-' + (task.format === 'poster' ? '矢量全谱图' : 'A4完整谱书') + '.pdf';
       const uploaded = await cloud.uploadFile({ cloudPath: 'exports/' + task.userId + '/' + task._id + '-' + task.runToken + '.pdf', fileContent: result.bytes });
       fileId = uploaded.fileID;
       if (!fileId) fail('PDF_FAILED');
-      await authorize(task);
+      await verifyRevision(task, data.sourceRevision);
       const committed = await update(task, {
         status: 'completed', progress: 100, fileId, fileName, size: result.bytes.length,
         personCount: result.personCount, relationCount: result.relationCount, pageCount: result.pageCount,
@@ -142,6 +155,10 @@ function createWorker(options) {
       await update(task, { status: 'failed', failureCode: code, failureMessage: code === 'PDF_FONT_MISSING_GLYPH' ? error.message : MESSAGES[code] || MESSAGES.PDF_FAILED, failedAt: db.serverDate() });
       return { completed: false, taskId: id, code };
     }
+  }
+  async function verifyRevision(task, revision) {
+    const source = await authorize(task);
+    if (task.layoutSnapshot && Number(task.source === 'example' ? source.publishedVersion || 0 : source.contentRevision || 0) !== revision) fail('PDF_GRAPH_CHANGED');
   }
   async function maintenance() {
     const tasks = await rows(db, 'export_tasks', { kind: 'family_pdf', status: 'pending' }, 5000);
@@ -161,4 +178,4 @@ function createWorker(options) {
   }
   return { process, authorize, snapshot, maintenance };
 }
-module.exports = { createWorker, normalize, membershipActive };
+module.exports = { createWorker, normalize, membershipActive, unpackLayout };

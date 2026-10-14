@@ -257,6 +257,7 @@ Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap({
           rawPersons: persons,
           rawRelations: data.relations || [],
           relationRevision: Number(data.relationRevision || 0),
+          contentRevision: data.contentRevision,
           loading: false,
           nameLayout: nameLayout,
           showChildRankBadge: preference.showChildRankBadge === true,
@@ -939,6 +940,10 @@ Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap({
 
   childOrderRows: function (orderedIds) {
     const self = this;
+    const parentId = this.data.childOrderParent && this.data.childOrderParent._id;
+    const dirty = orderedIds.join('|') !== (this._childOrderOriginalIds || []).join('|');
+    const rankData = dirty ? childRank.preview(this.data.rawPersons, this.data.rawRelations, parentId, orderedIds)
+      : childRank.build(this.data.rawPersons, this.data.rawRelations);
     const relationsByChild = {};
     this.data.rawRelations.forEach(function (relation) {
       if (relation.type === 'parent_child' && self.data.childOrderParent && relation.fromPersonId === self.data.childOrderParent._id) {
@@ -955,12 +960,14 @@ Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap({
       let label = '排行待确认';
       if (gender === 'male' || gender === 'female') {
         genderCounts[gender] += 1;
-        label = childRank.rankLabel(gender, genderCounts[gender]);
+        label = rankData.byPerson[row.person._id] ? rankData.byPerson[row.person._id].childRankLabel : childRank.rankLabel(gender, genderCounts[gender]);
       }
       return Object.assign({}, personGender.decorate(row.person), {
         initial: (row.person.name || '家').slice(0, 1),
         birthDateText: personDate.display(row.person, 'birth'),
         rankLabel: label,
+        rankBasisText: rankData.byPerson[row.person._id] && rankData.byPerson[row.person._id].childRankParentId !== parentId
+          ? rankData.byPerson[row.person._id].childRankBasisText : '',
         canMoveUp: index > 0 && childRank.canSwap(row, rows[index - 1]),
         canMoveDown: index < rows.length - 1 && childRank.canSwap(row, rows[index + 1])
       });
@@ -971,7 +978,7 @@ Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap({
     const parent = this.data.selectedPerson;
     if (!parent || !this.data.canEdit) return;
     const rankData = childRank.build(this.data.rawPersons, this.data.rawRelations);
-    const orderedIds = rankData.parentOrders[parent._id] || [];
+    const orderedIds = childRank.editorOrder(rankData, parent._id);
     if (orderedIds.length < 2) {
       wx.showToast({ title: '至少有两个孩子才需要排行', icon: 'none' });
       return;

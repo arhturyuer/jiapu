@@ -5,7 +5,7 @@ const MM = 72 / 25.4;
 const BACKGROUND = '#F7F4EC';
 function drawPoster(doc, snapshot, display, assets, miniCode, helpers) {
   const { text, fitText, verticalText } = helpers;
-  const layout = graph.layoutGraph(snapshot.persons, snapshot.relations, { mode: 'full', nameLayout: display.nameLayout, collapsedIds: [] });
+  const layout = snapshot.posterLayout || graph.layoutGraph(snapshot.persons, snapshot.relations, { mode: 'full', nameLayout: display.nameLayout, collapsedIds: [] });
   const width = Math.max(750, layout.width) + 128;
   const height = Math.max(900, layout.height) + 324;
   const factor = 1189 * MM / Math.max(width, height);

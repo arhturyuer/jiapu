@@ -2,6 +2,38 @@ require('./helpers/test-environment');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const api = require('../miniprogram/utils/api');
+const siblingFixture = require('./helpers/sibling-rank-fixture');
+const childRank = require('../miniprogram/utils/child-rank');
+
+test('同组姐妹弹窗跟随图上有效口径，移动后预览保存结果而不修改原资料', function () {
+  for (const parentId of ['father', 'mother']) {
+    const page = loadPage({});
+    const data = siblingFixture();
+    page.data.rawPersons = data.persons;
+    page.data.rawRelations = data.relations;
+    page.data.selectedPerson = data.persons.find(p => p._id === parentId);
+    const before = structuredClone(data.relations);
+    page.openChildOrderSheet();
+    let girls = page.data.childOrderItems.filter(p => p.gender === 'female');
+    assert.deepEqual(girls.map(p => p._id), ['rong', 'ying', 'man']);
+    assert.deepEqual(girls.map(p => p.rankLabel), ['长女', '次女', '三女']);
+    assert.equal(page.data.childOrderDirty, false);
+    if (parentId === 'father') assert.ok(girls.every(p => p.rankBasisText === '按李洁玲的子女排行'));
+    page.moveChildOrder({ currentTarget: { dataset: { id: 'rong', direction: 'down' } } });
+    girls = page.data.childOrderItems.filter(p => p.gender === 'female');
+    assert.deepEqual(girls.map(p => p._id), ['ying', 'rong', 'man']);
+    assert.deepEqual(girls.map(p => p.rankLabel), ['长女', '次女', '三女']);
+    const saved = data.relations.map(r => r.type === 'parent_child' && r.fromPersonId === parentId
+      ? { ...r, childOrder: page._childOrderIds.indexOf(r.toPersonId), childOrderUpdatedAt: 1000 } : r);
+    const result = childRank.build(data.persons, saved);
+    assert.deepEqual(girls.map(p => result.byPerson[p._id].childRankLabel), girls.map(p => p.rankLabel));
+    assert.deepEqual(data.relations, before);
+    page.moveChildOrder({ currentTarget: { dataset: { id: 'rong', direction: 'up' } } });
+    assert.equal(page.data.childOrderDirty, false);
+    assert.deepEqual(page.data.childOrderItems.filter(p => p.gender === 'female').map(p => [p._id, p.rankLabel]),
+      [['rong', '长女'], ['ying', '次女'], ['man', '三女']]);
+  }
+});
 
 function loadPage(app) {
   let definition = null;

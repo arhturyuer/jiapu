@@ -50,7 +50,7 @@ function timestamp(value) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function compareFallback(first, second) {
+function compareFallback(first, second, ignoreText) {
   const firstOrder = relationNumber(first.relation, 'childOrder', Infinity);
   const secondOrder = relationNumber(second.relation, 'childOrder', Infinity);
   if (firstOrder !== secondOrder) return firstOrder - secondOrder;
@@ -62,6 +62,7 @@ function compareFallback(first, second) {
   const firstHasDate = Boolean(personDate.range(first.person, 'birth'));
   const secondHasDate = Boolean(personDate.range(second.person, 'birth'));
   if (firstHasDate !== secondHasDate) return firstHasDate ? -1 : 1;
+  if (ignoreText === true) return 0;
   return textOrder(first.person && first.person.name, second.person && second.person.name)
     || textOrder(first.person && first.person._id, second.person && second.person._id);
 }
@@ -140,14 +141,32 @@ function activeItems(persons, relations) {
   return byParent;
 }
 
-function build(persons, relations) {
+function candidatePriority(first, second) {
+  const firstManual = first.manualAt > 0;
+  const secondManual = second.manualAt > 0;
+  if (firstManual !== secondManual) return firstManual ? -1 : 1;
+  return second.manualAt - first.manualAt || second.relationAt - first.relationAt;
+}
+
+function build(persons, relations, options) {
+  const config = options || {};
   const byParent = activeItems(persons, relations);
   const candidatesByChild = {};
   const parentOrders = {};
   const parentRanks = {};
   Object.keys(byParent).forEach(function (parentId) {
     const group = byParent[parentId];
-    const ordered = orderChildren(Object.keys(group.childrenById).map(function (childId) {
+    // A parent's order is one decision for the whole sibling group. Per-edge
+    // timestamps can otherwise select a different parent for each child.
+    const priority = Object.keys(group.childrenById).reduce(function (result, childId) {
+      const relation = group.childrenById[childId].relation;
+      result.manualAt = Math.max(result.manualAt, timestamp(relation.childOrderUpdatedAt));
+      result.relationAt = Math.max(result.relationAt, timestamp(relation.updatedAt), timestamp(relation.createdAt));
+      return result;
+    }, { manualAt: 0, relationAt: 0 });
+    const ordered = config.parentOrders && config.parentOrders[parentId]
+      ? config.parentOrders[parentId].map(function (id) { return group.childrenById[id]; })
+      : orderChildren(Object.keys(group.childrenById).map(function (childId) {
       return group.childrenById[childId];
     }));
     parentOrders[parentId] = ordered.map(function (item) { return item.person._id; });
@@ -159,8 +178,8 @@ function build(persons, relations) {
       if (gender !== 'male' && gender !== 'female') return;
       genderCounts[gender] += 1;
       const relation = item.relation;
-      const manualAt = timestamp(relation.childOrderUpdatedAt);
-      const relationAt = Math.max(timestamp(relation.updatedAt), timestamp(relation.createdAt));
+      const manualAt = config.legacyParentPriority ? timestamp(relation.childOrderUpdatedAt) : priority.manualAt;
+      const relationAt = config.legacyParentPriority ? Math.max(timestamp(relation.updatedAt), timestamp(relation.createdAt)) : priority.relationAt;
       parentRanks[parentId][item.person._id] = {
         label: rankLabel(gender, genderCounts[gender]),
         rankNumber: genderCounts[gender],
@@ -182,14 +201,13 @@ function build(persons, relations) {
   const byPerson = {};
   Object.keys(candidatesByChild).forEach(function (childId) {
     const candidates = candidatesByChild[childId].sort(function (first, second) {
-      const firstManual = first.manualAt > 0;
-      const secondManual = second.manualAt > 0;
-      if (firstManual !== secondManual) return firstManual ? -1 : 1;
-      if (first.manualAt !== second.manualAt) return second.manualAt - first.manualAt;
-      if (first.relationAt !== second.relationAt) return second.relationAt - first.relationAt;
-      return textOrder(first.parentId, second.parentId);
+      return candidatePriority(first, second) || textOrder(first.parentId, second.parentId);
     });
-    const selected = candidates[0];
+    const chosen = config.parentChoices && config.parentChoices[childId];
+    const selected = chosen ? candidates.find(function (candidate) { return candidate.parentId === chosen; }) : candidates[0];
+    if (!selected || candidatePriority(candidates[0], selected) < 0) {
+      throw Object.assign(new Error('家谱图已变化，请返回家谱刷新后重新生成'), { code: 'PDF_LAYOUT_INVALID' });
+    }
     byPerson[childId] = {
       childRankLabel: selected.label,
       childRankNumber: selected.rankNumber,
@@ -207,11 +225,44 @@ function canSwap(first, second) {
   return comparableDateOrder(first && first.person, second && second.person) === 0;
 }
 
+function editorOrder(rankData, parentId) {
+  const ids = rankData.parentOrders[parentId] || [];
+  const queues = {};
+  ids.forEach(function (id) {
+    const basis = rankData.byPerson[id] && rankData.byPerson[id].childRankParentId;
+    if (basis && !queues[basis]) {
+      queues[basis] = rankData.parentOrders[basis].filter(function (childId) {
+        return ids.indexOf(childId) >= 0 && rankData.byPerson[childId] && rankData.byPerson[childId].childRankParentId === basis;
+      });
+    }
+  });
+  return ids.map(function (id) {
+    const basis = rankData.byPerson[id] && rankData.byPerson[id].childRankParentId;
+    return basis ? queues[basis].shift() : id;
+  });
+}
+
+function preview(persons, relations, parentId, ids) {
+  const manualAt = (relations || []).reduce(function (latest, relation) {
+    return Math.max(latest, timestamp(relation.childOrderUpdatedAt), timestamp(relation.updatedAt), timestamp(relation.createdAt));
+  }, 0) + 1;
+  const positions = new Map(ids.map(function (id, index) { return [id, index]; }));
+  return build(persons, relations.map(function (relation) {
+    return relation.status !== 'deleted' && relation.type === 'parent_child' && relation.fromPersonId === parentId && positions.has(relation.toPersonId)
+      ? Object.assign({}, relation, { childOrder: positions.get(relation.toPersonId), childOrderUpdatedAt: manualAt })
+      : relation;
+  }));
+}
+
 module.exports = {
   build: build,
   canSwap: canSwap,
   compareChildren: compareChildren,
   orderChildren: orderChildren,
+  activeItems: activeItems,
+  editorOrder: editorOrder,
+  preview: preview,
+  compareFallback: compareFallback,
   comparableDateOrder: comparableDateOrder,
   dateInterval: dateInterval,
   rankLabel: rankLabel

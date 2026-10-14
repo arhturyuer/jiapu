@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "archiver": "7.0.1",
+    "lunar-javascript": "1.7.7",
     "pdfkit": "0.20.2",
     "sharp": "0.34.5",
     "tencentcloud-sdk-nodejs-scf": "4.0.389",

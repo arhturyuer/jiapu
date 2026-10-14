@@ -32,7 +32,8 @@ function publicExample(template) {
     template: template,
     result: null,
     cleanText: function (value) { return String(value || ''); },
-    publicExamplePerson: function (person) { return person; }
+    publicExamplePerson: function (person) { return person; },
+    pdfGraphSource: require('../cloudfunctions/youpuUserApi/pdf-graph-source')
   };
   vm.runInNewContext(description[0] + '\n' + source[0] + '\nresult = publicExampleContent(template);', context);
   return JSON.parse(JSON.stringify(context.result));

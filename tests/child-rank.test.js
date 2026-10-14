@@ -2,6 +2,44 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const childRank = require('../miniprogram/utils/child-rank');
 const graph = require('../miniprogram/utils/graph-layout');
+const siblingFixture = require('./helpers/sibling-rank-fixture');
+
+test('同组姐妹不能按各条关系时间混用双亲口径，内外排行与横向顺序一致', function () {
+  const data = siblingFixture();
+  const old = childRank.build(data.persons, data.relations, { legacyParentPriority: true });
+  assert.equal(old.byPerson.man.childRankLabel, '长女');
+  assert.equal(old.byPerson.rong.childRankLabel, '长女');
+  for (const relations of [data.relations, data.relations.slice().reverse()]) {
+    const result = childRank.build(data.persons, relations);
+    for (const parent of ['father', 'mother']) {
+      assert.deepEqual(childRank.editorOrder(result, parent).filter(id => ['rong', 'ying', 'man'].includes(id)), ['rong', 'ying', 'man']);
+    }
+    assert.deepEqual(['rong', 'ying', 'man'].map(id => result.byPerson[id].childRankLabel), ['长女', '次女', '三女']);
+    assert.ok(['rong', 'ying', 'man'].every(id => result.byPerson[id].childRankParentId === 'mother'));
+    assert.equal(result.byPerson['son-2'].childRankLabel, '次子');
+    for (const nameLayout of ['horizontal', 'vertical']) {
+      const layout = graph.layoutGraph(data.persons, relations, { mode: 'full', nameLayout: nameLayout });
+      const daughters = layout.nodes.filter(node => node.gender === 'female' && node._id !== 'mother').sort((a, b) => a.x - b.x);
+      assert.deepEqual(daughters.map(node => node._id), ['rong', 'ying', 'man']);
+      assert.deepEqual(daughters.map(node => node.childRankLabel), ['长女', '次女', '三女']);
+    }
+  }
+});
+
+test('整组最近手动调整优先于普通关系更新时间，编辑预览不写入原关系', function () {
+  const data = siblingFixture();
+  data.relations.find(r => r._id === 'father-rong').childOrderUpdatedAt = 500;
+  data.relations.find(r => r._id === 'mother-man').updatedAt = 900;
+  const ranked = childRank.build(data.persons, data.relations);
+  assert.ok(['rong', 'ying', 'man'].every(id => ranked.byPerson[id].childRankParentId === 'father'));
+  assert.deepEqual(['man', 'rong', 'ying'].map(id => ranked.byPerson[id].childRankLabel), ['长女', '次女', '三女']);
+  const before = structuredClone(data.relations);
+  const preview = childRank.preview(data.persons, data.relations, 'mother', ['ying', 'rong', 'man']);
+  assert.deepEqual(['ying', 'rong', 'man'].map(id => preview.byPerson[id].childRankLabel), ['长女', '次女', '三女']);
+  assert.deepEqual(data.relations, before);
+  const deleted = { ...data.relations[1], _id: 'deleted', status: 'deleted', childOrderUpdatedAt: 10000 };
+  assert.deepEqual(childRank.build(data.persons, data.relations.concat(deleted)).byPerson, ranked.byPerson);
+});
 
 function person(id, name, gender, birthDate) {
   return { _id: id, name: name, gender: gender, birthDate: birthDate || '', status: 'active' };

@@ -11,6 +11,7 @@ const analytics = require('./analytics');
 const requestContext = require('./request-context');
 const familyCopy = require('./family-copy');
 const pdfExport = require('./pdf-export');
+const pdfGraphSource = require('./pdf-graph-source');
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
@@ -1604,11 +1605,21 @@ async function familyGetPreference(event) {
 async function graphGet(event) {
   const openid = getOpenid();
   await requireActiveUser(openid);
-  const access = await requireMembership(event.familyId, ACTIVE_ROLES, db, openid);
-  const family = access.family;
+  let access = await requireMembership(event.familyId, ACTIVE_ROLES, db, openid);
+  let family = access.family;
   const preference = await maybeGet(db, 'user_family_preferences', preferenceId(event.familyId, openid));
-  const persons = await listAll('persons', { familyId: event.familyId, status: 'active' }, GRAPH_PERSON_LIMIT);
-  const relations = await listAll('relations', { familyId: event.familyId, status: 'active' }, GRAPH_RELATION_LIMIT);
+  let persons; let relations; let consistent = false;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    persons = await listAll('persons', { familyId: event.familyId, status: 'active' }, GRAPH_PERSON_LIMIT);
+    relations = await listAll('relations', { familyId: event.familyId, status: 'active' }, GRAPH_RELATION_LIMIT);
+    const after = await getFamily(db, event.familyId);
+    if (Number(family.contentRevision || 0) === Number(after.contentRevision || 0)) { family = after; consistent = true; break; }
+    // Re-authorize without reusing invocation-local cached access on a retry.
+    requestContext.invalidate();
+    access = await requireMembership(event.familyId, ACTIVE_ROLES, db, openid); family = access.family;
+  }
+  assert(consistent, 'GRAPH_CHANGED', '家谱正在修改，请刷新后重试');
+  requestContext.rememberAccess(Object.assign({}, access, { family: family }));
   const personIds = new Set(persons.map(function (person) { return person._id; }));
   const visibleRelations = relations.filter(function (relation) {
     return personIds.has(relation.fromPersonId) && personIds.has(relation.toPersonId);
@@ -1629,19 +1640,9 @@ async function graphGet(event) {
   const result = {
     family: publicFamily(family, access.membership.role),
     persons: compactPersons,
-    relations: visibleRelations.map(function (relation) {
-      return {
-        _id: relation._id,
-        type: relation.type,
-        fromPersonId: relation.fromPersonId,
-        toPersonId: relation.toPersonId,
-        childOrder: relation.type === 'parent_child' && relation.childOrder !== undefined && relation.childOrder !== null && Number.isFinite(Number(relation.childOrder)) ? Number(relation.childOrder) : null,
-        childOrderUpdatedAt: relation.type === 'parent_child' ? relation.childOrderUpdatedAt || null : null,
-        createdAt: relation.createdAt || null,
-        updatedAt: relation.updatedAt || null
-      };
-    }),
+    relations: visibleRelations.map(pdfGraphSource.familyRelation),
     relationRevision: Number(family.relationRevision || 0),
+    contentRevision: Number(family.contentRevision || 0),
     preference: normalizeFamilyPreference(preference),
     currentRole: access.membership.role
   };
@@ -3073,19 +3074,7 @@ async function accessibleMediaAssets(assets, openid) {
 }
 
 function publicExamplePerson(person) {
-  const source = person || {};
-  return {
-    _id: cleanText(source._id, 80),
-    name: cleanText(source.name, 30),
-    gender: cleanGender(source.gender),
-    lifeStatus: cleanLifeStatus(source.lifeStatus),
-    birthDate: cleanDate(source.birthDate),
-    deathDate: cleanDate(source.deathDate),
-    birthPlace: cleanText(source.birthPlace, 80),
-    bio: cleanText(source.bio, 500),
-    avatarAssetId: '',
-    photoAssetIds: []
-  };
+  return pdfGraphSource.examplePerson(person);
 }
 
 function publicExampleContent(template) {
@@ -3095,14 +3084,7 @@ function publicExampleContent(template) {
     return person._id && person.name;
   });
   const personIds = new Set(people.map(function (person) { return person._id; }));
-  const relations = (content.relations || []).map(function (relation) {
-    return {
-      _id: cleanText(relation._id, 80),
-      type: relation.type === 'spouse' ? 'spouse' : 'parent_child',
-      fromPersonId: cleanText(relation.fromPersonId, 80),
-      toPersonId: cleanText(relation.toPersonId, 80)
-    };
-  }).filter(function (relation) {
+  const relations = (content.relations || []).map(pdfGraphSource.exampleRelation).filter(function (relation) {
     return relation._id && relation.fromPersonId !== relation.toPersonId &&
       personIds.has(relation.fromPersonId) && personIds.has(relation.toPersonId);
   });

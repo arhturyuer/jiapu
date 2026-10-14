@@ -1,5 +1,8 @@
 const crypto = require('crypto');
+const { gzipSync } = require('node:zlib');
 const { read, day } = require('./family-copy');
+const layoutSnapshot = require('./pdf-shared/pdf-layout-snapshot');
+const graphSource = require('./pdf-graph-source');
 const ROLES = ['admin', 'member', 'viewer'];
 const digest = value => crypto.createHash('sha256').update(value).digest('hex').slice(0, 40);
 function displayOptions(value) {
@@ -40,7 +43,39 @@ function createService(options) {
     assert(['poster', 'book'].includes(event.format), 'PDF_FORMAT_INVALID', '请选择 PDF 格式');
     const key = event.source === 'family' ? event.familyId : event.slug;
     assert(typeof key === 'string' && key.trim() && key.length <= 80, 'PDF_SOURCE_INVALID', '请选择家谱');
-    return { source: event.source, familyId: event.source === 'family' ? key : '', slug: event.source === 'example' ? key : '', format: event.format, display: displayOptions(event.display) };
+    const input = { source: event.source, familyId: event.source === 'family' ? key : '', slug: event.source === 'example' ? key : '', format: event.format, display: displayOptions(event.display) };
+    if (event.layoutSnapshot !== undefined) {
+      assert(input.format === 'poster', 'PDF_LAYOUT_INVALID', '请返回家谱刷新后重新生成');
+      input.layoutSnapshot = layoutSnapshot.structure(event.layoutSnapshot);
+      assert(input.layoutSnapshot.nameLayout === input.display.nameLayout, 'PDF_LAYOUT_INVALID', '请返回家谱刷新后重新生成');
+    }
+    return input;
+  }
+  function revision(source, input) { return Number(input.source === 'example' ? source.publishedVersion || 0 : source.contentRevision || 0); }
+  function matchingRevision(source, input) {
+    if (input.layoutSnapshot) assert(revision(source, input) === input.layoutSnapshot.sourceRevision, 'PDF_GRAPH_CHANGED', '家谱图已变化，请返回家谱刷新后重新生成');
+  }
+  async function validateLayout(input, openid) {
+    if (!input.layoutSnapshot) return;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const access = await authorize(input, db, openid);
+      const before = input.source === 'example' ? access : await read(db, 'families', input.familyId);
+      assert(before && before.status === (input.source === 'example' ? 'published' : 'active'), 'PDF_ACCESS_CHANGED', '家谱访问权限已变化，请返回确认');
+      matchingRevision(before, input);
+      let data;
+      if (input.source === 'example') data = graphSource.exampleGraph(before.publishedContent);
+      else {
+        const persons = await graphSource.rows(db, 'persons', { familyId: input.familyId, status: 'active' }, 500);
+        const ids = new Set(persons.map(person => person._id));
+        const relations = await graphSource.rows(db, 'relations', { familyId: input.familyId, status: 'active' }, 2000);
+        data = { persons: persons.map(graphSource.familyPerson), relations: relations.filter(r => ids.has(r.fromPersonId) && ids.has(r.toPersonId)).map(graphSource.familyRelation) };
+      }
+      const after = input.source === 'example' ? await authorize(input, db, openid) : await read(db, 'families', input.familyId);
+      if (after && revision(before, input) === revision(after, input)) {
+        layoutSnapshot.restore(input.layoutSnapshot, data.persons, data.relations, revision(before, input), input.display.nameLayout); return;
+      }
+    }
+    assert(false, 'PDF_GRAPH_CHANGED', '家谱图已变化，请返回家谱刷新后重新生成');
   }
   async function dispatch(task, openid) {
     if (!task || task.status !== 'pending') return task;
@@ -90,14 +125,17 @@ function createService(options) {
     assert(typeof id === 'string' && id.length <= 80, 'PDF_NOT_FOUND', 'PDF 任务不存在');
     const fingerprint = digest(JSON.stringify(input));
     await authorize(input, db, openid);
+    const prior = input.layoutSnapshot ? await read(db, 'export_tasks', id) : null;
+    if (!prior || prior.inputHash !== fingerprint || event.retryTaskId && prior.status === 'failed') await validateLayout(input, openid);
     await mutate('pdf.create', event, openid, async function (tx) {
-      await authorize(input, tx, openid);
+      const source = await authorize(input, tx, openid);
       const existing = await read(tx, 'export_tasks', id);
       if (existing) {
         assert(existing.kind === 'family_pdf' && existing.userId === user._id && existing.inputHash === fingerprint, 'PDF_REQUEST_CHANGED', '生成参数已改变，请重新发起');
         if (!event.retryTaskId || existing.status !== 'failed') return { taskId: id };
         assert(Date.now() - new Date(existing.createdAt).getTime() < 72 * 3600000, 'PDF_EXPIRED', '任务已过期，请重新生成');
       } else assert(!event.retryTaskId, 'PDF_NOT_FOUND', 'PDF 任务不存在');
+      matchingRevision(source, input);
       const actor = await read(tx, 'users', user._id);
       const active = actor.activePdfTaskId ? await read(tx, 'export_tasks', actor.activePdfTaskId) : null;
       assert(!active || !['pending', 'processing'].includes(active.status), 'PDF_IN_PROGRESS', '已有 PDF 正在生成，请稍后查看');
@@ -112,6 +150,7 @@ function createService(options) {
         miniCodeBase64: existing && existing.miniCodeBase64 || '',
         miniCodeInvitationId: existing && existing.miniCodeInvitationId || ''
       });
+      if (input.layoutSnapshot) data.layoutSnapshot = { version: input.layoutSnapshot.version, sourceRevision: input.layoutSnapshot.sourceRevision, encoding: 'gzip-base64', data: gzipSync(Buffer.from(JSON.stringify(input.layoutSnapshot))).toString('base64') };
       await tx.collection('export_tasks').doc(id).set({ data });
       await tx.collection('users').doc(user._id).update({ data: { pdfDay: today, pdfCount: count + (existing ? 0 : 1), activePdfTaskId: id, latestPdfTaskId: id } });
       return { taskId: id };

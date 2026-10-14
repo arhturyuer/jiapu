@@ -339,7 +339,8 @@ test('200 人和 400 条关系发布、回滚后用户端仍完整读取', async
     template: template,
     result: null,
     cleanText: function (value) { return String(value || ''); },
-    publicExamplePerson: function (person) { return person; }
+    publicExamplePerson: function (person) { return person; },
+    pdfGraphSource: require('../cloudfunctions/youpuUserApi/pdf-graph-source')
   };
   vm.runInNewContext(publicDescription[0] + '\n' + publicContent[0] + '\nresult = publicExampleContent(template);', userContext);
   assert.equal(userContext.result.personCount, 200);

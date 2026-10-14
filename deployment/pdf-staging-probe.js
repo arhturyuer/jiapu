@@ -3,6 +3,8 @@ const cloud = require('wx-server-sdk');
 const crypto = require('crypto');
 const pdf = require('./pdf-export');
 const dispatcher = require('./job-dispatcher');
+const graphSource = require('./pdf-graph-source');
+const layoutSnapshot = require('./pdf-shared/pdf-layout-snapshot');
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 function assert(condition, code) { if (!condition) throw Object.assign(new Error(code), { code }); }
@@ -16,6 +18,31 @@ async function list(name, where) {
   }
 }
 const uid = (run, role) => 'pdf_probe_' + run + '_' + role;
+async function removeRows(name, rows) {
+  // Bound concurrent deletes and wait for every write even on failure. Dense
+  // fixtures otherwise exceed the CLI's synchronous response timeout.
+  for (let offset = 0; offset < rows.length; offset += 4) {
+    const results = await Promise.allSettled(rows.slice(offset, offset + 4).map(row => db.collection(name).doc(row._id).remove()));
+    const failed = results.find(result => result.status === 'rejected'); if (failed) throw failed.reason;
+  }
+}
+async function layoutSource(task) {
+  if (task.source === 'example') {
+    const example = (await list('example_templates', { slug: task.slug }))[0];
+    return Object.assign({ revision: Number(example.publishedVersion || 0) }, graphSource.exampleGraph(example.publishedContent));
+  }
+  const family = await read(db, 'families', task.familyId);
+  return { revision: Number(family.contentRevision || 0),
+    persons: (await list('persons', { familyId: task.familyId, status: 'active' })).map(graphSource.familyPerson),
+    relations: (await list('relations', { familyId: task.familyId, status: 'active' })).map(graphSource.familyRelation) };
+}
+async function verifyLayout(task) {
+  if (!task.layoutSnapshot) return { layoutVersion: 0, geometryVerified: false };
+  const data = await layoutSource(task);
+  const value = task.layoutSnapshot.encoding ? JSON.parse(require('node:zlib').gunzipSync(Buffer.from(task.layoutSnapshot.data, 'base64'), { maxOutputLength: 768000 })) : task.layoutSnapshot;
+  const restored = layoutSnapshot.restore(value, data.persons, data.relations, data.revision, task.display.nameLayout);
+  return { layoutVersion: value.version, geometryVerified: true, nodeCount: restored.nodes.length, lineCount: restored.lines.length, snapshotBytes: Buffer.byteLength(JSON.stringify(value)) };
+}
 function service(run, role) {
   const actor = uid(run, role);
   return pdf.createService({ db, cloud, assert, getOpenid: () => actor,
@@ -47,7 +74,7 @@ function service(run, role) {
 async function seed(event) {
   const familyId = 'pdf_probe_' + event.run;
   if (event.phase === 'start') {
-    await db.collection('families').doc(familyId).set({ data: { name: 'PDF 虚构验收家谱', description: '仅供 staging 验收', status: 'active', proLifetime: true, personCount: 500, relationCount: 499, contentRevision: 0 } });
+    await db.collection('families').doc(familyId).set({ data: { name: 'PDF 虚构验收家谱', description: '仅供 staging 验收', status: 'active', proLifetime: true, personCount: 500, relationCount: event.dense ? 2000 : 499, contentRevision: 0 } });
     for (const role of ['admin', 'member', 'viewer']) {
       const actor = uid(event.run, role);
       await db.collection('users').doc(actor).set({ data: { status: 'active' } });
@@ -62,7 +89,11 @@ async function seed(event) {
     for (let i = event.offset; i < Math.min(500, event.offset + 50); i += 1) {
       const id = familyId + '_p' + String(i).padStart(3, '0');
       await db.collection('persons').doc(id).set({ data: { familyId, name: '测试成员' + i, gender: i % 2 ? 'male' : 'female', lifeStatus: 'living', status: 'active', bio: i < 3 ? '完整虚构简介。'.repeat(40) : '虚构资料', birthDateInfo: { year: 1980, calendar: 'lunar', precision: 'year' }, birthPlace: '虚构地点' } });
-      if (i) await db.collection('relations').doc(familyId + '_r' + i).set({ data: { familyId, type: 'parent_child', fromPersonId: familyId + '_p' + String(Math.floor((i - 1) / 2)).padStart(3, '0'), toPersonId: id, status: 'active' } });
+      if (event.dense) {
+        const personId = n => familyId + '_p' + String(n).padStart(3, '0');
+        if (i < 250) for (let d = 1; d <= 6; d++) await db.collection('relations').doc(familyId + '_sp_' + i + '_' + d).set({ data: { familyId, type: 'spouse', fromPersonId: id, toPersonId: personId((i + d) % 250), status: 'active' } });
+        else for (let d = 0; d < 2; d++) await db.collection('relations').doc(familyId + '_pc_' + i + '_' + d).set({ data: { familyId, type: 'parent_child', fromPersonId: personId((i - 250 + d) % 250), toPersonId: id, status: 'active' } });
+      } else if (i) await db.collection('relations').doc(familyId + '_r' + i).set({ data: { familyId, type: 'parent_child', fromPersonId: familyId + '_p' + String(Math.floor((i - 1) / 2)).padStart(3, '0'), toPersonId: id, status: 'active' } });
     }
     return { seeded: true };
   }
@@ -95,7 +126,7 @@ exports.main = async event => {
       const active = actor && actor.activePdfTaskId ? await read(db, 'export_tasks', actor.activePdfTaskId) : null;
       assert(actor && actor.status === 'active' && actor.openid && !['pending', 'processing'].includes(active && active.status), 'PROBE_CLIENT_BUSY');
       const today = require('./family-copy').day(Date.now());
-      assert(actor.pdfDay !== today || Number(actor.pdfCount || 0) <= 18, 'PROBE_CLIENT_QUOTA');
+      assert(actor.pdfDay !== today || Number(actor.pdfCount || 0) <= 20 - (event.reserve || 2), 'PROBE_CLIENT_QUOTA');
       const snapshot = Object.fromEntries(['pdfDay', 'pdfCount', 'activePdfTaskId', 'latestPdfTaskId'].filter(key => actor[key] !== undefined).map(key => [key, actor[key]]));
       const key = 'pdf_probe_' + event.run + '_client';
       assert(!await read(db, 'system_config', key), 'PROBE_CLIENT_EXISTS');
@@ -112,13 +143,17 @@ exports.main = async event => {
       const task = await read(db, 'export_tasks', event.taskId);
       assert(client && task && task.userId === client.actorId && (task.familyId === familyId || task.slug === familyId), 'PROBE_CLIENT_TASK');
       assert(!['pending', 'processing'].includes(task.status), 'PROBE_CLIENT_RUNNING');
-      data = { status: task.status, failureCode: task.failureCode || '', nativeCodeReady: Boolean(task.miniCodeBase64) };
+      data = Object.assign({ status: task.status, failureCode: task.failureCode || '', nativeCodeReady: Boolean(task.miniCodeBase64) }, await verifyLayout(task));
     }
     if (event.action === 'seed') data = await seed(event);
     if (event.action === 'start') {
       assert(['admin', 'member', 'viewer'].includes(event.role), 'PROBE_ROLE');
       const api = service(event.run, event.role);
       const input = { source: event.example ? 'example' : 'family', familyId: event.example ? '' : familyId, slug: event.example ? familyId : '', format: event.format, display: { nameLayout: event.vertical ? 'vertical' : 'horizontal', showGenderColors: true }, requestId: event.role + ':' + event.format + ':' + Boolean(event.example) };
+      if (input.format === 'poster' && !event.legacy) {
+        const data = await layoutSource(input);
+        input.layoutSnapshot = layoutSnapshot.create(data.persons, data.relations, input.display.nameLayout, data.revision);
+      }
       const task = await api.create(input); const duplicate = await api.create(input);
       assert(task.taskId === duplicate.taskId, 'PROBE_IDEMPOTENCY');
       const actor = await read(db, 'users', uid(event.run, event.role));
@@ -143,9 +178,28 @@ exports.main = async event => {
       assert(code === 'PDF_DAILY_LIMIT' && (await read(db, 'users', uid(event.run, 'admin'))).pdfCount === 20, 'PROBE_QUOTA_LIMIT');
       data = { rejected: code, count: 20 };
     }
+    if (event.action === 'layoutReject') {
+      const api = service(event.run, 'viewer');
+      const input = { source: 'family', familyId, format: 'poster', display: { nameLayout: 'horizontal' }, requestId: 'reject-' + event.run };
+      const graph = await layoutSource(input);
+      const original = layoutSnapshot.create(graph.persons, graph.relations, 'horizontal', graph.revision);
+      const before = await read(db, 'users', uid(event.run, 'viewer')); const rejected = [];
+      for (const mode of ['version', 'missingNode', 'fakeWire']) {
+        const value = JSON.parse(JSON.stringify(original));
+        if (mode === 'version') value.sourceRevision += 1;
+        if (mode === 'missingNode') value.nodes.pop();
+        if (mode === 'fakeWire') value.lines.pop();
+        let code;
+        try { await api.create(Object.assign({}, input, { requestId: input.requestId + mode, layoutSnapshot: value })); }
+        catch (error) { code = error.code; }
+        assert(code === (mode === 'version' ? 'PDF_GRAPH_CHANGED' : 'PDF_LAYOUT_INVALID'), 'PROBE_LAYOUT_REJECTION'); rejected.push({ mode, code });
+      }
+      assert((await read(db, 'users', uid(event.run, 'viewer'))).pdfCount === before.pdfCount, 'PROBE_LAYOUT_QUOTA');
+      data = { rejected, quotaUnchanged: true };
+    }
     if (event.action === 'status') {
       const api = service(event.run, event.role); const task = (await api.status({ taskId: event.taskId })).task;
-      data = task;
+      data = Object.assign({}, task, await verifyLayout(await read(db, 'export_tasks', task.taskId)));
       if (task.status === 'completed') {
         const first = await api.downloadUrl({ taskId: task.taskId }); const second = await api.downloadUrl({ taskId: task.taskId });
         assert(first.fileName === second.fileName, 'PROBE_DOWNLOAD');
@@ -183,15 +237,15 @@ exports.main = async event => {
           }
         });
         const requests = new Set(native.map(task => task.requestId).concat(native.map(task => task._id + '-code')));
-        for (const requestId of requests) for (const row of await list('idempotency_records', { actorId: client.actorId, requestId })) await db.collection('idempotency_records').doc(row._id).remove();
+        for (const requestId of requests) await removeRows('idempotency_records', await list('idempotency_records', { actorId: client.actorId, requestId }));
         await db.collection('system_config').doc(familyId + '_client').remove();
       }
       const files = tasks.concat(examples).map(t => t.fileId).concat(assets.map(a => a.fileId)).filter(Boolean);
       if (files.length) { const result = await cloud.deleteFile({ fileList: files }); assert((result.fileList || []).every(f => Number(f.status || 0) === 0), 'PROBE_FILE_CLEANUP'); }
-      for (const task of tasks.concat(examples)) await db.collection('export_tasks').doc(task._id).remove();
-      for (const name of ['persons', 'relations', 'media_assets', 'family_memberships', 'invitations', 'audit_logs']) for (const row of await list(name, { familyId })) await db.collection(name).doc(row._id).remove();
+      await removeRows('export_tasks', tasks.concat(examples));
+      for (const name of ['persons', 'relations', 'media_assets', 'family_memberships', 'invitations', 'audit_logs']) await removeRows(name, await list(name, { familyId }));
       for (const role of ['admin', 'member', 'viewer']) {
-        const actor = uid(event.run, role); for (const row of await list('idempotency_records', { actorId: actor })) await db.collection('idempotency_records').doc(row._id).remove();
+        const actor = uid(event.run, role); await removeRows('idempotency_records', await list('idempotency_records', { actorId: actor }));
         await db.collection('users').doc(actor).remove();
       }
       await db.collection('families').doc(familyId).remove(); await db.collection('example_templates').doc(familyId).remove();

@@ -1,6 +1,7 @@
 const launchAd = require('../../utils/launch-ad');
 const api = require('../../utils/api');
 const transfer = require('../../utils/file-transfer');
+const session = require('../../utils/pdf-export-session');
 Page(launchAd.wrap({
   data: {
     source: 'family', familyId: '', slug: '', format: 'poster', name: '',
@@ -11,10 +12,12 @@ Page(launchAd.wrap({
     this._display = {};
     try { this._display = JSON.parse(decodeURIComponent(options.display || '%7B%7D')); } catch (error) {}
     this.setData({ source: options.source === 'example' ? 'example' : 'family', familyId: options.familyId || '', slug: options.slug || '' });
+    const captured = session.take(options.session);
+    this._layoutSnapshot = captured && captured.source === this.data.source && captured.key === (this.data.source === 'example' ? this.data.slug : this.data.familyId) ? captured.layoutSnapshot : null;
   },
   onShow: function () { this._visible = true; this.load(); },
   onHide: function () { this._visible = false; clearTimeout(this._timer); },
-  onUnload: function () { this._unloaded = true; this._visible = false; clearTimeout(this._timer); if (this._file) transfer.removeTempFile(this._file.filePath); },
+  onUnload: function () { this._unloaded = true; this._visible = false; this._layoutSnapshot = null; this._request = null; this._submittedRequest = null; clearTimeout(this._timer); if (this._file) transfer.removeTempFile(this._file.filePath); },
   load: function () {
     const self = this;
     this.setData({ error: '' });
@@ -54,13 +57,19 @@ Page(launchAd.wrap({
   },
   generate: function () {
     if (this.data.submitting || this.data.running || this.data.membershipRequired) return;
+    if (this.data.format === 'poster' && !this._layoutSnapshot) {
+      this.setData({ taskError: '请返回家谱刷新后，再打开 PDF 重新生成' }); return;
+    }
     const self = this;
     if (!this._request) {
       this._request = { source: this.data.source, familyId: this.data.familyId, slug: this.data.slug, format: this.data.format, display: this._display, requestId: api.requestId() };
-      if (this.data.task && this.data.task.status === 'failed' && this.data.task.format === this.data.format) this._request.retryTaskId = this.data.task.taskId;
+      if (this.data.format === 'poster') this._request.layoutSnapshot = this._layoutSnapshot;
+      if (this.data.task && this.data.task.status === 'failed' && this.data.task.format === this.data.format &&
+        (!this._layoutSnapshot || this._submittedTaskId === this.data.task.taskId && this._submittedRequest && this._submittedRequest.format === this.data.format)) this._request.retryTaskId = this.data.task.taskId;
     }
     this.setData({ submitting: true, taskError: '' });
     api.call('pdf.create', this._request).then(function (task) {
+      if (!self._unloaded) { self._submittedRequest = self._request; self._submittedTaskId = task.taskId; }
       self._request = null; self._delay = 3000;
       if (!self._unloaded) self.setData({ uncertain: false });
       self.receiveTask(task);

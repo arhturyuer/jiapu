@@ -792,7 +792,8 @@ function pairKey(firstId, secondId) {
   return firstId < secondId ? firstId + '|' + secondId : secondId + '|' + firstId;
 }
 
-function createSpouseConnections(nodesById, relations, selectedPersonId, metrics) {
+function createSpouseConnections(nodesById, relations, selectedPersonId, metrics, compareIds) {
+  const compare = compareIds || function (a, b) { return a.localeCompare(b); };
   const lines = [];
   const junctions = [];
   const byPair = {};
@@ -809,7 +810,7 @@ function createSpouseConnections(nodesById, relations, selectedPersonId, metrics
     nodesByRow[node.y].push(node);
   });
   Object.keys(nodesByRow).forEach(function (row) {
-    nodesByRow[row].sort(function (first, second) { return first.x - second.x || first._id.localeCompare(second._id); });
+    nodesByRow[row].sort(function (first, second) { return first.x - second.x || compare(first._id, second._id); });
   });
 
   const routes = spouseRelations.map(function (relation) {
@@ -838,7 +839,7 @@ function createSpouseConnections(nodesById, relations, selectedPersonId, metrics
   const occupiedPorts = {};
   let maxPortLane = 0;
   routes.slice().sort(function (first, second) {
-    return Number(first.remote) - Number(second.remote) || first.relation._id.localeCompare(second.relation._id);
+    return Number(first.remote) - Number(second.remote) || compare(first.relation._id, second.relation._id);
   }).forEach(function (route) {
     const leftKey = route.left._id + ':1';
     const rightKey = route.right._id + ':-1';
@@ -897,7 +898,8 @@ function createSpouseConnections(nodesById, relations, selectedPersonId, metrics
   return { lines: lines, junctions: junctions, byPair: byPair };
 }
 
-function assignFamilyRailLanes(sourceGroups, nodesById, relations, metrics) {
+function assignFamilyRailLanes(sourceGroups, nodesById, relations, metrics, compareIds) {
+  const compare = compareIds || function (a, b) { return a.localeCompare(b); };
   const spouseCounts = {};
   relations.forEach(function (relation) {
     if (relation.type !== 'spouse') return;
@@ -928,7 +930,7 @@ function assignFamilyRailLanes(sourceGroups, nodesById, relations, metrics) {
   const requiredShifts = [];
   Object.keys(groupsByRow).forEach(function (rowKey) {
     const rowGroups = groupsByRow[rowKey].sort(function (first, second) {
-      return first.minX - second.minX || first.maxX - second.maxX || first._id.localeCompare(second._id);
+      return first.minX - second.minX || first.maxX - second.maxX || compare(first._id, second._id);
     });
     const lanes = [];
     rowGroups.forEach(function (group) {
@@ -1005,8 +1007,9 @@ function assignFamilyRailLanes(sourceGroups, nodesById, relations, metrics) {
   return { groups: groups, requiredShifts: requiredShifts };
 }
 
-function createFamilyConnections(nodesById, relations, selectedPersonId, metrics) {
-  const spouseConnections = createSpouseConnections(nodesById, relations, selectedPersonId, metrics);
+function createFamilyConnections(nodesById, relations, selectedPersonId, metrics, compareIds) {
+  const compare = compareIds || function (a, b) { return a.localeCompare(b); };
+  const spouseConnections = createSpouseConnections(nodesById, relations, selectedPersonId, metrics, compare);
   const lines = spouseConnections.lines;
   const junctions = spouseConnections.junctions;
   const spouseJunctions = spouseConnections.byPair;
@@ -1070,7 +1073,7 @@ function createFamilyConnections(nodesById, relations, selectedPersonId, metrics
     });
   });
   Object.keys(childGroups).forEach(function (childId) {
-    const groups = childGroups[childId].sort(function (first, second) { return first._id.localeCompare(second._id); });
+    const groups = childGroups[childId].sort(function (first, second) { return compare(first._id, second._id); });
     const child = nodesById[childId];
     const spacing = Math.min(12, (metrics.nodeWidth - 24) / Math.max(1, groups.length - 1));
     groups.forEach(function (group, index) {
@@ -1078,7 +1081,7 @@ function createFamilyConnections(nodesById, relations, selectedPersonId, metrics
     });
   });
 
-  const allocation = assignFamilyRailLanes(sourceGroups, nodesById, relations, metrics);
+  const allocation = assignFamilyRailLanes(sourceGroups, nodesById, relations, metrics, compare);
   const familyGroups = allocation.groups;
   familyGroups.forEach(function (group) {
     const groupKey = group._id;
@@ -1238,6 +1241,15 @@ function scaleLayout(layout, value) {
   return result;
 }
 
+// Rebuild only the wires around supplied full-tree positions. No person/name
+// ordering runs here; the snapshot also supplies the client's ID collation.
+function connectionsForNodes(nodes, relations, nameLayout, compareIds) {
+  const nodesById = Object.create(null);
+  nodes.forEach(function (node) { nodesById[node._id] = node; });
+  const connections = createFamilyConnections(nodesById, relations, '', metricsForNameLayout(nameLayout), compareIds);
+  return Object.assign(connections, { crossings: findLineCrossings(connections.lines) });
+}
+
 function layoutGraph(personsInput, relationsInput, options) {
   const optionsValue = options || {};
   const nameLayout = optionsValue.nameLayout === 'vertical' ? 'vertical' : 'horizontal';
@@ -1251,7 +1263,7 @@ function layoutGraph(personsInput, relationsInput, options) {
   }).slice().sort(function (a, b) {
     return a.type.localeCompare(b.type) || a.fromPersonId.localeCompare(b.fromPersonId) || a.toPersonId.localeCompare(b.toPersonId);
   });
-  const childRanks = childRank.build(activePersons, active);
+  const childRanks = childRank.build(activePersons, active, { legacyParentPriority: optionsValue.rankVersion === 1 });
   const filtered = filterCollapsed(activePersons, active, optionsValue.collapsedIds || []);
   const persons = filtered.persons;
   const relations = filtered.relations;
@@ -1434,6 +1446,7 @@ function expandCollapsedIds(persons, relations, collapsedIds, targetPersonId) {
 
 module.exports = {
   layoutGraph: layoutGraph,
+  connectionsForNodes: connectionsForNodes,
   calculateKinships: kinship.calculateKinships,
   filterCollapsed: filterCollapsed,
   groupPersonsByGeneration: groupPersonsByGeneration,
