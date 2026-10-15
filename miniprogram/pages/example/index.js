@@ -1,3 +1,4 @@
+const nodePresentation = require('../../utils/node-presentation');
 const readingGraph = require('../../utils/reading-graph');
 const deviceLayout = require('../../utils/device-layout');
 const pdfEntry = require('../../utils/pdf-entry');
@@ -35,7 +36,7 @@ Page(launchAd.wrap(graphGesturePage.wrap({
     canvasWidth: 750, canvasHeight: 900, graphScale: 1, graphX: 0, graphY: 0, graphScaleMin: 0.32, graphZoomClass: 'zoom-detail',
     isCleanScreen: false,
     pageOrientation: 'portrait', isLandscape: false, orientationChanging: false,
-    collapsedPersonIds: [], hiddenBranchCount: 0, canExpandAll: false, nameLayout: 'horizontal', showChildRankBadge: false, showGenderBadge: false, showGenderColors: true, autoCollapseEnabled: true, viewMode: 'full', viewpointId: '', viewpointName: '',
+    collapsedPersonIds: [], hiddenBranchCount: 0, canExpandAll: false, nameLayout: 'horizontal', showAvatar: true, emptyAvatarStyle: 'default', showChildRankBadge: false, showGenderBadge: false, showGenderColors: true, autoCollapseEnabled: true, viewMode: 'full', viewpointId: '', viewpointName: '',
     selectedPersonId: '', selectedPerson: null, showMemberSheet: false, memberAdUnitId: '', memberAdVisible: false, memberAdMounted: false, memberAdLoaded: false, memberAdReserved: false, memberAdPreloadState: 'idle', memberAdWidth: 0, memberAdLayoutPending: false, memberAdFamilyId: '', memberAdVersion: 0, showPerspectiveSheet: false, perspectiveKeyword: '', perspectiveResults: [],
     posterGenerating: false,
     shareCard: shareCard.create({ kind: 'example' })
@@ -267,6 +268,13 @@ Page(launchAd.wrap(graphGesturePage.wrap({
   getWindowSize: function () {
     try { return wx.getWindowInfo ? wx.getWindowInfo() : wx.getSystemInfoSync(); } catch (error) { return { windowWidth: 375, windowHeight: 667 }; }
   },
+  onNodeAvatarError: function (event) {
+    const id = event.currentTarget.dataset.id;
+    const url = event.currentTarget.dataset.url;
+    const clear = function (person) { return person._id === id && person.avatar === url ? Object.assign({}, person, { avatar: '' }) : person; };
+    this.setData({ rawPersons: this.data.rawPersons.map(clear), nodes: this.data.nodes.map(clear) });
+  },
+
   renderGraph: function (mode, viewpointId, renderOptions) {
     const optionsValue = renderOptions || {};
     if (optionsValue.statePatch && optionsValue.statePatch.showMemberSheet === false

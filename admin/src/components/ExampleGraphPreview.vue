@@ -4,9 +4,18 @@
 // @ts-ignore The mini-program utility is CommonJS and Vite converts it at build time.
 import graphLayout from '../../../miniprogram/utils/graph-layout.js';
 import { computed, ref } from 'vue';
+// @ts-ignore Shared pure presentation helpers.
+import nodePresentation from '../../../miniprogram/utils/node-presentation.js';
+import maleAvatar from '../../../miniprogram/images/system-avatar-male.png';
+import femaleAvatar from '../../../miniprogram/images/system-avatar-female.png';
+import neutralAvatar from '../../../miniprogram/images/system-avatar-neutral.png';
+function systemAvatar(gender: string): string {
+  if (!props.displayPreference.showGenderColors) return neutralAvatar;
+  return gender === 'male' ? maleAvatar : gender === 'female' ? femaleAvatar : neutralAvatar;
+}
 
 type Row = Record<string, any>;
-type DisplayPreference = { nameLayout: 'horizontal' | 'vertical'; showChildRankBadge: boolean; showGenderBadge: boolean; showGenderColors: boolean; autoCollapseEnabled: boolean };
+type DisplayPreference = { showAvatar: boolean; emptyAvatarStyle: 'default' | 'surname'; nameLayout: 'horizontal' | 'vertical'; showChildRankBadge: boolean; showGenderBadge: boolean; showGenderColors: boolean; autoCollapseEnabled: boolean };
 const props = defineProps<{ persons: Row[]; relations: Row[]; displayPreference: DisplayPreference; selectedPersonId?: string; selectedRelationId?: string }>();
 const emit = defineEmits<{ selectPerson: [id: string]; selectRelation: [id: string] }>();
 const zoom = ref(0.72);
@@ -25,7 +34,6 @@ const lines = computed<Row[]>(() => (layout.value.lines as Row[]).filter((line: 
 const relationHits = computed<Row[]>(() => lines.value.filter((line: Row) => line.relationIds?.length));
 const relationsById = computed<Record<string, Row>>(() => Object.fromEntries((props.relations || []).map((relation: Row) => [relation._id, relation])));
 const namesById = computed<Record<string, string>>(() => Object.fromEntries((props.persons || []).map((person: Row) => [person._id, person.name || '未命名人物'])));
-const nodeWidth = computed(() => layout.value.nodeWidth || 168);
 const nodeHeight = computed(() => layout.value.nodeHeight || 164);
 function chooseLine(line: Row): void {
   const ids = Array.from(new Set((line.relationIds || []) as string[])).filter((id: string) => relationsById.value[id]);
@@ -60,12 +68,16 @@ function onPointerUp(): void { drag.value = null; }
         <g v-for="crossing in layout.crossings" :key="crossing._id" class="line-crossing" :class="{ 'is-spouse': crossing.isSpouse }"><circle :cx="crossing.x" :cy="crossing.y" r="7"/><line :x1="crossing.x" :x2="crossing.x" :y1="crossing.y - 7" :y2="crossing.y + 7"/></g>
         <line v-for="hit in relationHits" :key="`hit-${hit._id}`" :x1="hit.x1" :y1="hit.y1" :x2="hit.x2" :y2="hit.y2" class="relation-hit" @click.stop="chooseLine(hit)" />
         <g v-for="node in layout.nodes" :key="node._id" class="graph-node" :class="[displayPreference.showGenderColors ? node.genderClass : 'gender-neutral', { selected: node._id === selectedPersonId }]" :transform="`translate(${node.x}, ${node.y})`" @click.stop="emit('selectPerson', node._id)">
-          <rect class="node-card" :width="nodeWidth" :height="nodeHeight" rx="18"/>
+          <rect class="node-card" :width="node.width" :height="nodeHeight" rx="18"/>
           <template v-if="displayPreference.showGenderBadge"><rect class="gender-marker" x="8" y="8" width="38" height="24" rx="12"/><text x="27" y="25" text-anchor="middle" class="gender-marker-text">{{ node.genderText }}</text></template>
-          <template v-if="displayPreference.nameLayout === 'vertical'"><text :x="nodeWidth / 2" y="37" text-anchor="middle" class="node-name node-name-vertical"><tspan v-for="(character,index) in Array.from(node.name || '未命名').slice(0,4)" :key="index" :x="nodeWidth / 2" :dy="index ? 30 : 0">{{ character }}</tspan></text></template>
-          <template v-else><text :x="nodeWidth / 2" :y="nodeHeight / 2 - 15" text-anchor="middle" class="node-name">{{ node.name || '未命名人物' }}</text><text v-if="node.birthDate" :x="nodeWidth / 2" :y="nodeHeight / 2 + 18" text-anchor="middle" class="node-meta">{{ node.birthDate.slice(0,4) }}年</text></template>
+          <template v-if="displayPreference.nameLayout === 'vertical'"><text v-for="(column, ci) in node.nameColumns" :key="ci" :x="node.width / 2 + ((node.nameColumns.length - 1) / 2 - ci) * 36" :y="(nodeHeight - Math.max(...node.nameColumns.map((c: string) => c.split('\n').length)) * 32) / 2 + 26" text-anchor="middle" class="node-name node-name-vertical"><tspan v-for="(character, ri) in column.split('\n')" :key="ri" :x="node.width / 2 + ((node.nameColumns.length - 1) / 2 - ci) * 36" :dy="ri ? 32 : 0">{{ character }}</tspan></text></template>
+          <template v-else>
+            <template v-if="displayPreference.showAvatar"><image v-if="displayPreference.emptyAvatarStyle === 'default'" :href="systemAvatar(node.gender)" :x="(node.width - 52) / 2" y="12" width="52" height="52"/><text v-else :x="node.width / 2" y="49" text-anchor="middle" class="node-name" :style="{ fontSize: node.surnameFontSize + 'px' }">{{ node.surname }}</text></template>
+            <text v-for="(line, ri) in node.nameLines" :key="ri" :x="node.width / 2" :y="nodePresentation.horizontalContent(node.name, nodeHeight, displayPreference.showAvatar, node.birthDate).nameTop + ri * 30 + 25" text-anchor="middle" class="node-name">{{ line }}</text>
+            <text v-if="node.birthDate" :x="node.width / 2" :y="nodePresentation.horizontalContent(node.name, nodeHeight, displayPreference.showAvatar, node.birthDate).metaCenter + 7" text-anchor="middle" class="node-meta">{{ node.birthDate.slice(0,4) }}年</text>
+          </template>
           <template v-if="displayPreference.showChildRankBadge && node.childRankLabel"><rect class="child-rank-background" x="-13" y="-20" width="70" height="31" rx="15"/><text x="22" y="1" text-anchor="middle" class="child-rank-text">{{ node.childRankLabel }}</text></template>
-          <template v-if="node.hiddenDescendantCount > 0"><rect class="branch-count-background" :x="nodeWidth - 55" :y="nodeHeight - 8" width="72" height="28" rx="14"/><text :x="nodeWidth - 19" :y="nodeHeight + 11" text-anchor="middle" class="branch-count-text">+{{ node.hiddenDescendantCount }} 人</text></template>
+          <template v-if="node.hiddenDescendantCount > 0"><rect class="branch-count-background" :x="node.width - 55" :y="nodeHeight - 8" width="72" height="28" rx="14"/><text :x="node.width - 19" :y="nodeHeight + 11" text-anchor="middle" class="branch-count-text">+{{ node.hiddenDescendantCount }} 人</text></template>
         </g>
       </svg>
       <p v-if="!layout.nodes.length" class="empty">添加人物和关系后会在这里显示关系图。</p>
@@ -75,7 +87,7 @@ function onPointerUp(): void { drag.value = null; }
 </template>
 
 <style scoped>
-.graph-preview { overflow:hidden; border:1px solid #dfe7e2; border-radius:14px; }.graph-preview-tools { min-height:42px; padding:0 12px; display:flex; align-items:center; gap:7px; color:#315143; background:#f5f8f5; font-size:12px; font-weight:700; }.graph-preview-tools span { flex:1; }.graph-preview-tools button { min-width:31px; height:27px; padding:0 8px; color:#245c4a; background:#fff; border:1px solid #ccd8d1; border-radius:7px; font-size:12px; }.graph-stage { position:relative; height:420px; overflow:hidden; touch-action:none; background-color:#fbfcfa; background-image:radial-gradient(rgba(36,92,74,.12) 1px,transparent 1px); background-size:16px 16px; cursor:grab; }.graph-stage:active { cursor:grabbing; }.graph-stage svg { width:100%; height:100%; transform-origin:center; transition:transform 80ms linear; }.graph-line { stroke:#a6b7ae; stroke-width:4; stroke-linecap:round; pointer-events:none; }.graph-line.selected { stroke:#c18a32; stroke-width:7; }.line-spouse { stroke:#829d91; stroke-width:5; }.line-rail { stroke:#bec9c3; stroke-width:3; }.relation-hit { stroke:transparent; stroke-width:18; cursor:pointer; }.graph-node { cursor:pointer; }.graph-node .node-card { fill:#ecefed; stroke:#65706a; stroke-width:2; }.graph-node.gender-male .node-card { fill:#e6eff5; stroke:#416b89; }.graph-node.gender-female .node-card { fill:#f5e7eb; stroke:#985565; }.graph-node.selected .node-card { stroke:#c18a32; stroke-width:5; }.gender-marker { fill:#65706a; stroke:none; }.gender-male .gender-marker { fill:#416b89; }.gender-female .gender-marker { fill:#985565; }.gender-marker-text { fill:#fff; font-size:13px; font-weight:700; }.node-name { fill:#202824; font-size:24px; font-weight:700; }.node-meta { fill:#65706a; font-size:18px; }.empty { position:absolute; inset:0; display:grid; place-items:center; color:#718079; font-size:13px; }
+.graph-preview { overflow:hidden; border:1px solid #dfe7e2; border-radius:14px; }.graph-preview-tools { min-height:42px; padding:0 12px; display:flex; align-items:center; gap:7px; color:#315143; background:#f5f8f5; font-size:12px; font-weight:700; }.graph-preview-tools span { flex:1; }.graph-preview-tools button { min-width:31px; height:27px; padding:0 8px; color:#245c4a; background:#fff; border:1px solid #ccd8d1; border-radius:7px; font-size:12px; }.graph-stage { position:relative; height:420px; overflow:hidden; touch-action:none; background-color:#fbfcfa; background-image:radial-gradient(rgba(36,92,74,.12) 1px,transparent 1px); background-size:16px 16px; cursor:grab; }.graph-stage:active { cursor:grabbing; }.graph-stage svg { width:100%; height:100%; transform-origin:center; transition:transform 80ms linear; }.graph-line { stroke:#a6b7ae; stroke-width:4; stroke-linecap:round; pointer-events:none; }.graph-line.selected { stroke:#c18a32; stroke-width:7; }.line-spouse { stroke:#829d91; stroke-width:5; }.line-rail { stroke:#bec9c3; stroke-width:3; }.relation-hit { stroke:transparent; stroke-width:18; cursor:pointer; }.graph-node { cursor:pointer; }.graph-node .node-card { fill:#ecefed; stroke:#65706a; stroke-width:2; }.graph-node.gender-male .node-card { fill:#e6eff5; stroke:#416b89; }.graph-node.gender-female .node-card { fill:#f5e7eb; stroke:#985565; }.graph-node.selected .node-card { stroke:#c18a32; stroke-width:5; }.gender-marker { fill:#65706a; stroke:none; }.gender-male .gender-marker { fill:#416b89; }.gender-female .gender-marker { fill:#985565; }.gender-marker-text { fill:#fff; font-size:13px; font-weight:700; }.node-name { fill:#202824; font-size:28px; font-weight:600; }.node-meta { fill:#65706a; font-size:18px; }.empty { position:absolute; inset:0; display:grid; place-items:center; color:#718079; font-size:13px; }
 .line-crossing { pointer-events:none; }
 .line-crossing circle { fill:#f7f4ec; }
 .line-crossing line { stroke:#a6b7ae; stroke-width:4; }
@@ -84,7 +96,7 @@ function onPointerUp(): void { drag.value = null; }
 .relation-choice button { padding:6px 9px; color:#245c4a; background:#fff; border:1px solid #ccd8d1; border-radius:7px; cursor:pointer; }
 .relation-choice .choice-close { margin-left:auto; }
 .graph-node.gender-neutral .node-card { fill:#fffefa; stroke:#d8ded9; }
-.node-name-vertical { font-size:25px; }
+.node-name-vertical { font-size:28px; }
 .child-rank-background { fill:#f5e8c9; stroke:#f7f4ec; stroke-width:3; }
 .child-rank-text { fill:#7a4b13; font-size:13px; font-weight:700; }
 .branch-count-background { fill:#245c4a; stroke:#f7f4ec; stroke-width:3; }

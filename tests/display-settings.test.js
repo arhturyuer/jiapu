@@ -129,6 +129,7 @@ test('示例显示设置仅使用按示例隔离的本地偏好', async function
       showChildRankBadge: false,
       showGenderBadge: false,
       showGenderColors: true,
+      showAvatar: true, emptyAvatarStyle: 'surname',
       autoCollapseEnabled: true
     });
     assert.equal(exampleDisplayPreference.get('other').nameLayout, 'horizontal');
@@ -160,6 +161,7 @@ test('示例设置保存后立即刷新上一张示例家谱画布', async funct
       showChildRankBadge: false,
       showGenderBadge: false,
       showGenderColors: true,
+      showAvatar: true, emptyAvatarStyle: 'default',
       autoCollapseEnabled: true
     }]);
   } finally {
@@ -187,10 +189,12 @@ test('示例家谱显示偏好归一化兼容旧字段默认值', function () {
     showChildRankBadge: false,
     showGenderBadge: false,
     showGenderColors: true,
+    showAvatar: true, emptyAvatarStyle: 'default',
     autoCollapseEnabled: true
   });
   assert.deepEqual(exampleDisplayPreference.normalize({ nameLayout: 'vertical' }), {
     nameLayout: 'vertical',
+    showAvatar: true, emptyAvatarStyle: 'surname',
     showChildRankBadge: true,
     showGenderBadge: true,
     showGenderColors: true,
@@ -202,7 +206,7 @@ test('示例家谱显示偏好归一化兼容旧字段默认值', function () {
 test('无发布版本的旧示例沿用本地偏好优先规则，首次修改保留其他默认项', function () {
   const previousWx = global.wx;
   const storage = {};
-  const defaults = { nameLayout: 'vertical', showChildRankBadge: true, showGenderBadge: true, showGenderColors: false, autoCollapseEnabled: false };
+  const defaults = { nameLayout: 'vertical', showAvatar: true, emptyAvatarStyle: 'surname', showChildRankBadge: true, showGenderBadge: true, showGenderColors: false, autoCollapseEnabled: false };
   global.wx = {
     getStorageSync: function (key) { return storage[key]; },
     setStorageSync: function (key, value) { storage[key] = value; }
@@ -361,4 +365,37 @@ test('会话重置前尚未发出的显示设置不在新账号提交', async t 
   const calls = []; const app = { _sessionVersion: 0, updatePreference() {} }; const page = loadPage(app); page.data.familyId = 'f1';
   t.mock.method(api, 'call', async (type, payload) => { calls.push(payload); return { preference: payload }; });
   page.savePreference('nameLayout', 'vertical'); app._sessionVersion++; await page.flushPreference(); assert.equal(calls.length, 0);
+});
+
+test('真实家谱头像设置保存后立即刷新原画布，失败不提前确认', async () => {
+  const previousCall = api.call; const originalPages = global.getCurrentPages;
+  const applied = [];
+  const preview = { data: { currentFamily: { _id: 'family-1' } }, applyDisplayPreference: value => applied.push(value) };
+  const page = loadPage({ updatePreference() {} }); page.data.familyId = 'family-1'; page._previewPage = preview;
+  global.getCurrentPages = () => [preview];
+  api.call = () => Promise.resolve({ preference: { nameLayout: 'horizontal', showAvatar: false, emptyAvatarStyle: 'surname' } });
+  try {
+    await page.savePreference('showAvatar', false); await page.flushPreference();
+    assert.equal(applied.length, 1); assert.equal(applied[0].showAvatar, false);
+    preview.data.currentFamily._id = 'other';
+    await page.savePreference('emptyAvatarStyle', 'default'); await page.flushPreference();
+    assert.equal(applied.length, 1, '迟到结果不能刷新已经切换的家谱');
+    preview.data.currentFamily._id = 'family-1'; preview._unloaded = true;
+    await page.savePreference('showAvatar', true); await page.flushPreference();
+    assert.equal(applied.length, 1, '已销毁的原页面不接受迟到结果');
+  } finally { api.call = previousCall; global.getCurrentPages = originalPages; }
+});
+
+test('头像选择标题独占一行，图标与姓氏选项等宽且保留可访问名称', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const wxml = fs.readFileSync(path.resolve(__dirname, '../miniprogram/pages/display-settings/index.wxml'), 'utf8');
+  const css = fs.readFileSync(path.resolve(__dirname, '../miniprogram/pages/display-settings/index.wxss'), 'utf8');
+  assert.match(wxml, /class="avatar-style-setting"[^>]*>\s*<text class="setting-title">选择系统头像<\/text>/);
+  assert.doesNotMatch(wxml, /无照片时|默认头像/);
+  assert.match(wxml, /aria-label="系统头像"/);
+  assert.match(wxml, /system-avatar-male\.png/);
+  assert.match(wxml, /system-avatar-female\.png/);
+  assert.match(css, /grid-template-columns:\s*minmax\(0, 1fr\) minmax\(0, 1fr\)/);
+  assert.match(css, /\.avatar-style-option\s*\{[^}]*min-width:\s*0/);
 });

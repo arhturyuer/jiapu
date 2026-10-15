@@ -74,6 +74,7 @@ test('PDF 绘制实际使用快照节点、排行及全部静态连线，横竖�
     const doc = new Proxy({}, { get(target, key) {
       if (key === 'roundedRect') return (...args) => { rectangles.push(args); return doc; };
       if (key === 'moveTo' || key === 'lineTo') return (...args) => { points.push([key, ...args]); return doc; };
+      if (key === 'currentLineHeight') return () => 28;
       if (key === 'widthOfString') return text => text.length * 20;
       if (key === 'bufferedPageRange') return () => ({ count: 1 });
       return () => doc;
@@ -91,7 +92,7 @@ test('资料版本／姓名方向不匹配和未知快照版本必须拒绝', ()
   const data = fixture(); const value = snapshot.create(data.persons, data.relations, 'horizontal', 7);
   assert.throws(() => server.restore(value, data.persons, data.relations, 8, 'horizontal'), { code: 'PDF_GRAPH_CHANGED' });
   assert.throws(() => server.restore(value, data.persons, data.relations, 7, 'vertical'), { code: 'PDF_LAYOUT_INVALID' });
-  assert.throws(() => snapshot.structure({ ...value, version: 3 }), { code: 'PDF_LAYOUT_UNSUPPORTED' });
+  assert.throws(() => snapshot.structure({ ...value, version: 999 }), { code: 'PDF_LAYOUT_UNSUPPORTED' });
 });
 test('遗漏／重复／越权 ID、隐藏成员、伪造连线或交点均拒绝', () => {
   const data = fixture(); const original = snapshot.create(data.persons, data.relations, 'horizontal', 0);

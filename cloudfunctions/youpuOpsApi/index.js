@@ -1700,7 +1700,7 @@ function publicExampleTemplate(template) {
 }
 
 function normalizeExampleDisplayPreference(input, fallback) {
-  const defaults = { nameLayout: 'horizontal', showChildRankBadge: false, showGenderBadge: false, showGenderColors: true, autoCollapseEnabled: true };
+  const defaults = { showAvatar: true, emptyAvatarStyle: 'default', nameLayout: 'horizontal', showChildRankBadge: false, showGenderBadge: false, showGenderColors: true, autoCollapseEnabled: true };
   const source = input === undefined ? (fallback || defaults) : input;
   assert(source && typeof source === 'object' && !Array.isArray(source), 'EXAMPLE_DISPLAY_PREFERENCE_INVALID', '示例默认展示设置格式无效');
   const fields = Object.keys(defaults);
@@ -1708,8 +1708,10 @@ function normalizeExampleDisplayPreference(input, fallback) {
     assert(fields.includes(field), 'EXAMPLE_DISPLAY_PREFERENCE_INVALID', '示例默认展示设置包含未知字段');
   });
   const result = Object.assign({}, defaults, source);
+  if (!Object.prototype.hasOwnProperty.call(source, 'emptyAvatarStyle') && (fallback || input !== undefined)) result.emptyAvatarStyle = 'surname';
+  assert(['default', 'surname'].includes(result.emptyAvatarStyle), 'EXAMPLE_DISPLAY_PREFERENCE_INVALID', '头像样式无效');
   assert(['horizontal', 'vertical'].includes(result.nameLayout), 'EXAMPLE_DISPLAY_PREFERENCE_INVALID', '姓名排列设置无效');
-  fields.slice(1).forEach(function (field) {
+  fields.filter(function (field) { return !['nameLayout', 'emptyAvatarStyle'].includes(field); }).forEach(function (field) {
     assert(typeof result[field] === 'boolean', 'EXAMPLE_DISPLAY_PREFERENCE_INVALID', '示例默认展示开关必须为布尔值');
   });
   return result;

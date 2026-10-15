@@ -5,7 +5,7 @@ function open(page, source) {
   if (!family) return;
   const key = source === 'example' ? '&slug=' + encodeURIComponent(page.data.slug) : '&familyId=' + encodeURIComponent(family._id);
   const display = {};
-  ['nameLayout', 'showGenderColors', 'showGenderBadge', 'showChildRankBadge'].forEach(function (field) { display[field] = page.data[field]; });
+  ['nameLayout', 'showAvatar', 'emptyAvatarStyle', 'showGenderColors', 'showGenderBadge', 'showChildRankBadge'].forEach(function (field) { display[field] = page.data[field]; });
   try {
     const revision = source === 'example' ? Number(family.publishedVersion || 0) : page.data.contentRevision;
     const layout = snapshot.create(page.data.rawPersons || [], page.data.rawRelations || [], display.nameLayout, revision);

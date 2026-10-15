@@ -1,3 +1,4 @@
+const nodePresentation = require('../../utils/node-presentation');
 const readingGraph = require('../../utils/reading-graph');
 const deviceLayout = require('../../utils/device-layout');
 const pdfEntry = require('../../utils/pdf-entry');
@@ -57,7 +58,7 @@ Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap({
     pageOrientation: 'portrait',
     isLandscape: false,
     orientationChanging: false,
-    nameLayout: 'horizontal',
+    nameLayout: 'horizontal', showAvatar: true, emptyAvatarStyle: 'default',
     showChildRankBadge: false,
     showGenderBadge: false,
     showGenderColors: true,
@@ -263,6 +264,7 @@ Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap({
           showChildRankBadge: preference.showChildRankBadge === true,
           showGenderBadge: preference.showGenderBadge === true,
           showGenderColors: preference.showGenderColors !== false,
+          ...nodePresentation.avatarPreference(preference, Boolean(data.preference)),
           autoCollapseEnabled: autoCollapseEnabled,
           viewMode: mode,
           viewpointId: personId,
@@ -367,6 +369,30 @@ Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap({
       && Number(family.personCount || 0) >= 3
       && !family.sharedAt
       && !family.shareReminderDismissedAt);
+  },
+
+  applyDisplayPreference: function (preference) {
+    if (!this.data.currentFamily) return;
+    const previous = this.data;
+    const patch = Object.assign(nodePresentation.avatarPreference(preference, true), {
+      nameLayout: preference.nameLayout === 'vertical' ? 'vertical' : 'horizontal',
+      showChildRankBadge: preference.showChildRankBadge === true,
+      showGenderBadge: preference.showGenderBadge === true,
+      showGenderColors: preference.showGenderColors !== false,
+      autoCollapseEnabled: preference.autoCollapseEnabled !== false
+    });
+    const relayout = patch.nameLayout !== previous.nameLayout || patch.autoCollapseEnabled !== previous.autoCollapseEnabled;
+    if (patch.autoCollapseEnabled !== previous.autoCollapseEnabled) patch.collapsedPersonIds = patch.autoCollapseEnabled
+      ? graphLayout.suggestCollapsedIds(previous.rawPersons, previous.rawRelations, { limit: 36, focusId: previous.viewpointId }) : [];
+    this.setData(patch);
+    if (relayout) this.renderGraph(this.data.viewMode, this.data.viewpointId, { preserveViewport: true });
+  },
+
+  onNodeAvatarError: function (event) {
+    const id = event.currentTarget.dataset.id;
+    const url = event.currentTarget.dataset.url;
+    const clear = function (person) { return person._id === id && person.avatar === url ? Object.assign({}, person, { avatar: '' }) : person; };
+    this.setData({ rawPersons: this.data.rawPersons.map(clear), nodes: this.data.nodes.map(clear) });
   },
 
   renderGraph: function (mode, viewpointId, renderOptions) {

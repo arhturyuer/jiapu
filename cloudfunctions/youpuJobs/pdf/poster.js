@@ -1,3 +1,5 @@
+const nodePresentation = require('./shared/node-presentation');
+const { resolve } = require('node:path');
 const graph = require('./shared/graph-layout');
 const personDate = require('./shared/person-date');
 const { genderColors } = require('./shared/tree-poster-style');
@@ -5,7 +7,7 @@ const MM = 72 / 25.4;
 const BACKGROUND = '#F7F4EC';
 function drawPoster(doc, snapshot, display, assets, miniCode, helpers) {
   const { text, fitText, verticalText } = helpers;
-  const layout = snapshot.posterLayout || graph.layoutGraph(snapshot.persons, snapshot.relations, { mode: 'full', nameLayout: display.nameLayout, collapsedIds: [] });
+  const layout = snapshot.posterLayout || graph.layoutGraph(snapshot.persons, snapshot.relations, { mode: 'full', nameLayout: display.nameLayout, collapsedIds: [], geometryVersion: 2 });
   const width = Math.max(750, layout.width) + 128;
   const height = Math.max(900, layout.height) + 324;
   const factor = 1189 * MM / Math.max(width, height);
@@ -15,6 +17,12 @@ function drawPoster(doc, snapshot, display, assets, miniCode, helpers) {
   doc.rect(0, 0, width, height).fill(BACKGROUND);
   function centered(value, x, cy, w, h, size, color) {
     fitText(doc, value, x, cy - h / 2, w, h, size, { align: 'center', color });
+  }
+  function nodeText(value, x, cy, w, size, color) {
+    doc.fontSize(size);
+    const lineHeight = doc.currentLineHeight(true);
+    text(doc, value, x + (w - doc.widthOfString(value)) / 2, cy - lineHeight / 2, w, size,
+      { color: color, height: lineHeight, lineGap: 0, lineBreak: false });
   }
   function badge(value, x, y, background, foreground, config) {
     const size = 20; doc.fontSize(size);
@@ -49,12 +57,38 @@ function drawPoster(doc, snapshot, display, assets, miniCode, helpers) {
   const byId = new Map(snapshot.persons.map(person => [person._id, person]));
   layout.nodes.forEach(node => {
     const person = byId.get(node._id); const x = ox + node.x; const y = oy + node.y;
-    const w = layout.nodeWidth; const h = layout.nodeHeight;
+    const w = node.width || layout.nodeWidth; const h = node.height || layout.nodeHeight;
     const colors = genderColors(person, display.showGenderColors);
     doc.lineWidth(2).roundedRect(x, y, w, h, 24).fillAndStroke(colors.surface, colors.border);
     if (display.showGenderBadge) badge(person.gender === 'male' ? '男' : person.gender === 'female' ? '女' : '未填', x - 12, y - 15, colors.badge, '#FFFFFF', { minimumWidth: 44, height: 34, padding: 20 });
     if (person.lifeStatus === 'deceased') badge('故', x + w - 38 + 12, y - 15, '#EEF0ED', '#53655C', { minimumWidth: 38, height: 34, padding: 18 });
-    if (display.nameLayout === 'vertical') {
+    if (layout.presentationVersion === 3) {
+      if (display.nameLayout === 'vertical') {
+        const columns = nodePresentation.nameColumns(person.name);
+        const rows = Math.max(...columns.map(column => column.split('\n').length));
+        columns.forEach((column, columnIndex) => column.split('\n').forEach((character, row) => {
+          nodeText(character, x + w / 2 + ((columns.length - 1) / 2 - columnIndex) * 36 - 14, y + (h - rows * 32) / 2 + row * 32 + 16, 28, 28, '#202824');
+        }));
+      } else {
+        const kind = nodePresentation.avatarKind(assets[person._id], display);
+        const year = personDate.fromPerson(person, 'birth').year;
+        if (kind !== 'hidden') {
+          const ax = x + (w - 52) / 2; const ay = y + 12;
+          doc.lineWidth(3).roundedRect(ax, ay, 52, 52, 18).fillAndStroke(colors.avatar, colors.border);
+          if (kind === 'surname') nodeText(nodePresentation.surname(person.name), ax, ay + 26, 52, nodePresentation.surnameFontSize(nodePresentation.surname(person.name)), colors.text);
+          else {
+            doc.save();
+            try {
+              doc.roundedRect(ax, ay, 52, 52, 18).clip();
+              doc.image(kind === 'photo' ? assets[person._id] : resolve(__dirname, 'assets', nodePresentation.systemAvatar(person.gender, display.showGenderColors).split('/').pop()), ax, ay, { cover: [52, 52], align: 'center', valign: 'center' });
+            } finally { doc.restore(); }
+          }
+        }
+        const content = nodePresentation.horizontalContent(person.name, h, kind !== 'hidden', year);
+        content.lines.forEach((line, row) => nodeText(line, x + 14, y + content.nameTop + row * 30 + 15, w - 28, 28, '#202824'));
+        if (year) nodeText(year + '年', x + 12, y + content.metaCenter, w - 24, 22, '#65706A');
+      }
+    } else if (display.nameLayout === 'vertical') {
       verticalText(doc, person.name, x + 11, y + 16, w - 22, h - 32, 27);
     } else {
       const avatarX = x + (w - 52) / 2; const avatarY = y + 14;

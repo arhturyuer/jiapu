@@ -23,7 +23,7 @@ function compact(value, layout) {
     if (!positions.has(number)) { positions.set(number, coordinates.length); coordinates.push(number); }
     return positions.get(number);
   }
-  value.nodes = value.nodes.map(function (row) { return [row[0], coordinate(row[1]), coordinate(row[2]), row[3]]; });
+  value.nodes = value.nodes.map(function (row) { return [row[0], coordinate(row[1]), coordinate(row[2]), row[3]].concat(row.slice(4)); });
   value.lines = value.lines.map(function (row) { return [row[0], coordinate(row[1]), coordinate(row[2]), coordinate(row[3]), coordinate(row[4]), row[5]]; });
   value.junctions = value.junctions.map(function (row) { return [coordinate(row[0]), coordinate(row[1]), row[2]]; });
   value.crossings = value.crossings.map(function (row) { return [coordinate(row[0]), coordinate(row[1]), row[2]]; });
@@ -41,7 +41,7 @@ function expand(value) {
   const keys = Array.from(new Set(value.ids.concat(value.relationIds, value.families)));
   function coordinate(i) { index(i, value.coordinates.length); return value.coordinates[i]; }
   return Object.assign({}, value, {
-    nodes: list(value.nodes, 500).map(function (row) { tuple(row, 4); return [row[0], coordinate(row[1]), coordinate(row[2]), row[3]]; }),
+    nodes: list(value.nodes, 500).map(function (row) { tuple(row, value.version === 3 ? 5 : 4); return [row[0], coordinate(row[1]), coordinate(row[2]), row[3]].concat(row.slice(4)); }),
     lines: list(value.lines, 16000).map(function (row) { tuple(row, 6); return [row[0], coordinate(row[1]), coordinate(row[2]), coordinate(row[3]), coordinate(row[4]), row[5]]; }),
     junctions: list(value.junctions, 2000).map(function (row) { tuple(row, 3); return [coordinate(row[0]), coordinate(row[1]), row[2]]; }),
     crossings: list(value.crossings, 32000).map(function (row) { tuple(row, 3); return [coordinate(row[0]), coordinate(row[1]), row[2]]; }),
@@ -63,8 +63,8 @@ function packWires(layout, ids, relationIds) {
   };
 }
 function create(persons, relations, nameLayout, sourceRevision, rankVersion) {
-  const version = rankVersion === undefined ? 2 : rankVersion;
-  const layout = graph.layoutGraph(persons, relations, { mode: 'full', nameLayout: nameLayout, collapsedIds: [], selectedPersonId: '', contentScale: 1, rankVersion: version });
+  const version = rankVersion === undefined ? 3 : rankVersion;
+  const layout = graph.layoutGraph(persons, relations, { mode: 'full', nameLayout: nameLayout, collapsedIds: [], selectedPersonId: '', contentScale: 1, rankVersion: version === 1 ? 1 : 2, geometryVersion: version });
   const ids = layout.nodes.map(function (node) { return node._id; });
   const people = new Map(ids.map(function (id, i) { return [id, i]; }));
   // Preserve the exact input order used by the client's wire algorithm too.
@@ -82,7 +82,7 @@ function create(persons, relations, nameLayout, sourceRevision, rankVersion) {
   const snapshot = Object.assign({
     version: version, sourceRevision: sourceRevision, nameLayout: layout.nameLayout,
     size: [layout.width, layout.height, layout.nodeWidth, layout.nodeHeight], ids: ids, relationIds: relationIds,
-    nodes: layout.nodes.map(function (node, i) { return [i, node.x, node.y, node.childRankParentId ? people.get(node.childRankParentId) : -1]; }),
+    nodes: layout.nodes.map(function (node, i) { return [i, node.x, node.y, node.childRankParentId ? people.get(node.childRankParentId) : -1].concat(version === 3 ? [node.width] : []); }),
     orders: Object.keys(parentOrders).map(function (id) { return [people.get(id), parentOrders[id].map(function (child) { return people.get(child); })]; }),
     routingOrder: routingOrder
   }, packWires(layout, ids, relationIds));
@@ -91,7 +91,7 @@ function create(persons, relations, nameLayout, sourceRevision, rankVersion) {
 }
 function structure(value) {
   check(value && typeof value === 'object' && !Array.isArray(value));
-  if (value.version !== 1 && value.version !== 2) throw Object.assign(new Error('请更新小程序后重新生成家谱图'), { code: 'PDF_LAYOUT_UNSUPPORTED' });
+  if (value.version !== 1 && value.version !== 2 && value.version !== 3) throw Object.assign(new Error('请更新小程序后重新生成家谱图'), { code: 'PDF_LAYOUT_UNSUPPORTED' });
   check(Object.keys(value).length === KEYS.length && Object.keys(value).every(function (key) { return KEYS.indexOf(key) >= 0; }));
   const encoded = value;
   value = expand(value);
@@ -104,9 +104,11 @@ function structure(value) {
   check(list(value.nodes, 500).length === value.ids.length);
   const seen = new Set();
   value.nodes.forEach(function (row) {
-    tuple(row, 4); index(row[0], value.ids.length); check(!seen.has(row[0])); seen.add(row[0]);
+    tuple(row, value.version === 3 ? 5 : 4); index(row[0], value.ids.length); check(!seen.has(row[0])); seen.add(row[0]);
     number(row[1]); number(row[2]);
-    check(row[1] + value.size[2] <= value.size[0] && row[2] + value.size[3] <= value.size[1]);
+    const width = value.version === 3 ? row[4] : value.size[2];
+    check(width === value.size[2] || (value.version === 3 && value.nameLayout === 'vertical' && width === 120));
+    check(row[1] + width <= value.size[0] && row[2] + value.size[3] <= value.size[1]);
     if (row[3] !== -1) index(row[3], value.ids.length);
   });
   const parents = new Set();
@@ -187,11 +189,14 @@ function restore(value, persons, relations, sourceRevision, nameLayout) {
   const nodes = value.nodes.map(function (row) {
     const id = value.ids[row[0]]; const rank = ranks[id];
     check((rank ? rank.childRankParentId : '') === (row[3] === -1 ? '' : value.ids[row[3]]));
-    return Object.assign({}, people.get(id), rank || {}, { x: row[1], y: row[2] });
+    const person = people.get(id);
+    const width = value.version === 3 ? row[4] : value.size[2];
+    if (value.version === 3) check(width === require('./node-presentation').width(person.name, value.size[2], nameLayout === 'vertical', false));
+    return Object.assign({}, person, rank || {}, { x: row[1], y: row[2], width: width, height: value.size[3] });
   });
   // Reject overlapping cards; a client cannot hide a member behind another.
   nodes.forEach(function (a, i) { nodes.slice(i + 1).forEach(function (b) {
-    check(a.x + value.size[2] <= b.x || b.x + value.size[2] <= a.x || a.y + value.size[3] <= b.y || b.y + value.size[3] <= a.y);
+    check(a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + value.size[3] <= b.y || b.y + value.size[3] <= a.y);
   }); });
   const positions = new Map(nodes.map(function (node) { return [node._id, node]; }));
   relations.forEach(function (relation) {
@@ -209,6 +214,6 @@ function restore(value, persons, relations, sourceRevision, nameLayout) {
   check(allowedKeys.length === routing.size && allowedKeys.every(function (key) { return routing.has(key); }));
   const packed = packWires(wires, value.ids, value.relationIds);
   sameRows(value.lines, packed.lines); sameRows(value.junctions, packed.junctions); sameRows(value.crossings, packed.crossings);
-  return Object.assign({ nodes: nodes, width: value.size[0], height: value.size[1], nodeWidth: value.size[2], nodeHeight: value.size[3], nameLayout: nameLayout }, wires);
+  return Object.assign({ nodes: nodes, width: value.size[0], height: value.size[1], nodeWidth: value.size[2], nodeHeight: value.size[3], nameLayout: nameLayout, presentationVersion: value.version }, wires);
 }
 module.exports = { create: create, structure: structure, restore: restore };

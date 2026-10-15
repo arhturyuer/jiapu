@@ -289,6 +289,7 @@ verticalMultipleSpouse.lines.filter(function (line) { return !line.isFlow; }).fo
 const verticalLongName = graph.layoutGraph([
   { _id: 'long-name', name: '欧阳娜娜测试', status: 'active' }
 ], [], { mode: 'full', nameLayout: 'vertical' });
-assert.strictEqual(verticalLongName.nodes[0].verticalName, '欧\n阳\n娜\n娜\n…', '超过四个字符的竖排姓名应省略');
+assert.deepStrictEqual(verticalLongName.nodes[0].nameColumns, ['欧\n阳\n娜\n娜', '测\n试'], '超过四字的姓名应显示两列');
+assert.strictEqual(verticalLongName.nodes[0].width, 120);
 
 console.log('graph layout tests passed');

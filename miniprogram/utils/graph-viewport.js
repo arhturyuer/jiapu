@@ -55,7 +55,7 @@ function fitTransform(layout, viewport, options) {
   let x = (viewport.width - canvasWidth * scale) / 2;
   let y = (viewport.height - canvasHeight * scale) / 2;
   if (focusNode) {
-    const nodeWidth = layout.nodeWidth || 168;
+    const nodeWidth = focusNode.width || layout.nodeWidth || 168;
     const nodeHeight = layout.nodeHeight || 164;
     x = viewport.width / 2 - (focusNode.x + nodeWidth / 2) * viewport.rpxToPx * scale;
     y = viewport.height * 0.38 - (focusNode.y + nodeHeight * 58 / 164) * viewport.rpxToPx * scale;
@@ -86,7 +86,7 @@ function initialTransform(layout, viewport, options) {
   const start = initialClusterNode(layout, viewport, pixelsPerRpx, optionsValue.relations);
   if (start) {
     if (layout.width * pixelsPerRpx > viewport.width - 48) {
-      x = viewport.width / 2 - (start.x + nodeWidth / 2) * pixelsPerRpx;
+      x = viewport.width / 2 - (start.x + (start.width || nodeWidth) / 2) * pixelsPerRpx;
     }
     if (layout.height * pixelsPerRpx > viewport.height - 48) {
       y = viewport.height / 2 - (start.y + nodeHeight / 2) * pixelsPerRpx;

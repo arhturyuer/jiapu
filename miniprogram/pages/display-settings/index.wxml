@@ -16,6 +16,16 @@
     </view>
   </view>
 
+  <view class="section-block" wx:if="{{nameLayout === 'horizontal'}}">
+    <view class="section-heading"><text class="section-title">头像显示</text></view>
+    <view class="setting-list surface-card">
+      <view class="setting-row"><view class="setting-copy"><text class="setting-title">显示头像</text><text class="setting-desc">有照片时优先显示照片</text></view><switch color="#245C4A" checked="{{showAvatar}}" data-field="showAvatar" bindchange="togglePreference" /></view>
+      <view class="avatar-style-setting" wx:if="{{showAvatar}}">
+        <text class="setting-title">选择系统头像</text>
+        <view class="avatar-style-picker"><view aria-role="button" class="avatar-style-option {{emptyAvatarStyle === 'default' ? 'selected' : ''}}" data-style="default" bindtap="chooseEmptyAvatarStyle" aria-label="系统头像" aria-pressed="{{emptyAvatarStyle === 'default'}}"><image class="avatar-style-icon" src="/images/system-avatar-male.png" mode="aspectFit"/><image class="avatar-style-icon" src="/images/system-avatar-female.png" mode="aspectFit"/></view><view aria-role="button" class="avatar-style-option {{emptyAvatarStyle === 'surname' ? 'selected' : ''}}" data-style="surname" bindtap="chooseEmptyAvatarStyle" aria-pressed="{{emptyAvatarStyle === 'surname'}}">姓氏</view></view></view>
+    </view>
+  </view>
+
   <view class="section-block">
     <view class="section-heading"><text class="section-title">节点标识</text></view>
     <view class="setting-list surface-card">

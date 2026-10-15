@@ -139,6 +139,7 @@ test('关于页使用正式版实际版本并按最新在前展示受控更新�
   const uploadScript = fs.readFileSync(path.join(root, 'deployment/upload-miniprogram.sh'), 'utf8');
   const verifier = fs.readFileSync(path.join(root, 'deployment/verify-release-note.mjs'), 'utf8');
   assert.deepEqual(releaseInfo.validateReleaseNotes(releaseNotes), [
+  { version: '1.6.17', summary: '新增家谱头像显示与默认样式设置，支持横排双行、竖排按需双列姓名，统一图片和 PDF 大图排版。' },
   { version: '1.6.16', summary: '修复子女排行内外不一致和同组重复长女，统一父母排行依据与编辑预览，并保持 PDF 布局一致。' },
   { version: '1.6.15', summary: '修复 PDF 大图与小程序家谱图的子女顺序及长幼标注不一致，保持完整家谱布局和亲属连线一致。' },
   { version: '1.6.14', summary: '减少家谱浏览和编辑时的重复请求，优化登录恢复、显示设置保存及家庭看板加载。' },

@@ -392,3 +392,70 @@ test('服务端强制图片邀请为长期仅查看，普通邀请也不设期�
   assert.ok(config.permissions.openapi.includes('wxacode.getUnlimited'));
   assert.match(invitePage, /options\.token \|\| options\.scene/);
 });
+
+test('图片绘制双行与传统双列姓名，并按每个节点的宽度居中', () => {
+  const names = ['一二三四五六七八九十甲', '张甲'];
+  const persons = names.map((name, i) => ({ _id: 'p' + i, name }));
+  for (const nameLayout of ['horizontal', 'vertical']) {
+    const layout = graph.layoutGraph(persons, [], { nameLayout });
+    const drawn = [];
+    const ctx = new Proxy({}, { get(target, key) {
+      if (key === 'measureText') return text => ({ width: Array.from(text).length * 28 });
+      if (key === 'fillText') return (value, x, y) => drawn.push({ value, x, y });
+      return () => {};
+    }, set() { return true; } });
+    const sizing = poster.calculateSize(layout);
+    poster.draw(ctx, layout, sizing, {}, null, { showAvatar: false });
+    const node = layout.nodes.find(n => n._id === 'p0');
+    if (nameLayout === 'horizontal') {
+      const first = drawn.find(row => row.value === '一二三四五');
+      const second = drawn.find(row => row.value === '六七八九…');
+      assert.ok(first && second);
+      assert.equal(first.x, sizing.graphX + node.x + node.width / 2);
+      assert.equal(second.y - first.y, 30);
+    } else {
+      const first = drawn.find(row => row.value === '一');
+      const secondColumn = drawn.find(row => row.value === '五');
+      assert.equal(first.x - secondColumn.x, 36);
+      assert.equal(first.y, secondColumn.y);
+      assert.equal(layout.nodes.find(n => n._id === 'p1').width, 88);
+      assert.equal(node.width, 120);
+    }
+  }
+});
+
+
+test('图片姓氏占位完整显示复姓，使用同一头像框且不换行或省略', () => {
+  const layout = graph.layoutGraph([{ _id: 'p', name: '欧阳娜娜' }], [], {});
+  const texts = []; let font = '';
+  const ctx = new Proxy({}, { get(target, key) {
+    if (key === 'measureText') return value => ({ width: Array.from(value).length * (Number(/(\d+)px/.exec(font)?.[1]) || 28) });
+    if (key === 'fillText') return value => texts.push(value);
+    return () => {};
+  }, set(target, key, value) { if (key === 'font') font = value; return true; } });
+  poster.draw(ctx, layout, poster.calculateSize(layout), {}, null, { showAvatar: true, emptyAvatarStyle: 'surname' });
+  assert.ok(texts.includes('欧阳'));
+});
+
+test('图片系统头像使用男女各自资源，照片优先且隐藏时不绘头像', function () {
+  const presentation = require('../miniprogram/utils/node-presentation');
+  const data = [
+    { _id: 'm', name: '张甲', gender: 'male', status: 'active' },
+    { _id: 'f', name: '张乙', gender: 'female', status: 'active' },
+    { _id: 'u', name: '张丙', gender: 'unknown', status: 'active' },
+    { _id: 'p', name: '张丁', gender: 'male', status: 'active' }
+  ];
+  const layout = graph.layoutGraph(data, [], { nameLayout: 'horizontal' });
+  const assets = { p: { id: 'photo', width: 100, height: 100 } };
+  for (const gender of ['male', 'female', 'neutral']) assets[presentation.systemAvatar(gender, true)] = { id: gender, width: 128, height: 128 };
+  const images = [];
+  const context = new Proxy({ measureText: () => ({ width: 10 }), drawImage: image => images.push(image.id) }, { get: (target, key) => target[key] || function () {} });
+  for (const enabled of [true, false]) {
+    images.length = 0;
+    poster.draw(context, layout, poster.calculateSize(layout), assets, null, { showAvatar: true, emptyAvatarStyle: 'default', showGenderColors: enabled });
+    assert.deepEqual(images.sort(), (enabled ? ['male', 'female', 'neutral', 'photo'] : ['neutral', 'neutral', 'neutral', 'photo']).sort());
+  }
+  images.length = 0;
+  poster.draw(context, layout, poster.calculateSize(layout), assets, null, { showAvatar: false, emptyAvatarStyle: 'default', showGenderColors: true });
+  assert.equal(images.length, 0);
+});

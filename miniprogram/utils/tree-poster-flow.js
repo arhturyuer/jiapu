@@ -41,6 +41,8 @@ function generate(page, options) {
       viewLabel: page.data.viewMode === 'perspective'
         ? '当前视图：从「' + page.data.viewpointName + '」看家谱'
         : '当前视图：完整家谱',
+      showAvatar: page.data.showAvatar,
+      emptyAvatarStyle: page.data.emptyAvatarStyle,
       showChildRankBadge: page.data.showChildRankBadge,
       showGenderBadge: page.data.showGenderBadge,
       showGenderColors: page.data.showGenderColors,

@@ -1,3 +1,4 @@
+const nodePresentation = require('./node-presentation');
 const { genderColors } = require('./tree-poster-style');
 const TARGET_SCALE = 1.25;
 const MIN_SCALE = 0.75;
@@ -126,7 +127,7 @@ function drawAvatar(ctx, image, x, y, size, colors, initial) {
     return;
   }
   ctx.fillStyle = colors.text;
-  ctx.font = '600 26px sans-serif';
+  ctx.font = '600 ' + nodePresentation.surnameFontSize(initial || '家') + 'px sans-serif';
   centerText(ctx, initial || '家', x + size / 2, y + size / 2 + 1, size - 8);
 }
 
@@ -149,7 +150,7 @@ function drawBadge(ctx, value, x, y, background, foreground, options) {
 }
 
 function drawNode(ctx, layout, node, sizing, images, options) {
-  const width = layout.nodeWidth || 168;
+  const width = node.width || layout.nodeWidth || 168;
   const height = layout.nodeHeight || 164;
   const x = sizing.graphX + node.x;
   const y = sizing.graphY + node.y;
@@ -174,13 +175,17 @@ function drawNode(ctx, layout, node, sizing, images, options) {
   }
 
   if (layout.nameLayout === 'vertical') {
-    const lines = String(node.verticalName || node.name || '未命名').split('\n').slice(0, 5);
-    ctx.font = '600 27px sans-serif';
+    const columns = nodePresentation.nameColumns(node.name);
+    ctx.font = '600 28px sans-serif';
     ctx.fillStyle = '#202824';
-    const lineHeight = 31;
-    const total = lines.length * lineHeight;
-    lines.forEach(function (line, index) {
-      centerText(ctx, line, x + width / 2, y + Math.max(26, (height - total) / 2) + index * lineHeight + lineHeight / 2, width - 22);
+    const lineHeight = 32;
+    const total = Math.max.apply(null, columns.map(function (column) { return column.split('\n').length; })) * lineHeight;
+    const top = (height - total) / 2;
+    columns.forEach(function (column, columnIndex) {
+      const centerX = x + width / 2 + ((columns.length - 1) / 2 - columnIndex) * 36;
+      column.split('\n').forEach(function (character, index) {
+        centerText(ctx, character, centerX, y + top + index * lineHeight + 16, 28);
+      });
     });
     if (options.viewMode === 'perspective' && node.relationLabel) {
       ctx.font = '400 18px sans-serif';
@@ -188,17 +193,21 @@ function drawNode(ctx, layout, node, sizing, images, options) {
       centerText(ctx, node.relationLabel, x + width / 2, y + height - 17, width - 12);
     }
   } else {
-    const avatarSize = 52;
-    const avatarX = x + (width - avatarSize) / 2;
-    drawAvatar(ctx, images[node._id], avatarX, y + 14, avatarSize, colors, node.initial || String(node.name || '家').slice(0, 1));
+    const meta = options.viewMode === 'perspective' && node.relationLabel ? node.relationLabel : node.metaText || '';
+    const kind = nodePresentation.avatarKind(images[node._id], options);
+    if (kind !== 'hidden') {
+      const avatarSize = 52;
+      const avatarX = x + (width - avatarSize) / 2;
+      drawAvatar(ctx, kind === 'default' ? images[nodePresentation.systemAvatar(node.gender, options.showGenderColors)] : images[node._id], avatarX, y + 12, avatarSize, colors, nodePresentation.surname(node.name));
+    }
+    const content = nodePresentation.horizontalContent(node.name, height, kind !== 'hidden', meta);
     ctx.fillStyle = '#202824';
     ctx.font = '600 ' + PERSON_NAME_FONT_SIZE + 'px sans-serif';
-    centerText(ctx, node.name || '未命名', x + width / 2, y + 89, width - 24);
-    const meta = options.viewMode === 'perspective' && node.relationLabel ? node.relationLabel : node.metaText || '';
+    content.lines.forEach(function (line, index) { centerText(ctx, line, x + width / 2, y + content.nameTop + index * 30 + 15, width - 28); });
     if (meta) {
       ctx.fillStyle = '#65706A';
       ctx.font = '400 22px sans-serif';
-      centerText(ctx, meta, x + width / 2, y + 121, width - 24);
+      centerText(ctx, meta, x + width / 2, y + content.metaCenter, width - 24);
     }
     if (options.viewMode === 'perspective' && node.hasMultipleKinships) {
       ctx.fillStyle = '#765E3A';
@@ -346,7 +355,11 @@ function renderOnce(page, canvasId, layout, options, targetScale) {
     const context = canvas.getContext('2d');
     if (!context) throw posterError('POSTER_CANVAS_UNAVAILABLE', '图片暂时无法生成，请重试');
     return Promise.all([
-      loadNodeImages(canvas, layout.nodes),
+      loadNodeImages(canvas, options.showAvatar === false || layout.nameLayout === 'vertical' ? [] : layout.nodes).then(function (images) {
+        if (options.showAvatar === false || layout.nameLayout === 'vertical' || options.emptyAvatarStyle === 'surname') return images;
+        const sources = Array.from(new Set(layout.nodes.map(function (node) { return nodePresentation.systemAvatar(node.gender, options.showGenderColors); })));
+        return Promise.all(sources.map(function (source) { return loadImage(canvas, source).then(function (avatar) { images[source] = avatar; }); })).then(function () { return images; });
+      }),
       loadImage(canvas, options.miniCodePath)
     ]).then(function (assets) {
       context.save();

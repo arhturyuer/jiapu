@@ -88,7 +88,7 @@ async function seed(event) {
   if (event.phase === 'persons') {
     for (let i = event.offset; i < Math.min(500, event.offset + 50); i += 1) {
       const id = familyId + '_p' + String(i).padStart(3, '0');
-      await db.collection('persons').doc(id).set({ data: { familyId, name: '测试成员' + i, gender: i % 2 ? 'male' : 'female', lifeStatus: 'living', status: 'active', bio: i < 3 ? '完整虚构简介。'.repeat(40) : '虚构资料', birthDateInfo: { year: 1980, calendar: 'lunar', precision: 'year' }, birthPlace: '虚构地点' } });
+      await db.collection('persons').doc(id).set({ data: { familyId, name: i < 8 ? ['张', '欧阳娜娜', '欧阳长名字', '一二三四五六七八', '一二三四五六七八九', '一二三四五六七八九十', '一二三四五六七八九十甲', '张ABC'][i] : '测试成员' + i, gender: i % 2 ? 'male' : 'female', lifeStatus: 'living', status: 'active', bio: i < 3 ? '完整虚构简介。'.repeat(40) : '虚构资料', birthDateInfo: { year: 1980, calendar: 'lunar', precision: 'year' }, birthPlace: '虚构地点' } });
       if (event.dense) {
         const personId = n => familyId + '_p' + String(n).padStart(3, '0');
         if (i < 250) for (let d = 1; d <= 6; d++) await db.collection('relations').doc(familyId + '_sp_' + i + '_' + d).set({ data: { familyId, type: 'spouse', fromPersonId: id, toPersonId: personId((i + d) % 250), status: 'active' } });
@@ -149,7 +149,7 @@ exports.main = async event => {
     if (event.action === 'start') {
       assert(['admin', 'member', 'viewer'].includes(event.role), 'PROBE_ROLE');
       const api = service(event.run, event.role);
-      const input = { source: event.example ? 'example' : 'family', familyId: event.example ? '' : familyId, slug: event.example ? familyId : '', format: event.format, display: { nameLayout: event.vertical ? 'vertical' : 'horizontal', showGenderColors: true }, requestId: event.role + ':' + event.format + ':' + Boolean(event.example) };
+      const input = { source: event.example ? 'example' : 'family', familyId: event.example ? '' : familyId, slug: event.example ? familyId : '', format: event.format, display: { nameLayout: event.vertical ? 'vertical' : 'horizontal', showAvatar: event.showAvatar !== false, emptyAvatarStyle: event.emptyAvatarStyle || 'default', showGenderColors: true }, requestId: event.role + ':' + event.format + ':' + Boolean(event.example) + ':' + (event.emptyAvatarStyle || 'default') + ':' + (event.showAvatar !== false) };
       if (input.format === 'poster' && !event.legacy) {
         const data = await layoutSource(input);
         input.layoutSnapshot = layoutSnapshot.create(data.persons, data.relations, input.display.nameLayout, data.revision);
@@ -236,14 +236,14 @@ exports.main = async event => {
             await tx.collection('users').doc(client.actorId).update({ data: fields });
           }
         });
-        const requests = new Set(native.map(task => task.requestId).concat(native.map(task => task._id + '-code')));
+        const requests = new Set(native.map(task => task.requestId).concat(native.map(task => task._id + '-code'), ['node-display-' + event.run + '-hide', 'node-display-' + event.run + '-legacy', 'node-display-' + event.run + '-default']));
         for (const requestId of requests) await removeRows('idempotency_records', await list('idempotency_records', { actorId: client.actorId, requestId }));
         await db.collection('system_config').doc(familyId + '_client').remove();
       }
       const files = tasks.concat(examples).map(t => t.fileId).concat(assets.map(a => a.fileId)).filter(Boolean);
       if (files.length) { const result = await cloud.deleteFile({ fileList: files }); assert((result.fileList || []).every(f => Number(f.status || 0) === 0), 'PROBE_FILE_CLEANUP'); }
       await removeRows('export_tasks', tasks.concat(examples));
-      for (const name of ['persons', 'relations', 'media_assets', 'family_memberships', 'invitations', 'audit_logs']) await removeRows(name, await list(name, { familyId }));
+      for (const name of ['persons', 'relations', 'media_assets', 'family_memberships', 'user_family_preferences', 'invitations', 'audit_logs']) await removeRows(name, await list(name, { familyId }));
       for (const role of ['admin', 'member', 'viewer']) {
         const actor = uid(event.run, role); await removeRows('idempotency_records', await list('idempotency_records', { actorId: actor }));
         await db.collection('users').doc(actor).remove();

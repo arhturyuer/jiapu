@@ -8,6 +8,7 @@ const digest = value => crypto.createHash('sha256').update(value).digest('hex').
 function displayOptions(value) {
   const source = value || {};
   return {
+    ...require('./pdf-shared/node-presentation').avatarPreference(source, true),
     nameLayout: source.nameLayout === 'vertical' ? 'vertical' : 'horizontal',
     showGenderColors: source.showGenderColors !== false,
     showGenderBadge: source.showGenderBadge === true,

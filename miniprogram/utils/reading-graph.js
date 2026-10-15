@@ -4,7 +4,7 @@ function anchor(page) {
   const viewport = page.getGraphViewport();
   const transform = page.getGraphTransform();
   const pixels = viewport.rpxToPx * transform.scale;
-  function position(node) { return { x: transform.x + (node.x + layout.nodeWidth / 2) * pixels,
+  function position(node) { return { x: transform.x + (node.x + (node.width || layout.nodeWidth) / 2) * pixels,
     y: transform.y + (node.y + layout.nodeHeight / 2) * pixels }; }
   const selected = layout.nodes.find(function (node) { return node._id === page.data.selectedPersonId; });
   const node = selected || layout.nodes.reduce(function (nearest, candidate) {
@@ -28,7 +28,7 @@ function changed(previous, next) {
     if (!node) return;
     const pixels = viewport.rpxToPx * point.scale;
     page._graphViewport = viewport;
-    page.commitGraphTransform({ scale: point.scale, x: point.x - (node.x + page._lastLayout.nodeWidth / 2) * pixels,
+    page.commitGraphTransform({ scale: point.scale, x: point.x - (node.x + (node.width || page._lastLayout.nodeWidth) / 2) * pixels,
       y: point.y - (node.y + page._lastLayout.nodeHeight / 2) * pixels });
   }
   if (this.measureGraphViewport && (this.createSelectorQuery || typeof wx !== 'undefined' && wx.createSelectorQuery)) {

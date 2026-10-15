@@ -1,3 +1,4 @@
+const nodePresentation = require('./node-presentation');
 const EXAMPLE_NAME_LAYOUT_KEY_PREFIX = 'youpu_example_name_layout_';
 const EXAMPLE_DISPLAY_PREFERENCE_KEY_PREFIX = 'youpu_example_display_preference_';
 const DEFAULT_PREFERENCE = Object.freeze({
@@ -5,6 +6,8 @@ const DEFAULT_PREFERENCE = Object.freeze({
   showChildRankBadge: false,
   showGenderBadge: false,
   showGenderColors: true,
+  showAvatar: true,
+  emptyAvatarStyle: 'default',
   autoCollapseEnabled: true
 });
 
@@ -15,6 +18,7 @@ function publishedDefaults(value) {
     showChildRankBadge: preference.showChildRankBadge === true,
     showGenderBadge: preference.showGenderBadge === true,
     showGenderColors: preference.showGenderColors !== false,
+    ...nodePresentation.avatarPreference(preference, Boolean(value)),
     autoCollapseEnabled: preference.autoCollapseEnabled !== false
   };
 }
@@ -29,6 +33,7 @@ function normalize(value, fallbackNameLayout) {
     showChildRankBadge: hasSavedPreference ? preference.showChildRankBadge !== false : false,
     showGenderBadge: hasSavedPreference ? preference.showGenderBadge !== false : false,
     showGenderColors: preference.showGenderColors !== false,
+    ...nodePresentation.avatarPreference(preference, Boolean(value)),
     autoCollapseEnabled: preference.autoCollapseEnabled !== false
   };
 }
@@ -52,7 +57,10 @@ function get(slug, exampleDefaults, publishedVersion) {
     // A storage read failure is equivalent to having no local preference.
   }
   const defaults = publishedDefaults(exampleDefaults);
-  if (fallbackNameLayout) defaults.nameLayout = fallbackNameLayout;
+  if (fallbackNameLayout) {
+    defaults.nameLayout = fallbackNameLayout;
+    if (!exampleDefaults || !exampleDefaults.emptyAvatarStyle) defaults.emptyAvatarStyle = 'surname';
+  }
   return defaults;
 }
 

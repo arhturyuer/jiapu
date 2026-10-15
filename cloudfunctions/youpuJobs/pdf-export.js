@@ -28,7 +28,7 @@ function membershipActive(family) { return family && (family.proLifetime === tru
 function unpackLayout(value) {
   if (!value || !value.encoding) return value;
   try {
-    if (value.encoding !== 'gzip-base64' || (value.version !== 1 && value.version !== 2) || typeof value.data !== 'string' || value.data.length > 768000) fail('PDF_LAYOUT_INVALID');
+    if (value.encoding !== 'gzip-base64' || (value.version !== 1 && value.version !== 2 && value.version !== 3) || typeof value.data !== 'string' || value.data.length > 768000) fail('PDF_LAYOUT_INVALID');
     const decoded = JSON.parse(gunzipSync(Buffer.from(value.data, 'base64'), { maxOutputLength: 768000 }).toString('utf8'));
     if (decoded.sourceRevision !== value.sourceRevision || decoded.version !== value.version) fail('PDF_LAYOUT_INVALID');
     return decoded;
@@ -90,6 +90,7 @@ function createWorker(options) {
   }
   async function loadAvatars(task, data) {
     const assets = {}; let unavailable = 0; let processImage;
+    if (task.format === 'poster' && (task.display.nameLayout === 'vertical' || task.display.showAvatar === false)) { data.unavailableMediaCount = 0; return assets; }
     for (const person of data.persons) {
       if (!person.avatarAssetId) continue;
       const asset = await read(db, 'media_assets', person.avatarAssetId);

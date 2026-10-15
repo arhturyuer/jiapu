@@ -19,7 +19,7 @@ function fixture() {
 }
 function layout(f, options) { return graph.layoutGraph(f.persons, f.relations, options || {}); }
 function node(result, id) { return result.nodes.find(n => n._id === id); }
-function center(result, id) { return node(result, id).x + result.nodeWidth / 2; }
+function center(result, id) { return node(result, id).x + node(result, id).width / 2; }
 function checkSides(result, child, father, mother) {
   assert.ok(center(result, father) < center(result, mother), father + ' must be left of ' + mother);
   assert.ok(center(result, child) >= center(result, father) && center(result, child) <= center(result, mother), child + ' must be below its parents');
@@ -29,7 +29,7 @@ function checkSides(result, child, father, mother) {
 function geometry(result) {
   for (let i = 0; i < result.nodes.length; i++) for (let j = i + 1; j < result.nodes.length; j++) {
     const a = result.nodes[i], b = result.nodes[j];
-    assert.ok(Math.abs(a.x - b.x) >= result.nodeWidth || Math.abs(a.y - b.y) >= result.nodeHeight, 'cards overlap: ' + a._id + ', ' + b._id);
+    assert.ok(a.x + a.width <= b.x || b.x + b.width <= a.x || Math.abs(a.y - b.y) >= result.nodeHeight, 'cards overlap: ' + a._id + ', ' + b._id);
   }
   for (const line of result.lines) {
     const x = Number(/left:([^r]+)rpx/.exec(line.style)[1]);
@@ -39,8 +39,8 @@ function geometry(result) {
     const x2 = x + Math.cos(angle) * length, y2 = y + Math.sin(angle) * length;
     for (const card of result.nodes) {
       const crossed = Math.abs(y2 - y) < 1
-        ? y > card.y + 2 && y < card.y + result.nodeHeight - 2 && Math.max(x, x2) > card.x + 2 && Math.min(x, x2) < card.x + result.nodeWidth - 2
-        : x > card.x + 2 && x < card.x + result.nodeWidth - 2 && Math.max(y, y2) > card.y + 2 && Math.min(y, y2) < card.y + result.nodeHeight - 2;
+        ? y > card.y + 2 && y < card.y + result.nodeHeight - 2 && Math.max(x, x2) > card.x + 2 && Math.min(x, x2) < card.x + card.width - 2
+        : x > card.x + 2 && x < card.x + card.width - 2 && Math.max(y, y2) > card.y + 2 && Math.min(y, y2) < card.y + result.nodeHeight - 2;
       assert.equal(crossed, false, 'line crosses card: ' + line._id + ' -> ' + card._id);
     }
   }
@@ -160,7 +160,7 @@ test('leaf children stay compact and centered below a family with two ancestral 
   ]);
   for (const nameLayout of ['horizontal', 'vertical']) {
     const result = layout(f, { nameLayout: nameLayout });
-    const expectedDistance = result.nodeWidth + (nameLayout === 'vertical' ? 52 : 72);
+    const expectedDistance = (node(result, 'older-child').width + node(result, 'younger-child').width) / 2 + (nameLayout === 'vertical' ? 52 : 72);
     const olderX = center(result, 'older-child');
     const youngerX = center(result, 'younger-child');
     assert.equal(youngerX - olderX, expectedDistance);
@@ -199,8 +199,8 @@ test('a child couple does not inherit the grandparents ancestry reservation', ()
   ]);
   for (const nameLayout of ['horizontal', 'vertical']) {
     const result = layout(f, { nameLayout: nameLayout });
-    const coupleDistance = result.nodeWidth + (nameLayout === 'vertical' ? 48 : 76);
-    const childDistance = result.nodeWidth + (nameLayout === 'vertical' ? 52 : 72);
+    const coupleDistance = (node(result, 'child').width + node(result, 'child-spouse').width) / 2 + (nameLayout === 'vertical' ? 48 : 76);
+    const childDistance = (node(result, 'grandchild-a').width + node(result, 'grandchild-b').width) / 2 + (nameLayout === 'vertical' ? 52 : 72);
     assert.equal(center(result, 'child-spouse') - center(result, 'child'), coupleDistance);
     assert.equal(center(result, 'grandchild-b') - center(result, 'grandchild-a'), childDistance);
     assert.equal((center(result, 'grandchild-a') + center(result, 'grandchild-b')) / 2,

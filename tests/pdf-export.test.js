@@ -307,3 +307,42 @@ test('并发准备小程序码时，迟到失败不能覆盖已成功的同一�
   assert.equal(h.db.get('users', 'actor').pdfCount, 1);
   assert.equal((await h.worker.process(second.taskId)).completed, true);
 });
+
+test('v3 双行和双列实际以 28 字号绘制，传统列顺序正确且默认头像嵌入', async () => {
+  const PDFDocument = require('node:module').createRequire(require('node:path').resolve(__dirname, '../cloudfunctions/youpuJobs/pdf/render.js'))('pdfkit');
+  const original = PDFDocument.prototype.text;
+  const drawn = [];
+  PDFDocument.prototype.text = function (value, x, y, options) {
+    drawn.push({ value, x, y, size: this._fontSize, options });
+    return original.call(this, value, x, y, options);
+  };
+  try {
+    const data = fixture(1, 'binary'); data.persons[0].name = '一二三四五六七八九十甲';
+    for (const nameLayout of ['horizontal', 'vertical']) {
+      drawn.length = 0;
+      data.posterLayout = layoutSnapshot.restore(layoutSnapshot.create(data.persons, [], nameLayout, 0), data.persons, [], 0, nameLayout);
+      const result = await renderer.render(data, 'poster', { nameLayout, showAvatar: true, emptyAvatarStyle: 'default' }, {});
+      const names = drawn.filter(row => row.size === 28);
+      if (nameLayout === 'horizontal') {
+        assert.deepEqual(names.map(row => row.value), ['一二三四五', '六七八九…']);
+        assert.equal(names[1].y - names[0].y, 30);
+        assert.ok(result.bytes.toString('latin1').includes('/Subtype /Image'));
+      } else {
+        assert.deepEqual(names.map(row => row.value), ['一', '二', '三', '四', '五', '六', '七', '…']);
+        assert.ok(names[0].x > names[4].x);
+        assert.equal(names[1].y - names[0].y, 32);
+        assert.equal(names[0].y, names[4].y);
+      }
+    }
+  } finally { PDFDocument.prototype.text = original; }
+});
+test('隐藏头像与竖排大图跳过照片下载和缺失计数，谱书仍处理照片', async () => {
+  for (const mode of ['hidden', 'vertical', 'book']) {
+    const h = harness(); h.db.put('persons', 'p1', { ...h.db.get('persons', 'p1'), avatarAssetId: 'missing' });
+    h.input.display = { showAvatar: false, nameLayout: mode === 'vertical' ? 'vertical' : 'horizontal' };
+    h.input.format = mode === 'book' ? 'book' : 'poster';
+    const created = await h.service.create(h.input);
+    assert.equal((await h.worker.process(created.taskId)).completed, true);
+    assert.equal(h.db.get('export_tasks', created.taskId).unavailableMediaCount, mode === 'book' ? 1 : 0);
+  }
+});

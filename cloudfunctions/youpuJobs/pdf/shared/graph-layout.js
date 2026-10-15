@@ -30,6 +30,17 @@ const kinship = require('./kinship');
 const personGenderDisplay = require('./person-gender');
 const childRank = require('./child-rank');
 const personDate = require('./person-date');
+const nodePresentation = require('./node-presentation');
+
+function personWidth(person, metrics) {
+  return nodePresentation.width(person.name, metrics.nodeWidth, metrics.nameLayout === 'vertical', metrics.legacyGeometry);
+}
+function nodeWidth(node, metrics) { return node.width || metrics.nodeWidth; }
+function memberOffsets(members, metrics) {
+  let cursor = 0; const offsets = {};
+  members.forEach(function (member) { offsets[member._id] = cursor; cursor += personWidth(member, metrics) + metrics.coupleGap; });
+  return offsets;
+}
 
 function metricsForNameLayout(nameLayout) {
   return nameLayout === 'vertical' ? VERTICAL_METRICS : HORIZONTAL_METRICS;
@@ -440,8 +451,9 @@ function buildUnits(persons, relations, components, generations, metrics, childR
       _id: root,
       generation: generations[members[0]._id] || 0,
       members: members,
-      baseWidth: members.length * metrics.nodeWidth + Math.max(0, members.length - 1) * metrics.coupleGap,
-      width: members.length * metrics.nodeWidth + Math.max(0, members.length - 1) * metrics.coupleGap,
+      memberOffsets: memberOffsets(members, metrics),
+      baseWidth: members.reduce(function (sum, member) { return sum + personWidth(member, metrics); }, 0) + Math.max(0, members.length - 1) * metrics.coupleGap,
+      width: members.reduce(function (sum, member) { return sum + personWidth(member, metrics); }, 0) + Math.max(0, members.length - 1) * metrics.coupleGap,
       sortPerson: members.slice().sort(comparePeople)[0]
     };
     units.push(unit);
@@ -629,10 +641,7 @@ function positionAncestralFamilies(graph, metrics) {
         return parentsOf(member).some(function (parent) { return fullWidthParentRoots.has(parent._id); });
       });
       if (ancestralMembers.length < 2 && !needsLongConnectorClearance) {
-        unit.memberOffsets = {};
-        unit.members.forEach(function (member, index) {
-          unit.memberOffsets[member._id] = index * (metrics.nodeWidth + metrics.coupleGap);
-        });
+        unit.memberOffsets = memberOffsets(unit.members, metrics);
         unit.width = unit.baseWidth;
         return;
       }
@@ -647,8 +656,8 @@ function positionAncestralFamilies(graph, metrics) {
         const span = parents.reduce(function (sum, parent) {
           return sum + (fullWidthParentRoots.has(parent._id) ? parent.width : parent.baseWidth);
         }, 0) + Math.max(0, parents.length - 1) * metrics.unitGap;
-        const width = Math.max(metrics.nodeWidth, span);
-        unit.memberOffsets[member._id] = cursor + (width - metrics.nodeWidth) / 2;
+        const width = Math.max(personWidth(member, metrics), span);
+        unit.memberOffsets[member._id] = cursor + (width - personWidth(member, metrics)) / 2;
         cursor += width + metrics.coupleGap;
       });
       unit.width = cursor - metrics.coupleGap;
@@ -695,7 +704,7 @@ function positionAncestralFamilies(graph, metrics) {
       unit.members.forEach(function (member) {
         const parents = parentsOf(member);
         const span = parents.reduce(function (sum, parent) { return sum + parent.width; }, 0) + Math.max(0, parents.length - 1) * metrics.unitGap;
-        let left = unit.x + unit.memberOffsets[member._id] + metrics.nodeWidth / 2 - span / 2;
+        let left = unit.x + unit.memberOffsets[member._id] + personWidth(member, metrics) / 2 - span / 2;
         parents.forEach(function (parent) {
           if (!targets[parent._id]) targets[parent._id] = [];
           targets[parent._id].push(left);
@@ -821,7 +830,7 @@ function createSpouseConnections(nodesById, relations, selectedPersonId, metrics
     const right = left === first ? second : first;
     const between = (nodesByRow[left.y] || []).filter(function (node) {
       return node._id !== left._id && node._id !== right._id &&
-        node.x < right.x && node.x + metrics.nodeWidth > left.x + metrics.nodeWidth;
+        node.x < right.x && node.x + nodeWidth(node, metrics) > left.x + nodeWidth(left, metrics);
     });
     return { relation: relation, first: first, second: second, left: left, right: right, remote: between.length > 0 };
   }).filter(Boolean);
@@ -865,7 +874,7 @@ function createSpouseConnections(nodesById, relations, selectedPersonId, metrics
     const key = pairKey(route.first._id, route.second._id);
     const familyKey = 'spouse:' + key;
     const relationIds = [relation._id];
-    const startX = route.left.x + metrics.nodeWidth;
+    const startX = route.left.x + nodeWidth(route.left, metrics);
     const endX = route.right.x;
     const y = route.portY;
     // The card layer covers the middle of a remote couple's straight line.
@@ -880,8 +889,8 @@ function createSpouseConnections(nodesById, relations, selectedPersonId, metrics
       const remoteIndex = row.findIndex(function (node) { return node._id === remote._id; });
       const neighbor = row[remoteIndex + (remote === route.left ? 1 : -1)];
       junctionX = remote === route.left
-        ? (remote.x + metrics.nodeWidth + neighbor.x) / 2
-        : (neighbor.x + metrics.nodeWidth + remote.x) / 2;
+        ? (remote.x + nodeWidth(remote, metrics) + neighbor.x) / 2
+        : (neighbor.x + nodeWidth(neighbor, metrics) + remote.x) / 2;
     } else {
       junctionX = (startX + endX) / 2;
     }
@@ -1058,7 +1067,7 @@ function createFamilyConnections(nodesById, relations, selectedPersonId, metrics
       if (pairedParents.indexOf(parentId) >= 0) return;
       const parentNode = nodesById[parentId];
       addToGroup('single:' + parentId, {
-        x: parentNode.x + metrics.nodeWidth / 2,
+        x: parentNode.x + nodeWidth(parentNode, metrics) / 2,
         y: parentNode.y + metrics.nodeHeight
       }, [parentId]);
     });
@@ -1075,9 +1084,9 @@ function createFamilyConnections(nodesById, relations, selectedPersonId, metrics
   Object.keys(childGroups).forEach(function (childId) {
     const groups = childGroups[childId].sort(function (first, second) { return compare(first._id, second._id); });
     const child = nodesById[childId];
-    const spacing = Math.min(12, (metrics.nodeWidth - 24) / Math.max(1, groups.length - 1));
+    const spacing = Math.min(12, (nodeWidth(child, metrics) - 24) / Math.max(1, groups.length - 1));
     groups.forEach(function (group, index) {
-      group.childPorts[childId] = child.x + metrics.nodeWidth / 2 + (index - (groups.length - 1) / 2) * spacing;
+      group.childPorts[childId] = child.x + nodeWidth(child, metrics) / 2 + (index - (groups.length - 1) / 2) * spacing;
     });
   });
 
@@ -1253,7 +1262,7 @@ function connectionsForNodes(nodes, relations, nameLayout, compareIds) {
 function layoutGraph(personsInput, relationsInput, options) {
   const optionsValue = options || {};
   const nameLayout = optionsValue.nameLayout === 'vertical' ? 'vertical' : 'horizontal';
-  const metrics = Object.assign({}, metricsForNameLayout(nameLayout));
+  const metrics = Object.assign({}, metricsForNameLayout(nameLayout), { nameLayout: nameLayout, legacyGeometry: optionsValue.geometryVersion === 1 || optionsValue.geometryVersion === 2 });
   if (optionsValue.mode === 'perspective') metrics.nodeHeight = nameLayout === 'vertical' ? 212 : 196;
   if (nameLayout === 'vertical' && optionsValue.mode === 'perspective') metrics.nodeWidth = 112;
   const activePersons = (personsInput || []).filter(function (person) { return person.status !== 'deleted'; }).slice().sort(function (a, b) { return a._id.localeCompare(b._id); });
@@ -1292,13 +1301,20 @@ function layoutGraph(personsInput, relationsInput, options) {
     unitsByGeneration[generation].forEach(function (unit) {
       unit.members.forEach(function (person, memberIndex) {
         if (!visibleIds.has(person._id)) return;
-        const x = unit.x + (unit.memberOffsets ? unit.memberOffsets[person._id] : memberIndex * (metrics.nodeWidth + metrics.coupleGap));
+        const width = personWidth(person, metrics);
+        const x = unit.x + unit.memberOffsets[person._id];
         const y = metrics.marginY + generation * metrics.gapY;
         const node = Object.assign({}, personGenderDisplay.decorate(person), childRanks.byPerson[person._id] || {}, {
           x: x,
           y: y,
-          style: 'left:' + x + 'rpx;top:' + y + 'rpx;width:' + metrics.nodeWidth + 'rpx;height:' + metrics.nodeHeight + 'rpx;',
-          verticalName: verticalDisplayName(person.name),
+          width: width,
+          height: metrics.nodeHeight,
+          nameLines: nodePresentation.nameLines(person.name),
+          nameColumns: nodePresentation.nameColumns(person.name),
+          surname: nodePresentation.surname(person.name),
+          surnameFontSize: nodePresentation.surnameFontSize(nodePresentation.surname(person.name)),
+          style: 'left:' + x + 'rpx;top:' + y + 'rpx;width:' + width + 'rpx;height:' + metrics.nodeHeight + 'rpx;',
+          verticalName: metrics.legacyGeometry ? verticalDisplayName(person.name) : nodePresentation.nameColumns(person.name).join('\n\n'),
           relationLabel: kinships[person._id] || '',
           hasMultipleKinships: !!(kinshipDetails[person._id] && kinshipDetails[person._id].multiple),
           familySize: unit.members.length,
@@ -1325,12 +1341,12 @@ function layoutGraph(personsInput, relationsInput, options) {
       });
       nodes.forEach(function (node) { node[axis] = positions[node[axis]]; });
     }
-    compactAxis('x', metrics.marginX, metrics.nodeWidth + Math.max(metrics.unitGap, metrics.coupleGap));
+    compactAxis('x', metrics.marginX, Math.max.apply(null, nodes.map(function (node) { return node.width; })) + Math.max(metrics.unitGap, metrics.coupleGap));
     compactAxis('y', metrics.marginY, metrics.gapY);
     nodes.forEach(function (node) {
-      node.style = 'left:' + node.x + 'rpx;top:' + node.y + 'rpx;width:' + metrics.nodeWidth + 'rpx;height:' + metrics.nodeHeight + 'rpx;';
+      node.style = 'left:' + node.x + 'rpx;top:' + node.y + 'rpx;width:' + node.width + 'rpx;height:' + metrics.nodeHeight + 'rpx;';
     });
-    canvasWidth = Math.max(750, Math.max.apply(null, nodes.map(function (node) { return node.x; })) + metrics.nodeWidth + metrics.marginX);
+    canvasWidth = Math.max(750, Math.max.apply(null, nodes.map(function (node) { return node.x + node.width; })) + metrics.marginX);
     canvasHeight = Math.max(900, Math.max.apply(null, nodes.map(function (node) { return node.y; })) + metrics.nodeHeight + metrics.marginY);
   }
   let connections = createFamilyConnections(nodesById, relations, optionsValue.selectedPersonId || '', metrics);
@@ -1344,7 +1360,7 @@ function layoutGraph(personsInput, relationsInput, options) {
     nodes.forEach(function (node) {
       const extra = rowShifts.reduce(function (sum, row) { return sum + (node.y >= row ? shiftsByRow[row] : 0); }, topShift);
       node.y += extra;
-      node.style = 'left:' + node.x + 'rpx;top:' + node.y + 'rpx;width:' + metrics.nodeWidth + 'rpx;height:' + metrics.nodeHeight + 'rpx;';
+      node.style = 'left:' + node.x + 'rpx;top:' + node.y + 'rpx;width:' + node.width + 'rpx;height:' + metrics.nodeHeight + 'rpx;';
     });
     canvasHeight += topShift + rowShifts.reduce(function (sum, row) { return sum + shiftsByRow[row]; }, 0);
     connections = createFamilyConnections(nodesById, relations, optionsValue.selectedPersonId || '', metrics);

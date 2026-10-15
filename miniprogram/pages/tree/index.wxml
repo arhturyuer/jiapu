@@ -99,7 +99,7 @@
         <view
           wx:for="{{nodes}}"
           wx:key="_id"
-          class="person-node gender-surface {{showGenderColors && item.gender !== 'unknown' ? item.genderClass : 'gender-neutral'}} {{nameLayout === 'vertical' ? 'node-vertical' : ''}} {{item.lifeStatus === 'deceased' ? 'is-deceased' : ''}} {{item.isViewpoint ? 'is-viewpoint' : ''}} {{item.isSelected ? 'is-selected' : ''}}"
+          class="person-node gender-surface {{showGenderColors && item.gender !== 'unknown' ? item.genderClass : 'gender-neutral'}} {{nameLayout === 'vertical' ? 'node-vertical' : !showAvatar ? 'node-no-avatar' : ''}} {{item.lifeStatus === 'deceased' ? 'is-deceased' : ''}} {{item.isViewpoint ? 'is-viewpoint' : ''}} {{item.isSelected ? 'is-selected' : ''}}"
           style="{{item.style}}"
           data-id="{{item._id}}"
           catchtap="{{graphGesture.tap}}" data-gesture-action="showPerson" aria-role="button" aria-label="{{item.name + (item.relationLabel ? '，' + item.relationLabel : '') + '，查看资料和操作'}}"
@@ -107,13 +107,12 @@
           <text class="gender-badge gender-node-badge {{showGenderColors && item.gender !== 'unknown' ? item.genderClass : 'gender-neutral'}}" wx:if="{{showGenderBadge}}">{{item.genderText}}</text>
           <text class="life-status-badge" wx:if="{{item.lifeStatus === 'deceased'}}">故</text>
           <block wx:if="{{nameLayout === 'vertical'}}">
-            <text class="node-name node-name-vertical">{{item.verticalName}}</text>
+            <view class="node-name-columns"><text wx:for="{{item.nameColumns}}" wx:for-item="column" wx:key="index" class="node-name node-name-vertical">{{column}}</text></view>
             <text class="node-meta node-kinship" wx:if="{{viewMode === 'perspective' && item.relationLabel}}">{{item.relationLabel}}</text>
           </block>
           <block wx:else>
-            <image class="node-avatar gender-avatar {{showGenderColors && item.gender !== 'unknown' ? item.genderClass : 'gender-neutral'}}" wx:if="{{item.avatar}}" src="{{item.avatar}}" mode="aspectFill"></image>
-            <view class="node-avatar node-placeholder gender-avatar {{showGenderColors && item.gender !== 'unknown' ? item.genderClass : 'gender-neutral'}}" wx:else>{{item.initial}}</view>
-            <text class="node-name">{{item.name}}</text>
+            <block wx:if="{{showAvatar}}"><image class="node-avatar gender-avatar {{showGenderColors && item.gender !== 'unknown' ? item.genderClass : 'gender-neutral'}}" wx:if="{{item.avatar}}" src="{{item.avatar}}" mode="aspectFill" data-id="{{item._id}}" data-url="{{item.avatar}}" binderror="onNodeAvatarError"></image><image class="node-avatar gender-avatar {{showGenderColors && item.gender !== 'unknown' ? item.genderClass : 'gender-neutral'}}" wx:elif="{{emptyAvatarStyle === 'default'}}" src="/images/system-avatar-{{showGenderColors && (item.gender === 'male' || item.gender === 'female') ? item.gender : 'neutral'}}.png" mode="aspectFill"></image><view class="node-avatar node-placeholder gender-avatar {{showGenderColors && item.gender !== 'unknown' ? item.genderClass : 'gender-neutral'}}" style="font-size:calc({{item.surnameFontSize}}rpx * var(--graph-content-scale, 1));white-space:nowrap;line-height:1;" wx:else>{{item.surname}}</view></block>
+            <view class="node-name-lines"><text wx:for="{{item.nameLines}}" wx:for-item="nameLine" wx:key="index" class="node-name">{{nameLine}}</text></view>
             <text class="node-meta" wx:if="{{viewMode === 'perspective' && item.relationLabel}}">{{item.relationLabel}}</text>
             <text class="node-meta" wx:elif="{{item.metaText}}">{{item.metaText}}</text>
           </block>

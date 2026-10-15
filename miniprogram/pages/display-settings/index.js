@@ -1,3 +1,4 @@
+const nodePresentation = require('../../utils/node-presentation');
 const launchAd = require('../../utils/launch-ad');
 const app = getApp();
 const api = require('../../utils/api');
@@ -10,6 +11,7 @@ function normalizedPreference(value) {
     showChildRankBadge: preference.showChildRankBadge === true,
     showGenderBadge: preference.showGenderBadge === true,
     showGenderColors: preference.showGenderColors !== false,
+    ...nodePresentation.avatarPreference(preference, Boolean(value)),
     autoCollapseEnabled: preference.autoCollapseEnabled !== false
   };
 }
@@ -26,6 +28,8 @@ Page(launchAd.wrap({
     showChildRankBadge: false,
     showGenderBadge: false,
     showGenderColors: true,
+    showAvatar: true,
+    emptyAvatarStyle: 'default',
     autoCollapseEnabled: true,
     saving: false,
     savingField: ''
@@ -33,6 +37,8 @@ Page(launchAd.wrap({
 
   onLoad: function (options) {
     options = options || {};
+    const pages = typeof getCurrentPages === 'function' ? getCurrentPages() : [];
+    this._previewPage = pages[pages.length - 2];
     const exampleSlug = options.exampleSlug || '';
     if (exampleSlug) {
       this.setData({ exampleSlug: exampleSlug, isExample: true });
@@ -87,9 +93,15 @@ Page(launchAd.wrap({
     this.savePreference('nameLayout', value);
   },
 
+  chooseEmptyAvatarStyle: function (event) {
+    const value = event.currentTarget.dataset.style;
+    if (!['default', 'surname'].includes(value) || value === this.data.emptyAvatarStyle) return;
+    this.savePreference('emptyAvatarStyle', value);
+  },
+
   togglePreference: function (event) {
     const field = event.currentTarget.dataset.field;
-    if (['showChildRankBadge', 'showGenderBadge', 'showGenderColors', 'autoCollapseEnabled'].indexOf(field) < 0) return;
+    if (['showAvatar', 'showChildRankBadge', 'showGenderBadge', 'showGenderColors', 'autoCollapseEnabled'].indexOf(field) < 0) return;
     this.savePreference(field, Boolean(event.detail.value));
   },
 
@@ -135,6 +147,7 @@ Page(launchAd.wrap({
       const saved = normalizedPreference(data.preference);
       self._confirmedPreference = saved;
       app.updatePreference(self.data.familyId, data.preference);
+      if (operationVersion === (app._sessionVersion || 0)) self.refreshExamplePreview(saved);
       if (!self._unloaded && !self._pendingPreference) self.setData(Object.assign({ saving: false, savingField: '' }, saved));
     }).catch(function (error) {
       self._retryPreference = !error.isBusinessError && operationVersion === (app._sessionVersion || 0) ? payload : null;
@@ -152,8 +165,11 @@ Page(launchAd.wrap({
   refreshExamplePreview: function (preference) {
     if (typeof getCurrentPages !== 'function') return;
     const pages = getCurrentPages();
-    const previousPage = pages[pages.length - 2];
-    if (previousPage && typeof previousPage.applyDisplayPreference === 'function') {
+    const previousPage = this._previewPage || pages[pages.length - 2];
+    const matching = previousPage && previousPage.data && (this.data.isExample
+      ? previousPage.data.slug === this.data.exampleSlug || previousPage.data.example && previousPage.data.example.slug === this.data.exampleSlug
+      : previousPage.data.currentFamily && previousPage.data.currentFamily._id === this.data.familyId);
+    if (previousPage && !previousPage._unloaded && (matching || !previousPage.data) && typeof previousPage.applyDisplayPreference === 'function') {
       previousPage.applyDisplayPreference(preference);
     }
   }

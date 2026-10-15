@@ -1,3 +1,4 @@
+const nodePresentation = require('./pdf-shared/node-presentation');
 const cloud = require('wx-server-sdk');
 const crypto = require('crypto');
 const domain = require('./domain');
@@ -485,6 +486,7 @@ function normalizeFamilyPreference(value) {
     showChildRankBadge: hasSavedPreference ? preference.showChildRankBadge !== false : false,
     showGenderBadge: hasSavedPreference ? preference.showGenderBadge !== false : false,
     showGenderColors: preference.showGenderColors !== false,
+    ...nodePresentation.avatarPreference(preference, hasSavedPreference),
     autoCollapseEnabled: preference.autoCollapseEnabled !== false
   };
 }
@@ -1575,11 +1577,15 @@ async function familySetPreference(event) {
     if (Object.prototype.hasOwnProperty.call(event, 'nameLayout')) {
       preference.nameLayout = event.nameLayout === 'vertical' ? 'vertical' : 'horizontal';
     }
-    ['showChildRankBadge', 'showGenderBadge', 'showGenderColors', 'autoCollapseEnabled'].forEach(function (field) {
+    ['showAvatar', 'showChildRankBadge', 'showGenderBadge', 'showGenderColors', 'autoCollapseEnabled'].forEach(function (field) {
       if (!Object.prototype.hasOwnProperty.call(event, field)) return;
       assert(typeof event[field] === 'boolean', 'INVALID_PREFERENCE', '显示设置格式不正确');
       preference[field] = event[field];
     });
+    if (Object.prototype.hasOwnProperty.call(event, 'emptyAvatarStyle')) {
+      assert(['default', 'surname'].includes(event.emptyAvatarStyle), 'INVALID_PREFERENCE', '头像样式格式不正确');
+      preference.emptyAvatarStyle = event.emptyAvatarStyle;
+    }
     await transaction.collection('user_family_preferences').doc(id).set({
       data: Object.assign({}, preference, {
         familyId: event.familyId,
@@ -3099,6 +3105,7 @@ function publicExampleContent(template) {
     shareDescription: cleanText(template.shareDescription, 100),
     publishedVersion: Number(template.publishedVersion) || 0,
     defaultDisplayPreference: {
+      ...nodePresentation.avatarPreference(template.publishedDisplayPreference, true),
       nameLayout: template.publishedDisplayPreference && template.publishedDisplayPreference.nameLayout === 'vertical' ? 'vertical' : 'horizontal',
       showChildRankBadge: !!(template.publishedDisplayPreference && template.publishedDisplayPreference.showChildRankBadge === true),
       showGenderBadge: !!(template.publishedDisplayPreference && template.publishedDisplayPreference.showGenderBadge === true),

@@ -33,16 +33,34 @@ if (process.argv.includes('--wechat')) {
 }
 async function userApi(data) {
   if (!miniProgram) throw new Error('原生码验收请使用 --wechat');
-  const result = await miniProgram.evaluate(function (env, input) {
+  const token = randomBytes(8).toString('hex');
+  await miniProgram.evaluate(function (env, input, key) {
+    const app = getApp(); app._pdfProbeResponses = app._pdfProbeResponses || {};
+    app._pdfProbeResponses[key] = { pending: true };
     wx.cloud.init({ env: env, traceUser: true });
-    return wx.cloud.callFunction({ name: 'youpuUserApi', config: { env }, data: input }).then(function (response) {
-      if (input.type === 'auth.login' && response.result.success) return { success: true, data: { userId: response.result.data.user._id, accountState: response.result.data.accountState } };
-      return response.result;
-    });
-  }, manifest.envId, data);
-  if (!result || !result.success) throw new Error('客户端用户 API 失败：' + (result && result.code || 'NO_RESULT'));
-  return result.data;
+    wx.cloud.callFunction({ name: 'youpuUserApi', config: { env }, data: input }).then(function (response) {
+      const result = response.result;
+      app._pdfProbeResponses[key] = input.type === 'auth.login' && result.success
+        ? { success: true, data: { userId: result.data.user._id, accountState: result.data.accountState } } : result;
+    }).catch(function () { app._pdfProbeResponses[key] = { success: false, code: 'PROBE_CLIENT_REQUEST_FAILED' }; });
+  }, manifest.envId, data, token);
+  // Return from evaluate before waiting on the cloud request: the IDE's
+  // automator response timeout is shorter than a cold function invocation.
+  for (let attempt = 0; attempt < 90; attempt += 1) {
+    const result = await miniProgram.evaluate(function (key) {
+      const app = getApp(); const value = app._pdfProbeResponses && app._pdfProbeResponses[key];
+      if (value && !value.pending) delete app._pdfProbeResponses[key];
+      return value || { pending: true };
+    }, token);
+    if (!result.pending) {
+      if (!result.success) throw new Error('客户端用户 API 失败：' + (result.code || 'NO_RESULT'));
+      return result.data;
+    }
+    await new Promise(resolve => setTimeout(resolve, 2000));
+  }
+  throw new Error('客户端用户 API 超时：' + data.type);
 }
+
 async function invoke(action, input = {}) {
   const response = cli(['-e', manifest.envId, 'fn', 'invoke', name, '-d', JSON.stringify({ action, run, secret, ...input }), '--json'], action + '-' + (input.role || input.phase || '') + '-' + (input.format || input.offset || '') + '-' + Boolean(input.example));
   const result = typeof response.RetMsg === 'string' ? JSON.parse(response.RetMsg) : response.RetMsg;
@@ -60,13 +78,23 @@ try {
   if (!miniProgram) throw new Error('原生小程序码需要 --wechat 客户端调用票据');
   const account = await userApi({ type: 'auth.login' });
   await invoke('clientPrepare', { actorId: account.userId, reserve: layoutOnly ? 3 : 2 });
+  const preferenceInput = { familyId: 'pdf_probe_' + run };
+  const firstPreference = (await userApi({ type: 'family.getPreference', ...preferenceInput })).preference;
+  if (!firstPreference.showAvatar || firstPreference.emptyAvatarStyle !== 'default') throw new Error('新用户头像默认值不正确');
+  await userApi({ type: 'family.setPreference', ...preferenceInput, showAvatar: false, emptyAvatarStyle: 'surname', requestId: 'node-display-' + run + '-hide' });
+  await userApi({ type: 'family.setPreference', ...preferenceInput, nameLayout: 'vertical', requestId: 'node-display-' + run + '-legacy' });
+  const legacyPreference = (await userApi({ type: 'family.getPreference', ...preferenceInput })).preference;
+  if (legacyPreference.showAvatar !== false || legacyPreference.emptyAvatarStyle !== 'surname') throw new Error('旧客户端保存覆盖头像设置');
+  await userApi({ type: 'family.setPreference', ...preferenceInput, nameLayout: 'horizontal', showAvatar: true, emptyAvatarStyle: 'default', requestId: 'node-display-' + run + '-default' });
+  summary.avatarPreference = { newDefault: true, savedAndRead: true, legacyPreserved: true };
+  console.log('实际用户 API：头像偏好保存、回读与旧客户端兼容通过');
   summary.nativeClient = [];
   for (const source of ['family', 'example']) {
     const sourceData = source === 'family' ? await userApi({ type: 'graph.get', familyId: 'pdf_probe_' + run }) : (await userApi({ type: 'examples.get', slug: 'pdf_probe_' + run })).example;
     const captured = await miniProgram.evaluate(function (graph, revision) {
       return require('utils/pdf-layout-snapshot.js').create(graph.persons, graph.relations, 'horizontal', revision);
     }, sourceData, source === 'family' ? sourceData.contentRevision : sourceData.publishedVersion);
-    const task = await userApi({ type: 'pdf.create', source, familyId: source === 'family' ? 'pdf_probe_' + run : '', slug: source === 'example' ? 'pdf_probe_' + run : '', format: 'poster', display: { nameLayout: 'horizontal', showGenderColors: true }, layoutSnapshot: captured, requestId: 'pdf-native-' + run + '-' + source });
+    const task = await userApi({ type: 'pdf.create', source, familyId: source === 'family' ? 'pdf_probe_' + run : '', slug: source === 'example' ? 'pdf_probe_' + run : '', format: 'poster', display: { nameLayout: 'horizontal', showAvatar: true, emptyAvatarStyle: 'default', showGenderColors: true }, layoutSnapshot: captured, requestId: 'pdf-native-' + run + '-' + source });
     let state;
     for (let attempt = 0; attempt < 100; attempt += 1) {
       state = (await userApi({ type: 'pdf.status', taskId: task.taskId })).task;
@@ -75,7 +103,7 @@ try {
     }
     if (!state || state.status !== 'completed') throw new Error('客户端原生码任务失败：' + (state && state.failureCode || 'TIMEOUT'));
     const verified = await invoke('clientStatus', { taskId: task.taskId });
-    if (!verified.nativeCodeReady || !verified.geometryVerified || verified.layoutVersion !== captured.version || captured.version !== 2) throw new Error('客户端原生码或布局几何核对失败');
+    if (!verified.nativeCodeReady || !verified.geometryVerified || verified.layoutVersion !== captured.version || captured.version !== 3) throw new Error('客户端原生码或布局几何核对失败');
     const download = await userApi({ type: 'pdf.downloadUrl', taskId: task.taskId });
     const response = await fetch(download.url); if (!response.ok) throw new Error('客户端成品下载失败');
     const bytes = Buffer.from(await response.arrayBuffer()); if (bytes.subarray(0, 5).toString() !== '%PDF-') throw new Error('客户端成品不是 PDF');
@@ -103,9 +131,9 @@ try {
     summary.clientPage = { geometryVerified: true, personCount: state.personCount, relationCount: state.relationCount, fileDownloaded: true, snapshotBytes: verified.snapshotBytes };
     await miniProgram.navigateBack(); console.log('500 人／' + graph.relations.length + ' 条关系：真实 PDF 入口、内存交接、新任务生成及客户端下载通过');
   } else summary.gateway = await invoke('gateway');
-  const cases = layoutOnly ? [] : [['admin', 'poster', false, false, false], ['admin', 'book', false, false, false], ['member', 'poster', false, true, false], ['viewer', 'book', false, false, false], ['viewer', 'book', true, false, false], ['viewer', 'poster', true, false, true]];
-  for (const [role, format, example, vertical, legacy] of cases) {
-    const started = await invoke('start', { role, format, example, vertical, legacy }); let task;
+  const cases = layoutOnly ? [] : [['admin', 'poster', false, false, false], ['admin', 'book', false, false, false], ['member', 'poster', false, true, false], ['viewer', 'book', false, false, false], ['viewer', 'book', true, false, false], ['viewer', 'poster', true, false, true], ['viewer', 'poster', false, false, false, 'surname', true], ['viewer', 'poster', false, false, false, 'default', false]];
+  for (const [role, format, example, vertical, legacy, emptyAvatarStyle, showAvatar] of cases) {
+    const started = await invoke('start', { role, format, example, vertical, legacy, emptyAvatarStyle, showAvatar }); let task;
     for (let attempt = 0; attempt < 100; attempt += 1) {
       task = await invoke('status', { role, taskId: started.taskId });
       if (!['pending', 'processing'].includes(task.status)) break;
@@ -117,11 +145,11 @@ try {
     const response = await fetch(task.download.url); if (!response.ok) throw new Error('成品下载失败');
     const bytes = Buffer.from(await response.arrayBuffer());
     if (bytes.subarray(0, 5).toString() !== '%PDF-') throw new Error('成品不是 PDF');
-    if (!example && (task.unavailableMediaCount !== 1 || (bytes.toString('latin1').match(/\/Subtype \/Image\b/g) || []).length < (format === 'poster' ? 2 : 1))) throw new Error('有效照片未成功嵌入成品');
+    if (!example && (task.unavailableMediaCount !== (format === 'poster' && (vertical || showAvatar === false) ? 0 : 1) || (bytes.toString('latin1').match(/\/Subtype \/Image\b/g) || []).length < (format === 'poster' && showAvatar !== false && !vertical ? 2 : 1))) throw new Error('有效照片未成功嵌入成品');
     if (format === 'poster' && !task.miniCodePolicy) throw new Error('长期查看码业务规则未验证');
     if (format === 'poster' && !(bytes.toString('latin1').match(/\/Subtype \/Image\b/g) || []).length) throw new Error('小程序码未嵌入');
-    writeFileSync(resolve(base, role + '-' + format + '-' + example + '.pdf'), bytes, { mode: 0o600 });
-    summary.cases.push({ role, format, example, vertical: Boolean(vertical), legacy: Boolean(legacy), geometryVerified: task.geometryVerified, snapshotBytes: task.snapshotBytes || 0, count: started.count, personCount: task.personCount, relationCount: task.relationCount, pageCount: task.pageCount, bytes: bytes.length, unavailableMediaCount: task.unavailableMediaCount, miniCodePolicy: task.miniCodePolicy || null });
+    writeFileSync(resolve(base, role + '-' + format + '-' + example + '-' + (vertical ? 'vertical' : showAvatar === false ? 'hidden' : emptyAvatarStyle || 'default') + '.pdf'), bytes, { mode: 0o600 });
+    summary.cases.push({ role, format, example, showAvatar: showAvatar !== false, emptyAvatarStyle: emptyAvatarStyle || 'default', vertical: Boolean(vertical), legacy: Boolean(legacy), geometryVerified: task.geometryVerified, snapshotBytes: task.snapshotBytes || 0, count: started.count, personCount: task.personCount, relationCount: task.relationCount, pageCount: task.pageCount, bytes: bytes.length, unavailableMediaCount: task.unavailableMediaCount, miniCodePolicy: task.miniCodePolicy || null });
     console.log(role + ' ' + format + (example ? ' 示例' : ' 真实') + '：' + task.personCount + ' 人，' + task.pageCount + ' 页，下载通过');
   }
   summary.layoutRejected = await invoke('layoutReject');

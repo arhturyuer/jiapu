@@ -33,6 +33,7 @@ function publicExample(template) {
     result: null,
     cleanText: function (value) { return String(value || ''); },
     publicExamplePerson: function (person) { return person; },
+    nodePresentation: require('../miniprogram/utils/node-presentation'),
     pdfGraphSource: require('../cloudfunctions/youpuUserApi/pdf-graph-source')
   };
   vm.runInNewContext(description[0] + '\n' + source[0] + '\nresult = publicExampleContent(template);', context);
@@ -40,9 +41,9 @@ function publicExample(template) {
 }
 
 test('示例默认展示设置校验五项取值并兼容旧示例', function () {
-  const baseline = { nameLayout: 'horizontal', showChildRankBadge: false, showGenderBadge: false, showGenderColors: true, autoCollapseEnabled: true };
+  const baseline = { showAvatar: true, emptyAvatarStyle: 'default', nameLayout: 'horizontal', showChildRankBadge: false, showGenderBadge: false, showGenderColors: true, autoCollapseEnabled: true };
   assert.deepEqual(normalize(), baseline);
-  assert.deepEqual(normalize(undefined, { nameLayout: 'vertical', autoCollapseEnabled: false }), { ...baseline, nameLayout: 'vertical', autoCollapseEnabled: false });
+  assert.deepEqual(normalize(undefined, { nameLayout: 'vertical', autoCollapseEnabled: false }), { ...baseline, emptyAvatarStyle: 'surname', nameLayout: 'vertical', autoCollapseEnabled: false });
   assert.throws(function () { normalize({ showGenderBadge: 'yes' }); }, { code: 'EXAMPLE_DISPLAY_PREFERENCE_INVALID' });
   assert.throws(function () { normalize({ nameLayout: 'diagonal' }); }, { code: 'EXAMPLE_DISPLAY_PREFERENCE_INVALID' });
   assert.throws(function () { normalize({ extra: true }); }, { code: 'EXAMPLE_DISPLAY_PREFERENCE_INVALID' });
@@ -65,7 +66,7 @@ test('示例发布和回滚使用版本化默认值，客户端只读取已发�
   assert.equal(published.defaultDisplayPreference.nameLayout, 'horizontal');
   assert.equal(published.defaultDisplayPreference.showGenderBadge, false);
   assert.deepEqual(publicExample({ slug: 'legacy', publishedContent: { family: {}, persons: [], relations: [] } }).defaultDisplayPreference,
-    { nameLayout: 'horizontal', showChildRankBadge: false, showGenderBadge: false, showGenderColors: true, autoCollapseEnabled: true });
+    { showAvatar: true, emptyAvatarStyle: 'surname', nameLayout: 'horizontal', showChildRankBadge: false, showGenderBadge: false, showGenderColors: true, autoCollapseEnabled: true });
 });
 
 test('后台五个编辑页签与预览定位、展示设置相连', function () {

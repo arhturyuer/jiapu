@@ -48,4 +48,12 @@ for (const name of ['pdf-graph-source.js', 'domain.js', 'person-date.js']) {
     if (!existsSync(destination) || !data.equals(readFileSync(destination))) throw new Error('PDF 资料投影不同步：' + name);
   } else { mkdirSync(dirname(destination), { recursive: true }); writeFileSync(destination, data); }
 }
+for (const variant of ['male', 'female', 'neutral']) {
+  const name = 'system-avatar-' + variant + '.png';
+  const avatar = readFileSync(resolve(root, 'miniprogram/images', name));
+  const avatarTarget = resolve(root, 'cloudfunctions/youpuJobs/pdf/assets', name);
+  if (checking) {
+    if (!existsSync(avatarTarget) || !avatar.equals(readFileSync(avatarTarget))) throw new Error('PDF 系统头像资源不同步：' + name);
+  } else { mkdirSync(dirname(avatarTarget), { recursive: true }); writeFileSync(avatarTarget, avatar); }
+}
 console.log('PDF 布局依赖 ' + files.size + ' 项' + (checking ? '一致' : '已打包'));

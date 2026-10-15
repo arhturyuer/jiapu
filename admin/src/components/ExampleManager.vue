@@ -8,8 +8,8 @@ import ExampleGraphPreview from './ExampleGraphPreview.vue';
 
 type Row = Record<string, any>;
 type EditorTab = 'details' | 'persons' | 'relations' | 'preview' | 'display';
-type DisplayPreference = { nameLayout: 'horizontal' | 'vertical'; showChildRankBadge: boolean; showGenderBadge: boolean; showGenderColors: boolean; autoCollapseEnabled: boolean };
-const defaultDisplayPreference: DisplayPreference = { nameLayout: 'horizontal', showChildRankBadge: false, showGenderBadge: false, showGenderColors: true, autoCollapseEnabled: true };
+type DisplayPreference = { showAvatar: boolean; emptyAvatarStyle: 'default' | 'surname'; nameLayout: 'horizontal' | 'vertical'; showChildRankBadge: boolean; showGenderBadge: boolean; showGenderColors: boolean; autoCollapseEnabled: boolean };
+const defaultDisplayPreference: DisplayPreference = { showAvatar: true, emptyAvatarStyle: 'default', nameLayout: 'horizontal', showChildRankBadge: false, showGenderBadge: false, showGenderColors: true, autoCollapseEnabled: true };
 const editorTabs: { key: EditorTab; label: string }[] = [
   { key: 'details', label: '家谱资料' }, { key: 'persons', label: '人物表' }, { key: 'relations', label: '关系表' },
   { key: 'preview', label: '预览图' }, { key: 'display', label: '默认展示' }
@@ -108,7 +108,7 @@ function resetDraft(source: Row = {}): void {
     _id: source._id || '', title: source.title || '', slug: source.slug || '', description: source.description || '',
     tagsText: Array.isArray(source.tags) ? source.tags.join('、') : '', sortOrder: source.sortOrder || 0,
     shareTitle: source.shareTitle || '', shareDescription: source.shareDescription || '',
-    displayPreference: { ...defaultDisplayPreference, ...(source.draftDisplayPreference || {}) }, content
+    displayPreference: { ...defaultDisplayPreference, ...(source._id ? { emptyAvatarStyle: 'surname' } : {}), ...(source.draftDisplayPreference || {}) }, content
   });
   relationForm.fromPersonId = content.persons[0]?._id || '';
   relationForm.toPersonId = content.persons[1]?._id || '';
@@ -418,6 +418,7 @@ onMounted(loadList);
         <section v-if="activeTab === 'display'" id="example-panel-display" class="editor-section display-settings" role="tabpanel" aria-labelledby="example-tab-display">
           <h3>默认展示</h3><p class="muted">保存草稿后由超级管理员发布更新。新发布版本会让用户采用本页默认展示，用户之后仍可自行调整。</p>
           <div class="display-group"><h4>姓名排列</h4><div class="display-layout"><label><input v-model="draft.displayPreference.nameLayout" type="radio" value="horizontal"/>横排 <span>张建国</span></label><label><input v-model="draft.displayPreference.nameLayout" type="radio" value="vertical"/>竖排 <span>张<br/>建<br/>国</span></label></div></div>
+          <div v-if="draft.displayPreference.nameLayout === 'horizontal'" class="display-group"><h4>头像显示</h4><label class="display-row"><span><strong>显示头像</strong><small>有照片时优先显示照片</small></span><input v-model="draft.displayPreference.showAvatar" type="checkbox"/></label><label v-if="draft.displayPreference.showAvatar" class="display-row"><span><strong>选择系统头像</strong></span><select v-model="draft.displayPreference.emptyAvatarStyle"><option value="default">系统头像</option><option value="surname">姓氏</option></select></label></div>
           <div class="display-group"><h4>节点标识</h4><label class="display-row"><span><strong>显示子女排行</strong><small>在节点上显示长子、次子、长女等标识</small></span><input v-model="draft.displayPreference.showChildRankBadge" type="checkbox"/></label><label class="display-row"><span><strong>显示性别标识</strong><small>在节点上显示男、女文字标识</small></span><input v-model="draft.displayPreference.showGenderBadge" type="checkbox"/></label><label class="display-row"><span><strong>使用性别配色</strong><small>用不同颜色区分男女人物节点</small></span><input v-model="draft.displayPreference.showGenderColors" type="checkbox"/></label></div>
           <div class="display-group"><h4>浏览体验</h4><label class="display-row"><span><strong>智能收起</strong><small>家谱人数较多时自动收起部分分支，让画面更加流畅</small></span><input v-model="draft.displayPreference.autoCollapseEnabled" type="checkbox"/></label></div>
         </section>

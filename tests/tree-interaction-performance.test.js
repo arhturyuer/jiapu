@@ -637,7 +637,7 @@ test('示例家谱设置入口携带示例标识，返回后保持取景刷新�
         preserveViewport: true,
         nameLayout: 'vertical',
         collapsedPersonIds: [],
-        statePatch: { nameLayout: 'vertical', showChildRankBadge: false, showGenderBadge: false, showGenderColors: false, autoCollapseEnabled: true, collapsedPersonIds: [] }
+        statePatch: { nameLayout: 'vertical', showAvatar: true, emptyAvatarStyle: 'surname', showChildRankBadge: false, showGenderBadge: false, showGenderColors: false, autoCollapseEnabled: true, collapsedPersonIds: [] }
       }
     });
   } finally {
