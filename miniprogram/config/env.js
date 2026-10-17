@@ -11,7 +11,11 @@ let local = {};
 try {
   local = require('./env.local');
 } catch (error) {
-  if (error.code !== 'MODULE_NOT_FOUND') throw error;
+  // WeChat's module loader omits Node's MODULE_NOT_FOUND code. Only translate
+  // this exact missing local module; errors inside a present config still fail.
+  const missingLocal = error && (error.code === 'MODULE_NOT_FOUND' ||
+    error.message === "module 'config/env.local.js' is not defined, require args is './env.local'");
+  if (!missingLocal) throw error;
 }
 
 const stagingCloudEnv = typeof local.stagingCloudEnv === 'string'
@@ -22,7 +26,7 @@ const hasStagingEnvironment = stagingCloudEnv &&
   !/REPLACE_WITH|\s/.test(stagingCloudEnv);
 
 if (!hasStagingEnvironment) {
-  throw new Error('缺少 staging 环境配置：请运行 deployment/configure-staging.mjs 后再打开开发者工具或上传小程序。');
+  throw new Error('缺少 staging 环境配置：本地开发请显式设置 DEPLOYMENT_TARGET=staging 和 STAGING_ENV_ID，运行 node deployment/configure-miniprogram.mjs 后重新编译；完整部署仍使用 deployment/configure-staging.mjs。');
 }
 
 const environments = {

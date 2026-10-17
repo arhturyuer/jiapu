@@ -22,8 +22,19 @@ function read(relativePath) {
     assert.match(template, /bindtap="zoomGraphIn"[\s\S]*bindtap="zoomGraphOut"[\s\S]*bindtap="fitWholeGraph"[\s\S]*bindtap="togglePageOrientation"/);
     assert.doesNotMatch(template, /bindtap="locateGraphFocus"/);
     assert.doesNotMatch(template, /class="graph-control[^>]+bindtap="(?:toggleNameLayout|expandAllBranches)"/);
-    assert.match(template, /class="graph-control graph-control-text" bindtap="openDisplaySettings">设置<\/view>/);
-    assert.match(template, /bindtap="generatePoster">图片<\/view>\s*<view[^>]*bindtap="openPdfExport">PDF<\/view>\s*<view[^>]*bindtap="toggleCleanScreen"[^>]*aria-label="清屏查看家谱"[^>]*>\s*<view class="clean-screen-icon"[^>]*>[\s\S]*?<\/view>\s*<\/view>\s*<\/view>/);
+    if (pageName === 'tree') {
+      const controls = template.match(/<view class="graph-controls"[\s\S]*?<\/scroll-view>/)[0];
+      assert.equal((controls.match(/class="graph-control(?: |")/g) || []).length, 6);
+      assert.doesNotMatch(controls, /generatePoster|openPdfExport|更多/);
+      assert.match(controls, /bindtap="openDisplaySettings"[^>]*><text class="graph-control-label">设置/);
+      assert.match(controls, /bindtap="toggleCleanScreen"[^>]*><text class="graph-control-label">清屏/);
+      assert.match(controls, /bindtap="fitWholeGraph"[^>]*><text class="graph-control-label">全图/);
+      assert.doesNotMatch(template, /reading-graph-tools|reading-more/);
+      assert.match(template, /bindtap="openExportSheet"/);
+    } else {
+      assert.match(template, /class="graph-control graph-control-text" bindtap="openDisplaySettings">设置<\/view>/);
+      assert.match(template, /bindtap="generatePoster">图片<\/view>\s*<view[^>]*bindtap="openPdfExport">PDF<\/view>\s*<view[^>]*bindtap="toggleCleanScreen"[^>]*aria-label="清屏查看家谱"[^>]*>\s*<view class="clean-screen-icon"[^>]*>[\s\S]*?<\/view>\s*<\/view>\s*<\/view>/);
+    }
     assert.match(template, /<button class="clean-screen-exit"[^>]*aria-label="退出清屏"[^>]*>\s*<text wx:if="\{\{elderMode\}\}">退出清屏<\/text>\s*<view class="clean-screen-icon is-exit"/);
     assert.match(template, /<text wx:if="\{\{elderMode\}\}">退出清屏<\/text>/);
     assert.match(script, /pageOrientation:\s*'portrait'/);
@@ -39,17 +50,19 @@ test('主家谱横屏隐藏页面工具栏和原生 TabBar，并显示当前家�
   const script = read('miniprogram/pages/tree/index.js');
   const style = read('miniprogram/pages/tree/index.wxss');
   assert.match(style, /\.tree-page\.is-landscape \.tree-toolbar \{[^}]*display:\s*none/);
-  assert.match(script, /setNavigationBarTitle\(\{ title: familyName \|\| '有谱' \}\)/);
+  assert.match(read('miniprogram/pages/tree/index.wxml'), /page-navigation title="\{\{currentFamily.name \|\| '有谱'\}\}"/);
+  assert.doesNotMatch(script, /setNavigationBarTitle/);
   assert.match(script, /wx\.hideTabBar\(\{ animation: false \}\)/);
   assert.match(script, /wx\.showTabBar\(\{ animation: false \}\)/);
 });
 
-test('主家谱竖屏画布只扣除顶部工具栏，不重复预留原生 TabBar 高度', function () {
+test('主家谱竖屏画布扣除导航和工具栏，不重复预留原生 TabBar 高度', function () {
   const script = read('miniprogram/pages/tree/index.js');
   const style = read('miniprogram/pages/tree/index.wxss');
-  assert.match(style, /height:\s*calc\(100vh - 112rpx\)/);
+  assert.match(read('miniprogram/styles/navigation-graph.wxss'), /\.navigation-graph \.graph-viewport \{[^}]*flex:1; height:auto !important/);
+  assert.match(script, /height - \(this.data.navigationHeight \|\| 0\)/);
   assert.doesNotMatch(style, /height:\s*calc\(100vh - 112rpx - 120rpx\)/);
-  assert.match(script, /isLandscape && !this\.data\.isLargeDevice\) \|\| this\.data\.isCleanScreen \? 0 : \(width >= 600 \? 76 : 112 \* uiUnit/);
-  assert.match(script, /width > height && !this\.data\.isLargeDevice\) \|\| this\.data\.isCleanScreen \? 0 : \(width >= 600 \? 76 : 112 \* deviceLayout\.read/);
+  assert.match(script, /const toolbar = this\.getToolbarHeight\(info\)/);
+  assert.match(script, /const toolbar = this\.getToolbarHeight\(size\)/);
   assert.match(style, /\.graph-help \{[^}]*bottom:\s*calc\(24rpx \+ env\(safe-area-inset-bottom\)\)/);
 });

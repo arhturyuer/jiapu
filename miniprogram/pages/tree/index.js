@@ -1,3 +1,5 @@
+const navigationPage = require('../../utils/navigation-page');
+const graphToolsLayout = require('../../utils/graph-tools-layout');
 const nodePresentation = require('../../utils/node-presentation');
 const readingGraph = require('../../utils/reading-graph');
 const deviceLayout = require('../../utils/device-layout');
@@ -25,7 +27,11 @@ const myMiniProgramGuide = require('../../utils/my-miniprogram-guide');
 const MAX_INTERACTIVE_NODES = 80;
 
 Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap({
+  onNavigationLayout: navigationPage.changed,
   data: {
+    navigationHeight: 64,
+    toolbarHeight: 64,
+    graphToolsStyle: '', graphHelpStyle: '', graphToolsScrollable: false,
     selectedKinship: null,
     loading: true,
     loadError: '',
@@ -75,6 +81,7 @@ Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap({
     memberAdVisible: false, memberAdMounted: false, memberAdLoaded: false, memberAdReserved: false, memberAdPreloadState: 'idle', memberAdWidth: 0, memberAdLayoutPending: false, memberAdFamilyId: '', memberAdVersion: 0,
     showFamilySheet: false,
     showPerspectiveSheet: false,
+    showExportSheet: false,
     showChildOrderSheet: false,
     childOrderParent: null,
     childOrderItems: [],
@@ -130,6 +137,7 @@ Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap({
   },
 
   onHide: function () {
+    this.closeBrowseSheets();
     this.cancelNewFamilyTour();
     this._adPageHidden = true;
     adAccess.hide(this, true);
@@ -143,6 +151,7 @@ Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap({
 
   onUnload: function () {
     this._unloaded = true;
+    this.closeBrowseSheets();
     this.cancelNewFamilyTour();
     this._adPageHidden = true;
     adAccess.hide(this, true);
@@ -166,6 +175,7 @@ Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap({
 
   loadPage: function (pendingView, options) {
     const self = this;
+    this.closeBrowseSheets();
     this._myMiniProgramGraphScope = '';
     this._myMiniProgramGraphFamilyId = '';
     this.cancelNewFamilyTour();
@@ -475,6 +485,14 @@ Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap({
     return scale * this.getGraphViewport().rpxToPx / 0.5;
   },
 
+  getToolbarHeight: function (size) {
+    const width = size.windowWidth || 375;
+    if ((width > (size.windowHeight || 667) && !this.data.isLargeDevice) || this.data.isCleanScreen) return 0;
+    const key = width + ':' + this.data.readingBodySize + ':' + this.data.elderMode;
+    if (this._toolbarMeasuredKey === key) return this.data.toolbarHeight;
+    return this.data.readingLarge ? 2 * Math.max(this.data.elderMode ? 60 : 44, (this.data.readingBodySize || 16) * 1.5 + 16) + 24 : 64;
+  },
+
   getGraphViewport: function () {
     // Resize measurements are authoritative; window info may still describe
     // portrait after the canvas has switched to landscape.
@@ -482,11 +500,12 @@ Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap({
     const info = this.getWindowSize();
     const width = info.windowWidth || 375;
     const rpxToPx = width / 750;
-    const uiUnit = deviceLayout.read(null, info).uiUnit;
-    const isLandscape = width > (info.windowHeight || 667);
+    const toolbar = this.getToolbarHeight(info);
     return {
+      left: 0,
+      top: (this.data.navigationHeight || 0) + toolbar,
       width: width,
-      height: Math.max(isLandscape ? 120 : 240, (info.windowHeight || 667) - ((isLandscape && !this.data.isLargeDevice) || this.data.isCleanScreen ? 0 : (width >= 600 ? 76 : 112 * uiUnit))),
+      height: Math.max(1, (info.windowHeight || 667) - (this.data.navigationHeight || 0) - toolbar),
       rpxToPx: rpxToPx,
       windowWidth: width
     };
@@ -589,10 +608,6 @@ Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap({
   syncPageChrome: function (isLandscape) {
     if (typeof wx === 'undefined') return;
     isLandscape = (isLandscape && !this.data.isLargeDevice) || this.data.isCleanScreen;
-    const familyName = this.data.currentFamily && this.data.currentFamily.name;
-    if (wx.setNavigationBarTitle) {
-      wx.setNavigationBarTitle({ title: familyName || '有谱' });
-    }
     if (isLandscape) {
       if (wx.hideTabBar) wx.hideTabBar({ animation: false });
     } else if (wx.showTabBar) {
@@ -701,25 +716,58 @@ Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap({
   measureGraphViewport: function (size, callback) {
     const width = Number(size.windowWidth) || 375;
     const height = Number(size.windowHeight) || 667;
+    const toolbar = this.getToolbarHeight(size);
     const fallback = {
+      left: 0,
+      top: (this.data.navigationHeight || 0) + toolbar,
       width: width,
-      height: Math.max(width > height ? 120 : 240, height - ((width > height && !this.data.isLargeDevice) || this.data.isCleanScreen ? 0 : (width >= 600 ? 76 : 112 * deviceLayout.read(null, size).uiUnit))),
+      height: Math.max(1, height - (this.data.navigationHeight || 0) - toolbar),
       rpxToPx: width / 750,
       windowWidth: width
     };
     const query = this.createSelectorQuery ? this.createSelectorQuery() : wx.createSelectorQuery();
     query.select('.graph-viewport').boundingClientRect();
     query.select('.graph-unit-probe').boundingClientRect();
+    query.select('.tree-toolbar').boundingClientRect();
+    if (query.selectAll) query.selectAll('.graph-control-label').boundingClientRect();
+    const page = this;
+    const familyId = this.data.currentFamily && this.data.currentFamily._id;
+    const resizeSequence = this._orientationResizeSequence;
+    const readingSize = this.data.readingBodySize, elderMode = this.data.elderMode;
     query.exec(function (result) {
+      const current = !page._deviceHidden && !page._unloaded && resizeSequence === page._orientationResizeSequence
+        && familyId === (page.data.currentFamily && page.data.currentFamily._id)
+        && readingSize === page.data.readingBodySize && elderMode === page.data.elderMode;
+      const toolbar = result && result[2];
+      if (current && toolbar && toolbar.height > 0) {
+        page._toolbarMeasuredKey = width + ':' + page.data.readingBodySize + ':' + page.data.elderMode;
+        if (toolbar.height !== page.data.toolbarHeight) page.setData({ toolbarHeight: toolbar.height });
+        const reserved = page.getToolbarHeight(size);
+        fallback.top = (page.data.navigationHeight || 0) + reserved;
+        fallback.height = Math.max(1, height - fallback.top);
+      }
       const rect = result && result[0];
-      callback(rect && rect.width && rect.height ? {
+      const viewport = rect && rect.width && rect.height ? {
         left: rect.left,
         top: rect.top,
         width: rect.width,
         height: rect.height,
         rpxToPx: result[1] && result[1].width > 0 ? result[1].width / 100 : width / 750,
         windowWidth: width
-      } : fallback);
+      } : fallback;
+      if (current) {
+        const window = page.getWindowSize();
+        const safe = window.safeArea || {};
+        const tools = graphToolsLayout.layout(viewport, {
+          landscape: page.data.isLandscape, largeDevice: page.data.isLargeDevice, elderMode: page.data.elderMode,
+          bodySize: page.data.readingBodySize, labels: result && Array.isArray(result[3]) ? result[3] : [],
+          safeLeft: safe.left, safeRight: Math.max(0, (window.windowWidth || width) - (safe.right || window.windowWidth || width))
+        });
+        if (tools.style !== page.data.graphToolsStyle || tools.helpStyle !== page.data.graphHelpStyle) {
+          page.setData({ graphToolsStyle: tools.style, graphHelpStyle: tools.helpStyle, graphToolsScrollable: tools.scroll });
+        }
+      }
+      callback(viewport);
     });
   },
 
@@ -729,7 +777,41 @@ Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap({
     wx.navigateTo({ url: '/pages/display-settings/index?familyId=' + encodeURIComponent(family._id) });
   },
 
-  openPdfExport: function () { pdfEntry.open(this, 'family'); },
+  openPdfExport: function (format) { pdfEntry.open(this, 'family', format); },
+
+  closeBrowseSheets: function () {
+    if (this._perspectiveFilterTimer) clearTimeout(this._perspectiveFilterTimer);
+    this._perspectiveFilterTimer = null;
+    this._viewSheetFamilyId = '';
+    this._exportSheetFamilyId = '';
+    if (this.data.showPerspectiveSheet || this.data.showExportSheet) this.setData({ showPerspectiveSheet: false, showExportSheet: false });
+  },
+
+  openExportSheet: function () {
+    if (!this.canOpenBrowseSheet() || !this.data.nodes.length) return;
+    this.closeBrowseSheets();
+    this._exportSheetFamilyId = this.data.currentFamily._id;
+    this.setData({ showExportSheet: true, showFamilySheet: false });
+  },
+
+  closeExportSheet: function () {
+    this._exportSheetFamilyId = '';
+    this.setData({ showExportSheet: false });
+  },
+
+  chooseExport: function (event) {
+    if (!this.canOpenBrowseSheet() || !this.data.showExportSheet || this._exportSheetFamilyId !== this.data.currentFamily._id) return;
+    const format = event.currentTarget.dataset.format;
+    if (['image', 'poster', 'book'].indexOf(format) < 0 || format === 'image' && this.data.posterGenerating) return;
+    this.closeExportSheet();
+    if (format === 'image') this.generatePoster();
+    else this.openPdfExport(format);
+  },
+
+  canOpenBrowseSheet: function () {
+    return Boolean(this.data.currentFamily && !this.data.loading && !this.data.loadError && !this.data.accountPending
+      && !this._deviceHidden && !this._pageHidden && !this._unloaded);
+  },
 
   generatePoster: function () {
     const family = this.data.currentFamily;
@@ -863,6 +945,8 @@ Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap({
   },
 
   openFamilySheet: function () {
+    if (!this.data.currentFamily || this.data.loading || this.data.loadError || this.data.accountPending || this._deviceHidden || this._unloaded) return;
+    this.closeBrowseSheets();
     this.setData({ showFamilySheet: true });
   },
 
@@ -875,6 +959,8 @@ Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap({
     const familyId = event.currentTarget.dataset.id;
     const family = this.data.familyList.find(function (item) { return item._id === familyId; });
     if (!family) return;
+    this.closeBrowseSheets();
+    treePosterFlow.cancel(this);
     this.flushGraphPreference();
     app.setCurrentFamily(family);
     this.setData({
@@ -890,16 +976,7 @@ Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap({
   },
 
   noop: function () {},
-  readingMoreAction: function (event) {
-    const action = event.currentTarget.dataset.action;
-    if (['fitWholeGraph', 'openDisplaySettings', 'generatePoster', 'openPdfExport', 'togglePageOrientation', 'toggleCleanScreen'].indexOf(action) < 0) return;
-    this.setData({ showReadingMore: false });
-    this[action]();
-  },
   onReadingChange: readingGraph.changed,
-  lookClearly: readingGraph.lookClearly,
-  openReadingPeople: readingGraph.openPeople,
-  toggleReadingMore: function () { this.setData({ showReadingMore: !this.data.showReadingMore }); },
   showPerson: function (event) {
     const personId = event.currentTarget.dataset.id;
     const person = this.data.rawPersons.find(function (item) { return item._id === personId; });
@@ -1093,14 +1170,21 @@ Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap({
   },
 
   openPerspectiveSheet: function () {
+    if (!this.canOpenBrowseSheet()) return;
+    this.closeBrowseSheets();
+    this._viewSheetFamilyId = this.data.currentFamily._id;
     this.setData({
       showPerspectiveSheet: true,
+      showFamilySheet: false,
       perspectiveKeyword: '',
       perspectiveResults: this.data.rawPersons
     });
   },
 
   closePerspectiveSheet: function () {
+    if (this._perspectiveFilterTimer) clearTimeout(this._perspectiveFilterTimer);
+    this._perspectiveFilterTimer = null;
+    this._viewSheetFamilyId = '';
     this.setData({ showPerspectiveSheet: false });
   },
 
@@ -1109,7 +1193,11 @@ Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap({
     this.setData({ perspectiveKeyword: keyword });
     if (this._perspectiveFilterTimer) clearTimeout(this._perspectiveFilterTimer);
     const self = this;
+    const familyId = this._viewSheetFamilyId;
     this._perspectiveFilterTimer = setTimeout(function () {
+      self._perspectiveFilterTimer = null;
+      if (!self.canOpenBrowseSheet() || !self.data.showPerspectiveSheet || familyId !== self._viewSheetFamilyId
+        || familyId !== self.data.currentFamily._id) return;
       self._perspectiveFilterTimer = null;
       self.setData({ perspectiveResults: self.data.rawPersons.filter(function (person) {
         return !keyword || person.name.indexOf(keyword) >= 0;
@@ -1118,7 +1206,16 @@ Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap({
   },
 
   selectPerspective: function (event) {
-    this.setPerspective(event.currentTarget.dataset.id);
+    if (!this.canOpenBrowseSheet() || !this.data.showPerspectiveSheet || this._viewSheetFamilyId !== this.data.currentFamily._id) return;
+    const personId = event.currentTarget.dataset.id;
+    if (!this.data.rawPersons.some(function (person) { return person._id === personId; })) return;
+    if (this.data.viewMode !== 'perspective' || this.data.viewpointId !== personId) this.setPerspective(personId);
+    this.closePerspectiveSheet();
+  },
+
+  selectFullView: function () {
+    if (!this.canOpenBrowseSheet() || !this.data.showPerspectiveSheet || this._viewSheetFamilyId !== this.data.currentFamily._id) return;
+    if (this.data.viewMode !== 'full') this.showFullGraph();
     this.closePerspectiveSheet();
   },
 
@@ -1205,7 +1302,8 @@ Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap({
   openAdMembership: function () { adAccess.openMembership(this, app, true); },
 
   startShare: function () {
-    this.openShareSheet(this.data.viewMode, this.data.viewpointId, this.data.viewpointName);
+    this.closeBrowseSheets();
+    this.openShareSheet('full');
   },
 
   dismissShareReminder: function () {

@@ -16,6 +16,20 @@ function harness() {
   return { page, api, transfer, calls, timers, captured };
 }
 const flush = () => new Promise(resolve => setImmediate(resolve));
+test('PDF 入口预选格式但不生成，旧链接及无效格式回退大图，运行任务继续锁定格式', () => {
+  for (const format of [undefined, '', 'invalid', 'poster', 'book']) {
+    const h = harness();
+    h.page.onLoad({ familyId: 'family', format });
+    assert.equal(h.page.data.format, format === 'book' ? 'book' : 'poster');
+    assert.equal(h.calls.length, 0);
+    h.page.receiveTask({ taskId: 'existing', status: 'processing', format: 'book' });
+    const selected = h.page.data.format;
+    h.page.chooseFormat({ currentTarget: { dataset: { format: 'poster' } } });
+    assert.equal(h.page.data.format, selected);
+    assert.equal(h.page.data.task.taskId, 'existing');
+    h.page.onHide();
+  }
+});
 test('PDF 页面沿用显示设置，隐藏后停止轮询并忽略迟到状态', () => {
   const h = harness(); assert.equal(h.page._display.nameLayout, 'vertical');
   h.page.receiveTask({ taskId: 'task', status: 'processing', format: 'poster', progress: 50 });

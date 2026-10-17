@@ -139,6 +139,7 @@ test('关于页使用正式版实际版本并按最新在前展示受控更新�
   const uploadScript = fs.readFileSync(path.join(root, 'deployment/upload-miniprogram.sh'), 'utf8');
   const verifier = fs.readFileSync(path.join(root, 'deployment/verify-release-note.mjs'), 'utf8');
   assert.deepEqual(releaseInfo.validateReleaseNotes(releaseNotes), [
+  { version: '1.6.18', summary: '优化家谱导航、首页工具与邀请分享，更新介绍页和家庭页交互，收紧无子女兄弟姐妹间距并同步图片与 PDF 排版。' },
   { version: '1.6.17', summary: '新增家谱头像显示与默认样式设置，支持横排双行、竖排按需双列姓名，统一图片和 PDF 大图排版。' },
   { version: '1.6.16', summary: '修复子女排行内外不一致和同组重复长女，统一父母排行依据与编辑预览，并保持 PDF 布局一致。' },
   { version: '1.6.15', summary: '修复 PDF 大图与小程序家谱图的子女顺序及长幼标注不一致，保持完整家谱布局和亲属连线一致。' },
@@ -683,7 +684,7 @@ test('家谱显示偏好集中设置，新用户采用默认节点且性别开�
   assert.match(tree, /saveGraphPreference/);
   assert.match(tree, /openDisplaySettings/);
   assert.doesNotMatch(tree, /toggleNameLayout/);
-  assert.match(treeTemplate, /class="graph-control graph-control-text" bindtap="openDisplaySettings">设置<\/view>/);
+  assert.match(treeTemplate, /class="graph-control graph-control-text" bindtap="openDisplaySettings"[^>]*><text class="graph-control-label">设置/);
   assert.match(exampleTemplate, /class="graph-control graph-control-text" bindtap="openDisplaySettings">设置<\/view>/);
   assert.match(members, /bindtap="openDisplaySettings"[\s\S]{0,180}家谱显示设置/);
   assert.match(settings, /app\.getPreference\(this\.data\.familyId\)/);

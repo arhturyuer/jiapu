@@ -2,12 +2,45 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const vm = require('node:vm');
 
 const root = path.resolve(__dirname, '..');
 
 function read(relativePath) {
   return fs.readFileSync(path.join(root, relativePath), 'utf8');
 }
+
+test('家庭页顶部卡片打开当前家庭权限管理，内部按钮独立响应', function () {
+  const template = read('miniprogram/pages/members/index.wxml');
+  assert.match(template, /<view[^>]*aria-role="button"[^>]*aria-label="家庭与权限管理"[^>]*class="family-hero surface-card"[^>]*bindtap="openFamilyManage"/);
+  assert.match(template, /class="family-membership-badge[^>]*catchtap="openMembership"/);
+  assert.match(template, /class="invite-button" catchtap="openShareSheet"/);
+
+  let definition;
+  const navigations = [];
+  vm.runInNewContext(read('miniprogram/pages/members/index.js'), {
+    getApp: function () { return {}; },
+    Page: function (value) { definition = value; },
+    wx: { navigateTo: function (options) { navigations.push(options.url); } },
+    require: function (name) {
+      if (name === '../../utils/launch-ad') return { wrap: function (value) { return value; } };
+      if (name === '../../utils/share-card') return { create: function () { return {}; } };
+      return {};
+    }
+  });
+  const page = Object.assign({}, definition, { data: { currentFamily: null } });
+  page.openFamilyManage();
+  assert.deepEqual(navigations, []);
+  for (const familyId of ['family-1', 'family-2']) {
+    page.data.currentFamily = { _id: familyId };
+    for (const role of ['admin', 'member', 'viewer']) {
+      page.data.currentRole = role;
+      page.openFamilyManage();
+      assert.equal(navigations.at(-1), '/pages/family-manage/index?familyId=' + familyId);
+    }
+  }
+  assert.equal(navigations.length, 6);
+});
 
 test('家庭页四项统计均提供对应入口', function () {
   const template = read('miniprogram/pages/members/index.wxml');

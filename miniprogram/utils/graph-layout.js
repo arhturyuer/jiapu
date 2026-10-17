@@ -1287,6 +1287,10 @@ function layoutGraph(personsInput, relationsInput, options) {
 
   const hasMultipleLineages = unitGraph.units.some(function (unit) { return (unitGraph.parentRoots[unit._id] || []).length > 1; });
   let canvasWidth = hasMultipleLineages ? positionAncestralFamilies(unitGraph, metrics) : positionFamilySubtrees(unitGraph, metrics);
+  if (!metrics.legacyGeometry) {
+    require('./graph-leaf-spacing').compact(unitGraph, active, metrics, createFamilyConnections);
+    canvasWidth = Math.max(750, ...unitGraph.units.map(function (unit) { return unit.x + unit.width + metrics.marginX; }));
+  }
   let canvasHeight = Math.max(900, maxGeneration * metrics.gapY + metrics.nodeHeight + metrics.marginY * 2);
   const nodesById = {};
   const nodes = [];

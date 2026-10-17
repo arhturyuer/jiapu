@@ -1,0 +1,10 @@
+.reading-root.navigation-graph { height:100vh; min-height:0; display:flex; flex-direction:column; overflow:hidden; }
+.navigation-graph > .tree-page, .navigation-graph > .example-page { position:relative; flex:1; height:auto; min-height:0; display:flex; flex-direction:column; }
+.navigation-graph .tree-toolbar, .navigation-graph .example-header { flex:none; }
+.navigation-graph .graph-viewport { flex:1; height:auto !important; min-height:0; }
+.navigation-graph .graph-empty { flex:1; height:auto; min-height:0; }
+.navigation-graph .loading-panel, .navigation-graph .empty-panel { min-height:0; flex:1; overflow-y:auto; }
+.navigation-graph .tree-top-ad, .navigation-graph .tree-share-reminder { top:calc(var(--tree-toolbar-height, 56px) + 8px); }
+.navigation-graph .my-miniprogram-guide { margin-top:var(--navigation-height,64px); }
+.navigation-graph .sheet-mask { top:var(--navigation-height,64px); }
+.reading-root.navigation-graph .is-landscape .bottom-sheet { height:100%; max-height:100%; }

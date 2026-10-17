@@ -873,7 +873,7 @@ test('方向流光只使用 transform 和 opacity，不触发布局属性动画'
         select: function () { return this; }, boundingClientRect: function () { return this; },
         exec: function (callback) {
           const size = landscape ? { windowWidth: 667, windowHeight: 375 } : wx.getWindowInfo();
-          const top = landscape || page.data.isCleanScreen ? 0 : (pageName === 'tree' ? 56 : 177);
+          const top = page.data.navigationHeight + (landscape || page.data.isCleanScreen ? 0 : (pageName === 'tree' ? 56 : 177));
           callback([{ left: 0, top: top, width: size.windowWidth, height: size.windowHeight - top }]);
         }
       };
@@ -900,11 +900,11 @@ test('方向流光只使用 transform 和 opacity，不触发布局属性动画'
         const before = page.getGraphViewport(), center = logicalCenter(page);
         page.toggleCleanScreen();
         assert.equal(page.data.isCleanScreen, true);
-        assert.equal(page.getGraphViewport().top, 0);
-        assert.equal(page.getGraphViewport().height, wx.getWindowInfo().windowHeight);
+        assert.equal(page.getGraphViewport().top, page.data.navigationHeight);
+        assert.equal(page.getGraphViewport().height, wx.getWindowInfo().windowHeight - page.data.navigationHeight);
         assert.equal(page.getGraphTransform().scale, 0.6);
         assertCenter(page, center);
-        assert.equal(page.data.graphGestureConfig.top, 0);
+        assert.equal(page.data.graphGestureConfig.top, page.data.navigationHeight);
         page.toggleCleanScreen();
         assert.equal(page.data.isCleanScreen, false);
         assert.equal(page.getGraphViewport().height, before.height);

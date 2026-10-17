@@ -26,6 +26,22 @@ AI 通过脚本完成获授权 staging 的函数、集合、索引、规则和�
 
 ## 本地首次配置
 
+### 已有 staging，仅启动小程序
+
+首次克隆没有被 Git 忽略的 `miniprogram/config/env.local.js`。已有独立测试环境且只需小程序开发时执行：
+
+```bash
+DEPLOYMENT_TARGET=staging STAGING_ENV_ID=<独立staging环境ID> node deployment/configure-miniprogram.mjs
+```
+
+脚本沿用目标护栏并额外限定 staging，只生成本机小程序配置，不访问云端、不生成部署清单，也不要求支付或部署密钥。缺少 ID、生产 ID 或占位值均拒绝写入；不会自动建立云端环境。随后在开发者工具中重新编译。若仍报告 `module 'config/env.local.js' is not defined`，确认开发者工具打开的是当前仓库根目录及文件已经生成，再清除编译缓存并重新编译；后续的页面未注册需在配置错误解决后复验。
+
+`app.json.permission` 不声明 `scope.camera`、`scope.writePhotosAlbum`；拍照选图和保存相册仍由现有运行时 API、原生权限和隐私校验处理，微信公众平台隐私声明仍需人工维护。
+
+若本机 `miniprogram/app.json` 存在、`project.config.json` 的 `miniprogramRoot` 为 `miniprogram/`，工具却报“在项目根目录未找到 app.json”，可使用“项目 → 重新打开此项目”刷新工具状态后复验；不要为消除缓存报错把 app.json 复制到仓库根目录或改变源码根目录。
+
+### 完整环境建立与部署
+
 ```bash
 cp deployment/staging.local.env.example deployment/staging.local.env
 ```

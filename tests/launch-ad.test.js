@@ -714,3 +714,26 @@ test('广告刷新忽略切换家谱、关闭弹框及过期事件；购买返�
   await failed;
   assert.equal(page.data.memberAdVisible, false);
 });
+
+test('介绍页分享冷启动在开屏结束后恢复来源，热启动不重复拦截', async function (t) {
+  const query = { source: 'share_menu' };
+  const { app, visits } = fixture(t, { entry: { path: 'pages/share-intro/index', query: query } });
+  const intro = sourcePage('pages/share-intro/index');
+  intro.page.onLoad(query);
+  assert.equal(visits[0].options.url, '/pages/launch-ad/index');
+  assert.deepEqual(intro.calls, []);
+  const page = splash(app, true);
+  await page.onLoad();
+  if (page.data.adVisible) page.adClose();
+  assert.equal(visits.at(-1).kind, 'redirect');
+  assert.equal(visits.at(-1).options.url, '/pages/share-intro/index?source=share_menu');
+  const restored = sourcePage('pages/share-intro/index');
+  restored.page.onLoad({});
+  assert.deepEqual(restored.calls, [['load', query]]);
+  const before = visits.length;
+  const warm = sourcePage('pages/share-intro/index');
+  warm.page.onLoad(query);
+  assert.deepEqual(warm.calls, [['load', query]]);
+  assert.equal(visits.length, before);
+  page.onUnload();
+});

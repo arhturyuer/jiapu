@@ -11,7 +11,7 @@ Page(launchAd.wrap({
   onLoad: function (options) {
     this._display = {};
     try { this._display = JSON.parse(decodeURIComponent(options.display || '%7B%7D')); } catch (error) {}
-    this.setData({ source: options.source === 'example' ? 'example' : 'family', familyId: options.familyId || '', slug: options.slug || '' });
+    this.setData({ source: options.source === 'example' ? 'example' : 'family', familyId: options.familyId || '', slug: options.slug || '', format: options.format === 'book' ? 'book' : 'poster' });
     const captured = session.take(options.session);
     this._layoutSnapshot = captured && captured.source === this.data.source && captured.key === (this.data.source === 'example' ? this.data.slug : this.data.familyId) ? captured.layoutSnapshot : null;
   },

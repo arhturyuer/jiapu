@@ -2,12 +2,9 @@
 <import src="../../templates/kinship-card.wxml" />
 <import src="../../templates/my-miniprogram-guide.wxml" />
 <page-meta page-orientation="{{pageOrientation}}" bindresize="onPageResize"></page-meta>
-<view class="reading-root {{readingLarge ? 'reading-graph-page' : ''}} {{elderMode ? 'reading-elder' : ''}} {{readingLarge ? 'reading-large' : ''}}" style="{{readingStyle}}{{readingDockStyle}}">
-<view class="tree-page {{isLandscape && !isLargeDevice ? 'is-landscape' : ''}} {{isLargeDevice ? 'is-large-device' : ''}} {{isCleanScreen ? 'is-clean-screen' : ''}}">
-<view class="reading-graph-tools" wx:if="{{elderMode && !isCleanScreen && nodes.length}}">
-  <button bindtap="openReadingPeople">找家人</button><button bindtap="zoomGraphIn" aria-label="放大家谱">放大</button><button bindtap="zoomGraphOut" aria-label="缩小家谱">缩小</button><button bindtap="lookClearly">看清姓名</button><button bindtap="toggleReadingMore">更多</button>
-</view>
-<view class="sheet-mask" wx:if="{{elderMode && showReadingMore && !isCleanScreen}}" bindtap="toggleReadingMore"><view class="bottom-sheet reading-more" catchtap="noop"><text class="sheet-title">家谱操作</text><button class="secondary-button" data-action="fitWholeGraph" bindtap="readingMoreAction">查看整张家谱</button><button class="secondary-button" data-action="openDisplaySettings" bindtap="readingMoreAction">家谱显示设置</button><button class="secondary-button" data-action="generatePoster" bindtap="readingMoreAction" disabled="{{posterGenerating}}">导出图片</button><button class="secondary-button" data-action="openPdfExport" bindtap="readingMoreAction">导出 PDF</button><button class="secondary-button" wx:if="{{!isLargeDevice}}" data-action="togglePageOrientation" bindtap="readingMoreAction">切换横竖屏</button><button class="secondary-button" data-action="toggleCleanScreen" bindtap="readingMoreAction">清屏浏览</button><button class="secondary-button" bindtap="toggleReadingMore">关闭</button></view></view>
+<view class="reading-root navigation-graph {{readingLarge ? 'reading-graph-page' : ''}} {{elderMode ? 'reading-elder' : ''}} {{readingLarge ? 'reading-large' : ''}}" style="{{readingStyle}}{{readingDockStyle}}--navigation-height:{{navigationHeight}}px;">
+<page-navigation title="{{currentFamily.name || '有谱'}}" page-gutter title-switchable="{{currentFamily && !loading && !loadError && !accountPending}}" bindtitleswitch="openFamilySheet" bindlayout="onNavigationLayout" />
+<view class="tree-page {{isLandscape && !isLargeDevice ? 'is-landscape' : ''}} {{isLargeDevice ? 'is-large-device' : ''}} {{isCleanScreen ? 'is-clean-screen' : ''}}" style="--tree-toolbar-height:{{toolbarHeight}}px;">
   <view class="loading-panel" wx:if="{{loading}}">
     <view aria-hidden="true" class="loading-dot"></view>
     <text>正在整理家谱...</text>
@@ -40,17 +37,11 @@
 
   <block wx:else>
     <view class="tree-toolbar">
-      <view data-reading-control="true" aria-role="button" class="family-switch" bindtap="openFamilySheet">
-        <text class="family-switch-name">{{currentFamily.name}}</text>
-        <text class="family-switch-arrow">⌄</text>
+      <view data-reading-control="true" aria-role="button" class="view-mode-entry" bindtap="openPerspectiveSheet" aria-label="{{(viewMode === 'perspective' ? '从' + viewpointName + '看' : '全谱浏览') + '，切换查看方式'}}">
+        <text class="view-mode-label">{{viewMode === 'perspective' ? '从' + viewpointName + '看' : '全谱浏览'}}</text><view class="toolbar-arrow" aria-hidden="true"></view>
       </view>
-      <view class="mode-switch">
-        <view data-reading-control="true" aria-role="button" class="mode-item {{viewMode === 'full' ? 'active' : ''}}" bindtap="showFullGraph">全谱</view>
-        <view data-reading-control="true" aria-role="button" class="mode-item {{viewMode === 'perspective' ? 'active' : ''}}" bindtap="openPerspectiveSheet">
-          {{viewMode === 'perspective' ? '从' + viewpointName + '看' : '以某人看'}}
-        </view>
-      </view>
-      <view data-reading-control="true" aria-role="button" class="toolbar-share landscape-hidden" bindtap="startShare">分享</view>
+      <view data-reading-control="true" aria-role="button" class="toolbar-export" bindtap="openExportSheet" aria-label="导出家谱，选择图片或PDF"><text class="toolbar-action-label">导出</text><view class="toolbar-arrow" aria-hidden="true"></view></view>
+      <view data-reading-control="true" aria-role="button" class="toolbar-share landscape-hidden" bindtap="startShare"><text class="toolbar-action-label">邀请家人</text></view>
     </view>
 
     <view class="tree-share-reminder" wx:if="{{showShareReminder && !showMyMiniProgramGuide}}">
@@ -125,19 +116,20 @@
       </view>
     </view>
 
-    <view class="graph-controls" wx:if="{{!elderMode && nodes.length > 0}}">
-      <view data-reading-control="true" aria-role="button" class="graph-control" bindtap="zoomGraphIn">＋</view>
-      <view data-reading-control="true" aria-role="button" class="graph-control" bindtap="zoomGraphOut">－</view>
-      <view data-reading-control="true" aria-role="button" class="graph-control graph-control-text" bindtap="fitWholeGraph">全谱</view>
-      <view data-reading-control="true" aria-role="button" wx:if="{{!isLargeDevice}}" class="graph-control graph-control-text orientation-control {{orientationChanging ? 'is-disabled' : ''}}" bindtap="togglePageOrientation">{{orientationChanging ? '切换中' : isLandscape ? '竖屏' : '横屏'}}</view>
-      <view data-reading-control="true" aria-role="button" class="graph-control graph-control-text" bindtap="openDisplaySettings">设置</view>
-      <view data-reading-control="true" aria-role="button" class="graph-control graph-control-text {{posterGenerating ? 'is-disabled' : ''}}" bindtap="generatePoster">图片</view><view data-reading-control="true" aria-role="button" class="graph-control graph-control-text" bindtap="openPdfExport">PDF</view>
-      <view data-reading-control="true" aria-role="button" class="graph-control {{orientationChanging ? 'is-disabled' : ''}}" bindtap="toggleCleanScreen" aria-label="清屏查看家谱">
-        <view class="clean-screen-icon" aria-hidden="true"><view class="icon-corner top-left"></view><view class="icon-corner top-right"></view><view class="icon-corner bottom-left"></view><view class="icon-corner bottom-right"></view></view>
+    <view class="graph-controls" style="{{graphToolsStyle}}" wx:if="{{nodes.length > 0}}">
+      <scroll-view class="graph-tools-scroll" scroll-y="{{graphToolsScrollable}}">
+      <view class="graph-controls-grid">
+        <view data-reading-control="true" aria-role="button" class="graph-control" bindtap="zoomGraphIn" aria-label="放大家谱"><text class="graph-control-label">＋</text></view>
+        <view data-reading-control="true" aria-role="button" class="graph-control" bindtap="zoomGraphOut" aria-label="缩小家谱"><text class="graph-control-label">－</text></view>
+        <view data-reading-control="true" aria-role="button" class="graph-control graph-control-text" bindtap="fitWholeGraph" aria-label="适应全图，保留当前查看方式"><text class="graph-control-label">全图</text></view>
+        <view data-reading-control="true" aria-role="button" wx:if="{{!isLargeDevice}}" class="graph-control graph-control-text orientation-control {{orientationChanging ? 'is-disabled' : ''}}" bindtap="togglePageOrientation" aria-label="{{isLandscape ? '切换竖屏' : '切换横屏'}}"><text class="graph-control-label">{{orientationChanging ? '稍候' : isLandscape ? '竖屏' : '横屏'}}</text></view>
+        <view data-reading-control="true" aria-role="button" class="graph-control graph-control-text" bindtap="openDisplaySettings" aria-label="家谱显示设置"><text class="graph-control-label">设置</text></view>
+        <view data-reading-control="true" aria-role="button" class="graph-control graph-control-text {{orientationChanging ? 'is-disabled' : ''}}" bindtap="toggleCleanScreen" aria-label="清屏查看家谱"><text class="graph-control-label">清屏</text></view>
       </view>
+      </scroll-view>
     </view>
 
-    <view class="graph-help" wx:if="{{!elderMode && nodes.length > 0}}">
+    <view class="graph-help" style="{{graphHelpStyle}}" wx:if="{{!elderMode && nodes.length > 0}}">
       <text wx:if="{{graphRendering}}">正在分批绘制 {{renderedCount}} / {{totalVisibleCount}} 人</text>
       <text wx:elif="{{selectedPersonId && !showMemberSheet}}">关系已高亮，再次点击成员或点“•••”进行操作</text>
       <text wx:elif="{{hiddenBranchCount > 0}}">已收起 {{hiddenBranchCount}} 人，点击 +人数 可展开分支</text>
@@ -154,7 +146,7 @@
       <view class="sheet-handle"></view>
       <view class="family-sheet-heading"><view class="sheet-title">选择家谱</view><text data-reading-control="true" aria-role="button" class="examples-entry" bindtap="openExamples">示例家谱</text></view>
       <view data-reading-control="true" aria-role="button" class="family-option {{item._id === currentFamily._id ? 'selected' : ''}}" wx:for="{{familyList}}" wx:key="_id" data-id="{{item._id}}" bindtap="switchFamily">
-        <view>
+        <view class="family-option-copy">
           <text class="family-option-name">{{item.name}}</text>
           <text class="family-option-role">{{item.currentRole === 'admin' ? '管理员' : item.currentRole === 'member' ? '家庭成员' : '访客'}}</text>
         </view>
@@ -204,8 +196,8 @@
             <text class="action-desc">按出生日期与已确认顺序排列</text>
           </view>
           <view data-reading-control="true" aria-role="button" class="action-cell action-cell-wide" bindtap="shareSelectedPerson">
-            <text class="action-title">从此人分享</text>
-            <text class="action-desc">家人打开后直接看到此人视角</text>
+            <text class="action-title">从{{selectedPerson.name}}分享</text>
+            <text class="action-desc">家人打开后直接看到{{selectedPerson.name}}视角</text>
           </view>
         </view>
         <view class="member-relation-section" wx:if="{{canEdit}}">
@@ -256,31 +248,44 @@
   <view class="sheet-mask" wx:if="{{showPerspectiveSheet}}" bindtap="closePerspectiveSheet">
     <view data-reading-control="true" aria-role="button" class="bottom-sheet perspective-sheet" catchtap="stopEvent">
       <view class="sheet-handle"></view>
-      <view class="sheet-title">以某位成员看家谱</view>
+      <view class="sheet-title">查看方式</view>
+      <view data-reading-control="true" aria-role="button" class="view-full-option {{viewMode === 'full' ? 'selected' : ''}}" bindtap="selectFullView" aria-label="{{viewMode === 'full' ? '全谱浏览，已选择' : '全谱浏览'}}"><text>全谱浏览</text><text wx:if="{{viewMode === 'full'}}" class="view-selected">已选择</text></view>
+      <text class="view-picker-help">选择人物视角</text>
       <input aria-label="输入姓名查找" class="person-search" placeholder="输入姓名查找" value="{{perspectiveKeyword}}" bindinput="filterPerspectives" />
       <scroll-view class="perspective-list" scroll-y>
-        <view data-reading-control="true" aria-role="button" class="perspective-option" wx:for="{{perspectiveResults}}" wx:key="_id" data-id="{{item._id}}" bindtap="selectPerspective">
+        <view data-reading-control="true" aria-role="button" class="perspective-option {{viewMode === 'perspective' && viewpointId === item._id ? 'selected' : ''}}" wx:for="{{perspectiveResults}}" wx:key="_id" data-id="{{item._id}}" bindtap="selectPerspective" aria-label="{{item.name + (viewMode === 'perspective' && viewpointId === item._id ? '，已选择' : '，选择人物视角')}}">
           <view class="small-avatar gender-avatar {{item.genderClass}}">{{item.initial}}</view>
           <text class="perspective-name">{{item.name}}</text>
           <text class="gender-badge {{item.genderClass}}">{{item.genderText}}</text>
+          <text class="view-selected" wx:if="{{viewMode === 'perspective' && viewpointId === item._id}}">已选择</text>
         </view>
       </scroll-view>
+    </view>
+  </view>
+
+  <view class="sheet-mask" wx:if="{{showExportSheet}}" bindtap="closeExportSheet">
+    <view class="bottom-sheet export-sheet" catchtap="stopEvent">
+      <view class="sheet-handle"></view><view class="sheet-title">导出家谱</view>
+      <button class="export-option" data-format="image" bindtap="chooseExport" disabled="{{posterGenerating}}"><text class="export-option-title">{{posterGenerating ? '正在生成图片…' : '家谱图片'}}</text><text class="export-option-desc">当前视角与已展开分支，适合发微信</text></button>
+      <button class="export-option" data-format="poster" bindtap="chooseExport"><text class="export-option-title">家谱树大图 · PDF</text><text class="export-option-desc">完整家谱，适合放大查看、打印</text></button>
+      <button class="export-option" data-format="book" bindtap="chooseExport"><text class="export-option-title">家谱书 · PDF</text><text class="export-option-desc">完整家谱与人物资料，适合装订</text></button>
     </view>
   </view>
 
   <view class="sheet-mask" wx:if="{{showShareSheet}}" bindtap="closeShareSheet">
     <view data-reading-control="true" aria-role="button" class="bottom-sheet" catchtap="stopEvent">
       <view class="sheet-handle"></view>
-      <view class="sheet-title">分享给家人</view>
-      <view class="share-summary surface-card">
-        <text class="share-summary-title">{{shareMode === 'perspective' ? '从' + sharePersonName + '看家谱' : '分享完整家谱'}}</text>
+      <view class="sheet-title">{{shareMode === 'perspective' ? '分享给家人' : '邀请家人'}}</view>
+      <view class="share-summary surface-card" wx:if="{{shareMode === 'perspective'}}">
+        <text class="share-summary-title">{{'从' + sharePersonName + '看家谱'}}</text>
         <text class="share-summary-desc">分享卡片可在邀请管理中撤销。</text>
       </view>
-      <text class="share-label">家人打开后的权限</text>
-      <view class="share-role-options">
+      <text class="share-help" wx:else>家人将从完整家谱进入，可以随时切换任意成员视角。</text>
+      <text class="share-label" wx:if="{{shareMode === 'perspective'}}">家人打开后的权限</text>
+      <view class="share-role-options {{shareMode === 'perspective' ? '' : 'share-invite-options'}}">
         <view data-reading-control="true" aria-role="button" class="share-role {{shareRole === 'member' ? 'selected' : ''}}" data-role="member" bindtap="chooseShareRole" wx:if="{{currentRole !== 'viewer'}}">
           <text class="share-role-title">共同补全</text>
-          <text class="share-role-desc">可补资料，关键修改需审核</text>
+          <text class="share-role-desc">{{shareMode === 'perspective' ? '可补资料，关键修改需审核' : '可补普通资料，关键修改需审核'}}</text>
         </view>
         <view data-reading-control="true" aria-role="button" class="share-role {{shareRole === 'viewer' ? 'selected' : ''}}" data-role="viewer" bindtap="chooseShareRole">
           <text class="share-role-title">仅查看</text>

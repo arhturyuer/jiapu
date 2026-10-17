@@ -117,6 +117,22 @@ test('家谱和家庭页为所有已加入角色提供不越权的分享选择�
         page.chooseShareRole({ currentTarget: { dataset: { role: 'member' } } });
         assert.equal(page.data.shareRole, role === 'viewer' ? 'viewer' : 'member');
       }
+      if (file.includes('/tree/')) {
+        page.data.selectedPerson = { _id: 'person-1', name: '测试人物' };
+        page.closeMemberSheet = function () {};
+        page.shareSelectedPerson();
+        assert.equal(page.data.shareMode, 'perspective');
+        assert.equal(page.data.sharePersonId, 'person-1');
+        page.data.viewMode = 'perspective';
+        page.data.viewpointId = 'person-1';
+        page.data.viewpointName = '测试人物';
+        page.startShare();
+        assert.equal(page.data.shareMode, 'full');
+        assert.equal(page.data.sharePersonId, '');
+        assert.equal(page.data.sharePersonName, '');
+        assert.equal(page.data.viewMode, 'perspective');
+        assert.equal(page.data.viewpointId, 'person-1');
+      }
     }
   } finally {
     global.getApp = previousGetApp;
@@ -125,11 +141,31 @@ test('家谱和家庭页为所有已加入角色提供不越权的分享选择�
   const membersTemplate = source('miniprogram/pages/members/index.wxml');
   const treeTemplate = source('miniprogram/pages/tree/index.wxml');
   assert.doesNotMatch(membersTemplate + treeTemplate, /关闭分享卡片/);
-  assert.match(membersTemplate, /<button class="invite-button" bindtap="openShareSheet">邀请家人<\/button>/);
+  assert.match(membersTemplate, /<button class="invite-button" catchtap="openShareSheet">邀请家人<\/button>/);
   assert.match(membersTemplate, /data-role="member" bindtap="chooseShareRole" wx:if="\{\{currentRole !== 'viewer'\}\}"/);
-  assert.match(treeTemplate, /<view[^>]*class="toolbar-share landscape-hidden" bindtap="startShare">分享<\/view>/);
+  assert.match(treeTemplate, /<view[^>]*class="toolbar-share landscape-hidden" bindtap="startShare"><text[^>]*>邀请家人<\/text><\/view>/);
   assert.match(treeTemplate, /<view[^>]*class="action-cell action-cell-wide" bindtap="shareSelectedPerson">/);
+  assert.ok(treeTemplate.includes('<text class="action-title">从{{selectedPerson.name}}分享</text>'));
+  assert.ok(treeTemplate.includes('<text class="action-desc">家人打开后直接看到{{selectedPerson.name}}视角</text>'));
   assert.match(treeTemplate, /data-role="member" bindtap="chooseShareRole" wx:if="\{\{currentRole !== 'viewer'\}\}"/);
   assert.match(membersTemplate, /class="sheet-mask" wx:if="\{\{showShareSheet\}\}" bindtap="closeShareSheet"/);
   assert.match(treeTemplate, /class="sheet-mask" wx:if="\{\{showShareSheet\}\}" bindtap="closeShareSheet"/);
+});
+
+test('首页完整家谱邀请使用家庭页文案和纵向选项，人物分享保留视角摘要', function () {
+  const treeTemplate = source('miniprogram/pages/tree/index.wxml');
+  const membersTemplate = source('miniprogram/pages/members/index.wxml');
+  const help = '家人将从完整家谱进入，可以随时切换任意成员视角。';
+  assert.ok(membersTemplate.includes(help));
+  assert.ok(treeTemplate.includes('<text class="share-help" wx:else>' + help + '</text>'));
+  assert.match(treeTemplate, /class="sheet-title">\{\{shareMode === 'perspective' \? '分享给家人' : '邀请家人'\}\}/);
+  assert.match(treeTemplate, /class="share-summary surface-card" wx:if="\{\{shareMode === 'perspective'\}\}"/);
+  assert.match(treeTemplate, /class="share-label" wx:if="\{\{shareMode === 'perspective'\}\}"/);
+  assert.match(treeTemplate, /class="share-role-options \{\{shareMode === 'perspective' \? '' : 'share-invite-options'\}\}"/);
+  assert.ok(membersTemplate.includes('可补普通资料，关键修改需审核'));
+  assert.match(treeTemplate, /shareMode === 'perspective' \? '可补资料，关键修改需审核' : '可补普通资料，关键修改需审核'/);
+  const treeStyle = source('miniprogram/pages/tree/index.wxss');
+  assert.match(treeStyle, /\.share-invite-options\s*\{\s*display: block;/);
+  assert.match(treeStyle, /\.share-invite-options \.share-role\s*\{\s*margin-bottom: 16rpx;/);
+  assert.match(treeStyle, /\.share-invite-options \.share-role\s*\{\s*margin-bottom: 8px;/);
 });

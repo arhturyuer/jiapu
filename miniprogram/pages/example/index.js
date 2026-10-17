@@ -1,3 +1,4 @@
+const navigationPage = require('../../utils/navigation-page');
 const nodePresentation = require('../../utils/node-presentation');
 const readingGraph = require('../../utils/reading-graph');
 const deviceLayout = require('../../utils/device-layout');
@@ -29,7 +30,9 @@ function decodedScene(value) {
 }
 
 Page(launchAd.wrap(graphGesturePage.wrap({
+  onNavigationLayout: navigationPage.changed,
   data: {
+    navigationHeight: 64,
     selectedKinship: null,
     exampleTabs: [], selectedExampleTabId: '', tabsError: '',
     loading: true, error: '', slug: '', example: null, rawPersons: [], rawRelations: [], nodes: [], lines: [], junctions: [], crossings: [],
@@ -140,7 +143,6 @@ Page(launchAd.wrap(graphGesturePage.wrap({
       self.setData(Object.assign({ loading: false, example: example, rawPersons: persons, rawRelations: relations, perspectiveResults: persons, perspectiveKeyword: '', collapsedPersonIds: collapsed, selectedPersonId: '', selectedPerson: null, selectedKinship: null, showMemberSheet: false, showPerspectiveSheet: false, memberAdVisible: false, viewMode: 'full', viewpointId: '', viewpointName: '' }, preference), function () {
         if (!valid()) return;
         self.syncExampleTabs();
-        self.syncPageChrome(self.data.isLandscape);
         const initialPersonId = self._initialPersonId;
         const render = function (viewport) {
           if (!valid()) return;
@@ -263,7 +265,7 @@ Page(launchAd.wrap(graphGesturePage.wrap({
     const safeBottom = size.safeArea ? Math.max(0, (Number(size.screenHeight) || height) - size.safeArea.bottom) : 0;
     const fullCanvas = (width > height && !this.data.isLargeDevice) || this.data.isCleanScreen;
     const reserved = fullCanvas ? 0 : 354 * deviceLayout.read(null, size).uiUnit;
-    return { width: width, height: Math.max(80, height - reserved - (fullCanvas ? 0 : safeBottom)), rpxToPx: width / 750, windowWidth: width };
+    return { left: 0, top: (this.data.navigationHeight || 0) + reserved, width: width, height: Math.max(80, height - (this.data.navigationHeight || 0) - reserved - (fullCanvas ? 0 : safeBottom)), rpxToPx: width / 750, windowWidth: width };
   },
   getWindowSize: function () {
     try { return wx.getWindowInfo ? wx.getWindowInfo() : wx.getSystemInfoSync(); } catch (error) { return { windowWidth: 375, windowHeight: 667 }; }
@@ -328,7 +330,6 @@ Page(launchAd.wrap(graphGesturePage.wrap({
       if (this._orientationTimer) clearTimeout(this._orientationTimer);
       this._orientationTimer = null;
       this.setData({ pageOrientation: 'auto', orientationChanging: false, isCleanScreen: false });
-      this.syncPageChrome(false);
       return;
     }
     this._orientationResizeSequence = (this._orientationResizeSequence || 0) + 1;
@@ -341,11 +342,6 @@ Page(launchAd.wrap(graphGesturePage.wrap({
       this._orientationTarget = 'portrait';
       this.setData({ pageOrientation: 'portrait', isLandscape: false, orientationChanging: false, isCleanScreen: false });
     }
-    this.syncPageChrome(false);
-  },
-  syncPageChrome: function (isLandscape) {
-    if (typeof wx === 'undefined') return;
-    if (wx.setNavigationBarTitle) wx.setNavigationBarTitle({ title: '有谱家谱·微信云开发·安全可靠' });
   },
   syncPageOrientationSoon: function () {
     const self = this;
@@ -365,7 +361,6 @@ Page(launchAd.wrap(graphGesturePage.wrap({
       if (actual === target) return self.applyPageResize(size);
       self._orientationViewport = null; self._orientationTransform = null; self._orientationTarget = ''; self._graphViewport = null; self._orientationResizeSequence = (self._orientationResizeSequence || 0) + 1;
       self.setData({ pageOrientation: actual, isLandscape: actual === 'landscape', orientationChanging: false, graphScaleMin: graphViewport.minimumScaleForViewport({ rpxToPx: (size.windowWidth || 375) / 750 }) });
-      self.syncPageChrome(actual === 'landscape');
       wx.showToast({ title: '屏幕方向切换失败，请重试', icon: 'none' });
     }, 1200);
   },
@@ -378,7 +373,6 @@ Page(launchAd.wrap(graphGesturePage.wrap({
     const previousViewport = this._orientationViewport || this._graphViewport;
     const previousTransform = this._orientationTransform || this.getGraphTransform();
     const target = this._orientationTarget; const settled = !target || target === actual;
-    this.syncPageChrome(actual === 'landscape');
     if (settled && this._orientationTimer) clearTimeout(this._orientationTimer); if (settled) this._orientationTimer = null;
     const self = this;
     this.setData({ pageOrientation: this.data.isLargeDevice ? 'auto' : target || actual, isLandscape: actual === 'landscape', orientationChanging: Boolean(target && !settled), graphScaleMin: minimumScale }, function () {

@@ -1,3 +1,4 @@
+const navigationPage = require('../../utils/navigation-page');
 const launchAd = require('../../utils/launch-ad');
 const app = getApp();
 const api = require('../../utils/api');
@@ -32,7 +33,9 @@ function reconcileCurrentFamily(families) {
 }
 
 Page(launchAd.wrap({
+  onNavigationLayout: navigationPage.changed,
   data: {
+    navigationHeight: 64,
     loading: true,
     familyList: [],
     archivedFamilies: [],

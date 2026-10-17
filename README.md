@@ -25,6 +25,16 @@
 | `scripts/`、`tests/` | 本地检查、生成工具和回归测试 |
 | `docs/` | 现行规范、验收说明和明确标记的历史资料 |
 
+## 微信开发者工具启动
+
+首次克隆不包含被 Git 忽略的 `miniprogram/config/env.local.js`。只需本地开发时，用已建立的独立 staging 环境 ID 生成小程序配置，无需部署或支付密钥：
+
+```bash
+DEPLOYMENT_TARGET=staging STAGING_ENV_ID=<独立staging环境ID> node deployment/configure-miniprogram.mjs
+```
+
+该命令仅写入本机配置，不访问云端、不生成部署清单。随后在微信开发者工具中导入仓库根目录并重新编译；完整环境建立与部署仍按 [staging 手册](deployment/staging-runbook.md)执行。缺少配置时不能以生产 ID 或占位值代替。相机选图与保存相册沿用运行时授权和隐私校验，不在 `app.json.permission` 中声明这两项。
+
 ## 本地验证
 
 需要 Node.js 20.19+、pnpm；首次安装后台依赖：

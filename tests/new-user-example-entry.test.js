@@ -83,22 +83,28 @@ function deferred() {
 
 function settle() { return new Promise(function (resolve) { setImmediate(resolve); }); }
 
-test('示例与家庭页使用固定导航标题，示例切换方向和清屏不覆盖标题', function (t) {
+test('示例与家庭页使用靠左自定义导航，示例切换方向和清屏不覆盖固定文案', function (t) {
   environment(t);
   const title = '有谱家谱·微信云开发·安全可靠';
   ['example', 'members'].forEach(function (name) {
-    assert.equal(require('../miniprogram/pages/' + name + '/index.json').navigationBarTitleText, title);
+    const config = require('../miniprogram/pages/' + name + '/index.json');
+    assert.equal(config.navigationBarTitleText, title);
+    assert.equal(config.navigationStyle, 'custom');
+    const template = require('node:fs').readFileSync(require('node:path').join(__dirname, '../miniprogram/pages/' + name + '/index.wxml'), 'utf8');
+    assert.ok(template.includes('page-navigation title="' + title + '"'));
   });
   const titles = [];
   global.wx.setNavigationBarTitle = function (options) { titles.push(options.title); };
   const page = pageAt('example', {});
+  global.wx.nextTick = function (callback) { callback(); };
+  page.measureGraphViewport = function (_, callback) { callback({ width: 375, height: 450, rpxToPx: 0.5 }); };
   [null, { title: '第一份示例' }, { name: '第二份示例' }].forEach(function (example) {
     page.data.example = example;
     [false, true].forEach(function (landscape) {
       [false, true].forEach(function (cleanScreen) {
         page.data.isCleanScreen = cleanScreen;
-        page.syncPageChrome(landscape);
-        assert.equal(titles.at(-1), title);
+        page.applyPageResize({ windowWidth: landscape ? 667 : 375, windowHeight: landscape ? 375 : 667 });
+        assert.equal(titles.length, 0);
       });
     });
   });
@@ -111,19 +117,23 @@ test('用户家谱加载和刷新名称后同步导航标题，横竖屏与清�
   const family = { _id: 'family-title', name: '测试家谱' };
   const page = pageAt('tree', familyApp(family));
   await page.loadPage();
-  assert.equal(titles.at(-1), '测试家谱');
+  assert.equal(page.data.currentFamily.name, '测试家谱');
+  const template = require('node:fs').readFileSync(require('node:path').join(__dirname, '../miniprogram/pages/tree/index.wxml'), 'utf8');
+  assert.ok(template.includes("page-navigation title=\"{{currentFamily.name || '有谱'}}\""));
   family.name = '已更新家谱名';
   await page.loadPage(null, { force: true });
   [false, true].forEach(function (landscape) {
     [false, true].forEach(function (cleanScreen) {
       page.data.isCleanScreen = cleanScreen;
       page.syncPageChrome(landscape);
-      assert.equal(titles.at(-1), '已更新家谱名');
+      assert.equal(page.data.currentFamily.name, '已更新家谱名');
+      assert.equal(titles.length, 0);
     });
   });
   page.data.currentFamily = null;
   page.syncPageChrome(false);
-  assert.equal(titles.at(-1), '有谱');
+  assert.equal(page.data.currentFamily, null);
+  assert.equal(titles.length, 0);
 });
 
 test('窄屏和宽屏首次显示均保留清晰姓名、头像及辅助资料', function (t) {

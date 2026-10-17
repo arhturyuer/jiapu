@@ -47,7 +47,6 @@
   "appid": "wx29d07c0735f31600",
   "projectname": "有谱",
   "libVersion": "3.16.2",
-
   "compileType": "miniprogram",
   "srcMiniprogramRoot": "miniprogram/",
   "packOptions": {

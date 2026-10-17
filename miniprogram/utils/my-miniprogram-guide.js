@@ -47,7 +47,7 @@ function eligible(page, app) {
     && !data.orientationChanging && !page._myMiniProgramTourActive && !page._myMiniProgramNotificationsActive && !page._graphGestureActive
     && !page._gesturePending && !data.posterGenerating
     && !data.showMemberSheet && !data.showFamilySheet && !data.showPerspectiveSheet
-    && !data.showChildOrderSheet && !data.showShareSheet;
+    && !data.showChildOrderSheet && !data.showShareSheet && !data.showExportSheet;
 }
 
 function placement(platform) {
@@ -239,7 +239,7 @@ function wrap(definition) {
   // lightweight timer handles asynchronous loading and layout completion.
   ['onGraphGestureState', 'switchFamily', 'toggleCleanScreen', 'togglePageOrientation', 'onPageResize',
     'openFamilySheet', 'showPerson', 'openMemberActions', 'openPerspectiveSheet', 'openChildOrderSheet',
-    'openShareSheet', 'generatePoster', 'requestNotifications', 'loadPage'].forEach(function (name) {
+    'openShareSheet', 'openExportSheet', 'generatePoster', 'requestNotifications', 'loadPage'].forEach(function (name) {
     const original = definition[name];
     if (!original) return;
     definition[name] = function () {

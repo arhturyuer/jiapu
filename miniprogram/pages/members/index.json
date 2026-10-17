@@ -1,5 +1,9 @@
 {
   "navigationBarTitleText": "有谱家谱·微信云开发·安全可靠",
   "enablePullDownRefresh": true,
-  "backgroundColor": "#F7F4EC"
+  "backgroundColor": "#F7F4EC",
+  "navigationStyle": "custom",
+  "usingComponents": {
+    "page-navigation": "/components/page-navigation/index"
+  }
 }

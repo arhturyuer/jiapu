@@ -134,3 +134,40 @@ test('经示例列表与示例图创建时保留来源，创建页不重复记�
     assert.deepEqual(calls, [{ type: 'share.record', payload: { stage: 'opened', kind: 'discovery' } }]);
   } finally { api.call = previousCall; global.wx = previousWx; }
 });
+
+test('介绍页使用独立首页导航，装饰插图和隐私说明不改变两个入口', function () {
+  const config = require('../miniprogram/pages/share-intro/index.json');
+  const template = fs.readFileSync(path.join(root, 'miniprogram/pages/share-intro/index.wxml'), 'utf8');
+  assert.equal(config.navigationStyle, 'custom');
+  assert.equal(config.usingComponents['page-navigation'], '/components/page-navigation/index');
+  assert.match(template, /<page-navigation[^>]* home /);
+  assert.match(template, /src="\/images\/share\/intro-family\.svg" mode="aspectFit" aria-hidden="true"/);
+  assert.match(template, /家谱默认仅受邀家人可访问。/);
+  const scrollEnd = template.indexOf('</scroll-view>');
+  const dock = template.indexOf('<view class="intro-dock">');
+  assert.ok(template.includes('<scroll-view class="intro-scroll" scroll-y'), '正文使用独立滚动区域');
+  assert.ok(scrollEnd > 0 && dock > scrollEnd, '两个行动入口必须在滚动正文之外');
+  const buttons = Array.from(template.matchAll(/<button class="([^"]+)" bindtap="([^"]+)">([^<]+)<\/button>/g));
+  assert.deepEqual(buttons.map(match => [match[1], match[2], match[3]]), [
+    ['primary-button intro-button', 'createFamily', '创建我的家谱'],
+    ['secondary-button intro-button', 'openExamples', '先看示例家谱']
+  ]);
+  assert.ok(template.indexOf('家谱默认仅受邀家人可访问。') < scrollEnd, '访问范围提示不占用底栏');
+
+  const navigation = fs.readFileSync(path.join(root, 'miniprogram/components/page-navigation/index.wxml'), 'utf8');
+  assert.match(navigation, /wx:if="\{\{home\}\}"[^>]*bindtap="goHome"[^>]*aria-label="回家谱首页"/);
+  assert.match(navigation, /wx:elif="\{\{back\}\}"/);
+});
+
+test('非分享来源两个入口保持无来源参数', function () {
+  const previousWx = global.wx;
+  const urls = [];
+  global.wx = { navigateTo: options => urls.push(options.url) };
+  try {
+    const landing = loadPage('../miniprogram/pages/share-intro/index');
+    landing.onLoad({});
+    landing.openExamples();
+    landing.createFamily();
+    assert.deepEqual(urls, ['/pages/examples/index', '/pages/create-family/index']);
+  } finally { global.wx = previousWx; }
+});

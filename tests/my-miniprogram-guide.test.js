@@ -145,7 +145,7 @@ test('首次教学、所有操作弹框、手势、横屏、清屏、加载和�
   const states = [
     ['_myMiniProgramTourActive', true], ['_myMiniProgramNotificationsActive', true], ['_graphGestureActive', true], ['_gesturePending', {}],
     ['showMemberSheet', true], ['showFamilySheet', true], ['showPerspectiveSheet', true],
-    ['showChildOrderSheet', true], ['showShareSheet', true], ['isLandscape', true], ['isCleanScreen', true],
+    ['showChildOrderSheet', true], ['showShareSheet', true], ['showExportSheet', true], ['isLandscape', true], ['isCleanScreen', true],
     ['orientationChanging', true], ['posterGenerating', true], ['loading', true], ['loadError', 'fake-error'],
     ['accountPending', true], ['graphRendering', true], ['nodes', []]
   ];

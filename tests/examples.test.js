@@ -194,7 +194,8 @@ test('示例家谱竖屏区分创建引导与示例查看，横屏仅显示画�
   assert.match(style, /height:calc\(164rpx \* var\(--graph-content-scale, 1\)\); min-height:calc\(164rpx \* var\(--graph-content-scale, 1\)\)/);
   assert.match(treeStyle, /height: calc\(164rpx \* var\(--graph-content-scale, 1\)\);\n  min-height: calc\(164rpx \* var\(--graph-content-scale, 1\)\)/);
   assert.match(source, /fallbackGraphViewport/);
-  assert.match(source, /setNavigationBarTitle\(\{ title: '有谱家谱·微信云开发·安全可靠' \}\)/);
+  assert.match(page, /page-navigation title="有谱家谱·微信云开发·安全可靠" back/);
+  assert.doesNotMatch(source, /setNavigationBarTitle/);
 });
 
 test('示例家谱全谱适配沿用真实家谱的完整画布定位策略', function () {

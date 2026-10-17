@@ -1,25 +1,30 @@
 
-<view class="reading-root {{elderMode ? 'reading-elder' : ''}} {{readingLarge ? 'reading-large' : ''}}" style="{{readingStyle}}{{readingDockStyle}}">
+<view class="reading-root intro-root {{elderMode ? 'reading-elder' : ''}} {{readingLarge ? 'reading-large' : ''}}" style="{{readingStyle}}">
+<page-navigation title="认识有谱家谱" home page-gutter />
+<scroll-view class="intro-scroll" scroll-y show-scrollbar="{{false}}">
 <view class="intro-page page-shell">
   <view class="intro-hero surface-card">
     <text class="intro-eyebrow">有谱家谱</text>
-    <text class="intro-title">从一位家人开始，</text><text class="intro-title intro-title-second">把一家人连起来</text>
-    <text class="intro-copy">记录亲属关系，保存家庭记忆，再邀请家人一起完善。</text>
-    <view class="intro-art" aria-hidden="true"><view class="art-node art-node-top">家</view><view class="art-link"></view><view class="art-node">你</view><view class="art-node">家人</view></view>
+    <text class="intro-title">让后辈知道，<text class="intro-title-line">我们的家从哪里来</text></text>
+    <text class="intro-copy">把亲人的名字、关系和故事，整理成一份全家共修的家谱。</text>
+    <image class="intro-art" src="/images/share/intro-family.svg" mode="aspectFit" aria-hidden="true" />
   </view>
 
   <view class="intro-section">
-    <text class="section-title">可以这样开始</text>
-    <view class="intro-steps surface-card">
-      <view class="intro-step"><text class="step-number">1</text><view><text class="step-title">先看看示例</text><text class="step-copy">浏览虚构家谱，了解关系图怎样使用；不用填写家人资料。</text></view></view>
-      <view class="intro-step"><text class="step-number">2</text><view><text class="step-title">创建自己的家谱</text><text class="step-copy">从一位家人开始，按提示逐步补充关系。</text></view></view>
-      <view class="intro-step"><text class="step-number">3</text><view><text class="step-title">邀请家人共修</text><text class="step-copy">创建后再邀请家人共同维护。家谱默认仅受邀家人可访问。</text></view></view>
+    <view class="intro-values surface-card">
+      <view class="intro-value"><text class="value-title">家族脉络，看得清</text><text class="value-copy">把长辈、同辈和晚辈连起来，理清亲属关系。</text></view>
+      <view class="intro-value"><text class="value-title">长辈故事，记得住</text><text class="value-copy">用生平和照片，留下每位家人的经历。</text></view>
+      <view class="intro-value"><text class="value-title">一家人，共同完善</text><text class="value-copy">邀请家人补充资料，让家谱在共修中逐步完整。</text></view>
     </view>
   </view>
 
+  <text class="intro-privacy">家谱默认仅受邀家人可访问。</text>
+</view>
+</scroll-view>
+<view class="intro-dock">
   <view class="intro-actions">
-    <button class="primary-button intro-button" bindtap="openExamples">先看示例家谱</button>
-    <button class="secondary-button intro-button" bindtap="createFamily">创建我的家谱</button>
+    <button class="primary-button intro-button" bindtap="createFamily">创建我的家谱</button>
+    <button class="secondary-button intro-button" bindtap="openExamples">先看示例家谱</button>
   </view>
 </view>
 </view>

@@ -166,7 +166,10 @@ test('所有注册页面可获得阅读样式，保留广告配置与独立导�
   assert.doesNotMatch(fs.readFileSync(path.join(root, 'utils/tree-poster-flow.js'), 'utf8'), /graphContentScale|contentScale|reading/);
   for (const page of ['tree', 'example']) {
     const template = fs.readFileSync(path.join(root, 'pages', page, 'index.wxml'), 'utf8');
-    assert.match(template, /reading-graph-tools/);
+    if (page === 'tree') {
+      assert.match(template, /class="graph-controls"[^>]*wx:if="\{\{nodes.length > 0\}\}"/);
+      assert.doesNotMatch(template, /reading-graph-tools/);
+    } else assert.match(template, /reading-graph-tools/);
     assert.match(template, /item.isAnimatedFlow && !elderMode/);
     assert.match(template, /memberAdMounted/);
   }

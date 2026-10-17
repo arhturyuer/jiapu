@@ -132,7 +132,8 @@ test('真实与示例家谱共用一键生成和两个底部操作', function ()
   const exampleTemplate = fs.readFileSync(path.join(root, 'miniprogram/pages/example/index.wxml'), 'utf8');
   const previewTemplate = fs.readFileSync(path.join(root, 'miniprogram/pages/poster-preview/index.wxml'), 'utf8');
   const previewScript = fs.readFileSync(path.join(root, 'miniprogram/pages/poster-preview/index.js'), 'utf8');
-  assert.match(treeTemplate, /bindtap="openDisplaySettings">设置<\/view>[\s\S]*bindtap="generatePoster">图片<\/view>/);
+  assert.match(treeTemplate, /bindtap="openExportSheet"/);
+  assert.match(treeTemplate, /data-format="image" bindtap="chooseExport" disabled="\{\{posterGenerating\}\}"/);
   assert.match(exampleTemplate, /bindtap="openDisplaySettings">设置<\/view><view[^>]*bindtap="generatePoster">图片<\/view>/);
   assert.doesNotMatch(treeTemplate, /currentRole[^>]*generatePoster/);
   assert.match(inviteUtility, /api\.call\('invite\.createPoster'/);

@@ -1,7 +1,8 @@
 <wxs module="graphGesture" src="../../wxs/graph-gesture.wxs" />
 <import src="../../templates/kinship-card.wxml" />
 <page-meta page-orientation="{{pageOrientation}}" bindresize="onPageResize"></page-meta>
-<view class="reading-root {{readingLarge ? 'reading-graph-page' : ''}} {{elderMode ? 'reading-elder' : ''}} {{readingLarge ? 'reading-large' : ''}}" style="{{readingStyle}}{{readingDockStyle}}">
+<view class="reading-root navigation-graph {{readingLarge ? 'reading-graph-page' : ''}} {{elderMode ? 'reading-elder' : ''}} {{readingLarge ? 'reading-large' : ''}}" style="{{readingStyle}}{{readingDockStyle}}--navigation-height:{{navigationHeight}}px;">
+<page-navigation title="有谱家谱·微信云开发·安全可靠" back bindlayout="onNavigationLayout" />
 <view class="example-page {{isLandscape && !isLargeDevice ? 'is-landscape' : ''}} {{isLargeDevice ? 'is-large-device' : ''}} {{isCleanScreen ? 'is-clean-screen' : ''}}">
 <view class="reading-graph-tools" wx:if="{{elderMode && !isCleanScreen && nodes.length}}">
   <button bindtap="openReadingPeople">找家人</button><button bindtap="zoomGraphIn" aria-label="放大家谱">放大</button><button bindtap="zoomGraphOut" aria-label="缩小家谱">缩小</button><button bindtap="lookClearly">看清姓名</button><button bindtap="toggleReadingMore">更多</button>
