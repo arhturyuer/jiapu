@@ -27,24 +27,34 @@ input:focus, textarea:focus, select:focus { background: white; border-color: #24
 button:disabled { cursor: not-allowed; opacity: .55; }
 .form-error, .alert { color: #9f3030; }
 .form-error { margin: -6px 0 0; padding: 12px 14px; background: #fff0ee; border: 1px solid #efc7c3; border-radius: 11px; font-size: 13px; line-height: 1.55; }
-.app-shell { min-height: 100vh; display: grid; grid-template-columns: 264px 1fr; }
-.sidebar { position: sticky; top: 0; height: 100vh; padding: 26px 18px; display: flex; flex-direction: column; color: #eaf3ef; background: #172d26; }
-.sidebar-brand { padding: 0 10px 28px; display: flex; gap: 13px; align-items: center; }
+.app-shell { min-height: 100vh; display: grid; grid-template-columns: 264px minmax(0, 1fr); }
+.app-shell.sidebar-collapsed { grid-template-columns: 64px minmax(0, 1fr); }
+.sidebar { position: sticky; top: 0; align-self: start; height: 100vh; height: 100dvh; min-width: 0; min-height: 0; padding: 26px 18px; display: flex; flex-direction: column; color: #eaf3ef; background: #172d26; }
+.sidebar-heading { flex: 0 0 auto; padding-bottom: 24px; display: flex; gap: 8px; align-items: center; }
+.sidebar-brand { min-width: 0; flex: 1; display: flex; gap: 13px; align-items: center; white-space: nowrap; }
+.sidebar-brand .brand-mark { flex: 0 0 auto; }
+.sidebar-toggle { width: 44px; height: 44px; flex: 0 0 44px; padding: 0; display: grid; place-items: center; color: #bfd0ca; background: transparent; border: 1px solid #466457; border-radius: 12px; }
+.sidebar-toggle:hover { color: white; background: #24483b; }
+.sidebar-toggle:focus-visible, .sidebar-nav button:focus-visible, .operator-card button:focus-visible { outline: 2px solid #b9d3c9; outline-offset: -3px; }
+.sidebar-collapsed .sidebar { padding-inline: 10px; }
+.sidebar-collapsed .sidebar-heading { justify-content: center; }
 .sidebar-brand strong, .sidebar-brand span, .operator-card strong, .operator-card span { display: block; }
 .sidebar-brand strong { font-size: 20px; }
 .sidebar-brand span { margin-top: 2px; color: #a9c0b7; font-size: 12px; }
-nav { display: grid; gap: 7px; }
-nav button { padding: 13px 14px; display: flex; align-items: center; justify-content: space-between; color: #bfd0ca; background: transparent; border: 0; border-radius: 13px; text-align: left; }
-nav button span { font-weight: 700; }
-nav button small { color: #78988c; }
-nav button:hover, nav button.active { color: white; background: #24483b; }
-nav button.active small { color: #b9d3c9; }
-.operator-card { margin-top: auto; padding: 15px 10px 0; display: grid; grid-template-columns: 38px 1fr auto; gap: 10px; align-items: center; border-top: 1px solid rgba(255,255,255,.12); }
+.sidebar-nav { min-height: 0; flex: 1 1 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-width: thin; scrollbar-color: #78988c transparent; display: flex; flex-direction: column; gap: 7px; }
+.sidebar-nav button { flex: 0 0 auto; min-height: 46px; padding: 13px 10px; display: flex; gap: 6px; align-items: center; justify-content: space-between; color: #bfd0ca; background: transparent; border: 0; border-radius: 13px; text-align: left; }
+.sidebar-nav button span { font-weight: 700; white-space: nowrap; }
+.sidebar-nav button small { color: #78988c; }
+.sidebar-nav button:hover, .sidebar-nav button.active { color: white; background: #24483b; }
+.sidebar-nav button.active small { color: #b9d3c9; }
+.operator-card { flex: 0 0 auto; margin-top: 16px; padding: 15px 10px 0; display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; gap: 10px; align-items: center; border-top: 1px solid rgba(255,255,255,.12); }
+.operator-info { min-width: 0; }
+.operator-info strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .operator-avatar { width: 38px; height: 38px; display: grid; place-items: center; color: #245c4a; background: #d9e9e2; border-radius: 12px; font-weight: 800; }
 .operator-card strong { font-size: 13px; }
 .operator-card span { color: #8ca99e; font-size: 11px; }
 .operator-card button { padding: 5px; color: #b8cbc4; background: transparent; border: 0; font-size: 12px; }
-.workspace { position: relative; padding: 40px 46px 70px; overflow: hidden; }
+.workspace { position: relative; min-width: 0; padding: 40px 46px 70px; overflow: hidden; }
 header { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 30px; }
 header h1 { margin: 0; font: 650 40px/1.1 Georgia, "Noto Serif SC", serif; }
 .header-actions { display: flex; gap: 10px; }

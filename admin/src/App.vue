@@ -80,6 +80,7 @@ const booting = ref(true);
 const authenticated = ref(false);
 const operator = ref<Operator | null>(null);
 const activeModule = ref<ModuleKey>('dashboard');
+const sidebarCollapsed = ref(false);
 const guideManager = ref<InstanceType<typeof GuideManager> | null>(null);
 const moderationScope = ref<ModerationScope>('pending');
 const moderationMode = ref<ModerationMode>('strict');
@@ -617,11 +618,16 @@ onMounted(bootstrap);
     </form>
   </main>
 
-  <div v-else class="app-shell">
-    <aside class="sidebar">
-      <div class="sidebar-brand"><div class="brand-mark small">谱</div><div><strong>有谱</strong><span>运营控制台</span></div></div>
-      <nav><button v-for="item in visibleNav" :key="item.key" :class="{ active: activeModule === item.key }" @click="navigateModule(item.key)"><span>{{ item.label }}</span><small>{{ item.caption }}</small></button></nav>
-      <div class="operator-card"><div class="operator-avatar">{{ operator?.displayName?.slice(0, 1) }}</div><div><strong>{{ operator?.displayName }}</strong><span>{{ operator?.role === 'super_admin' ? '超级管理员' : '运营人员' }}</span></div><button @click="logout">退出</button></div>
+  <div v-else class="app-shell" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
+    <aside class="sidebar" aria-label="运营后台侧栏">
+      <div class="sidebar-heading">
+        <div v-show="!sidebarCollapsed" class="sidebar-brand"><div class="brand-mark small">谱</div><div><strong>有谱</strong><span>运营控制台</span></div></div>
+        <button class="sidebar-toggle" type="button" :aria-label="sidebarCollapsed ? '展开目录' : '收起目录'" :title="sidebarCollapsed ? '展开目录' : '收起目录'" :aria-expanded="!sidebarCollapsed" aria-controls="operations-navigation" @click="sidebarCollapsed = !sidebarCollapsed">
+          <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path :d="sidebarCollapsed ? 'm9 6 6 6-6 6' : 'm15 6-6 6 6 6'" /></svg>
+        </button>
+      </div>
+      <nav v-show="!sidebarCollapsed" id="operations-navigation" class="sidebar-nav" aria-label="运营模块"><button v-for="item in visibleNav" :key="item.key" :class="{ active: activeModule === item.key }" @click="navigateModule(item.key)"><span>{{ item.label }}</span><small>{{ item.caption }}</small></button></nav>
+      <div v-show="!sidebarCollapsed" class="operator-card"><div class="operator-avatar">{{ operator?.displayName?.slice(0, 1) }}</div><div class="operator-info"><strong :title="operator?.displayName">{{ operator?.displayName }}</strong><span>{{ operator?.role === 'super_admin' ? '超级管理员' : '运营人员' }}</span></div><button @click="logout">退出</button></div>
     </aside>
 
     <main class="workspace">
