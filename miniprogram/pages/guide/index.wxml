@@ -1,0 +1,15 @@
+<view class="reading-root {{elderMode ? 'reading-elder' : ''}} {{readingLarge ? 'reading-large' : ''}}" style="{{readingStyle}}">
+  <page-navigation title="修谱指南" home page-gutter />
+  <view class="page-shell guide-page">
+    <view wx:if="{{loading}}" class="empty-panel">正在读取指南…</view>
+    <view wx:elif="{{error}}" class="empty-panel"><text>{{error}}</text><button class="secondary-button" bindtap="loadGuide">重新读取</button></view>
+    <view wx:elif="{{guide}}">
+      <text class="guide-title">{{guide.title}}</text><text class="guide-summary">{{guide.summary}}</text>
+      <view class="surface-card guide-section guide-body"><rich-text nodes="{{guide.nodes}}" /></view>
+      <text wx:if="{{related.length}}" class="guide-summary">继续了解</text>
+      <navigator class="surface-card guide-link" wx:for="{{related}}" wx:key="slug" url="/pages/guide/index?slug={{item.slug}}">{{item.title}}</navigator>
+      <button class="primary-button guide-create" bindtap="createFamily">创建我的家谱</button>
+    </view>
+    <view class="guide-nav"><navigator url="/pages/guides/index">全部指南</navigator><navigator url="/pages/examples/index">体验官方示例</navigator><navigator url="/pages/share-intro/index">认识有谱</navigator></view>
+  </view>
+</view>

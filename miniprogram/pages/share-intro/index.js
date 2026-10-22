@@ -1,6 +1,6 @@
 const launchAd = require('../../utils/launch-ad');
 const app = getApp();
-const api = require('../../utils/api');
+const growth = require('../../utils/growth');
 
 Page(launchAd.wrap({
   data: { fromShare: false },
@@ -8,17 +8,19 @@ Page(launchAd.wrap({
   onLoad: function (options) {
     const fromShare = Boolean(options && options.source === 'share_menu');
     this.setData({ fromShare: fromShare });
-    if (!fromShare) return;
-    app.ensureLogin().then(function () {
-      return api.call('share.record', { stage: 'opened', kind: 'discovery' });
-    }).catch(function () {});
+    if (fromShare && !this._shareOpenRecorded) {
+      this._shareOpenRecorded = true;
+      growth.shareOpen('discovery');
+    }
   },
+
+  enterFamily: function () { wx.switchTab({ url: '/pages/tree/index' }); },
 
   openExamples: function () {
     wx.navigateTo({ url: '/pages/examples/index' + (this.data.fromShare ? '?source=share_menu' : '') });
   },
 
   createFamily: function () {
-    wx.navigateTo({ url: '/pages/create-family/index' + (this.data.fromShare ? '?source=share_menu&opened=1' : '') });
+    return growth.create('pages/share-intro/index', '', '/pages/create-family/index' + (this.data.fromShare ? '?source=share_menu&opened=1' : ''));
   }
-}));
+}, 'pages/share-intro/index'));

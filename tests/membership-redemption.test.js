@@ -161,7 +161,7 @@ test('路由登记兑换 mutation、20 次限流及 schema 权限，兑换不接
   assert.match(user, /'membership\.redeem': \{ max: 20, windowMs: 60 \* 60 \* 1000 \}/);
   assert.match(user, /const MUTATION_TYPES = new Set\(\[\s*'membership\.redeem'/);
   for (const action of ['membership.redeem', 'membership.listRecords']) assert.ok(user.includes("'" + action + "':"));
-  const schema = require('../deployment/database-indexes.json'); assert.equal(schema.schemaVersion, 12);
+  const schema = require('../deployment/database-indexes.json'); assert.equal(schema.schemaVersion, 14);
   assert.ok(schema.indexes.membership_codes && schema.indexes.membership_redemptions);
   assert.doesNotMatch(fs.readFileSync('cloudfunctions/youpuUserApi/membership-redemption.js', 'utf8'), /collection\('payment_orders'\)/);
   for (const name of ['membership_codes', 'membership_redemptions']) assert.ok(fs.readFileSync('deployment/apply-security.mjs', 'utf8').includes("'" + name + "'"));

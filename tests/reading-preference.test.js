@@ -169,7 +169,10 @@ test('所有注册页面可获得阅读样式，保留广告配置与独立导�
     if (page === 'tree') {
       assert.match(template, /class="graph-controls"[^>]*wx:if="\{\{nodes.length > 0\}\}"/);
       assert.doesNotMatch(template, /reading-graph-tools/);
-    } else assert.match(template, /reading-graph-tools/);
+    } else {
+      assert.match(template, /graphToolsStyle/);
+      assert.doesNotMatch(template, /reading-graph-tools/);
+    }
     assert.match(template, /item.isAnimatedFlow && !elderMode/);
     assert.match(template, /memberAdMounted/);
   }

@@ -139,6 +139,15 @@ test('关于页使用正式版实际版本并按最新在前展示受控更新�
   const uploadScript = fs.readFileSync(path.join(root, 'deployment/upload-miniprogram.sh'), 'utf8');
   const verifier = fs.readFileSync(path.join(root, 'deployment/verify-release-note.mjs'), 'utf8');
   assert.deepEqual(releaseInfo.validateReleaseNotes(releaseNotes), [
+  { version: '1.6.27', summary: '优化示例首页图标和公开页面返回导航，我的页帮助与反馈新增修谱指南入口。' },
+  { version: '1.6.26', summary: '新增夫妻顺序手动调整，本人与配偶共同排序，支持单配偶左右互换，并同步图片、PDF和家谱复制。' },
+  { version: '1.6.25', summary: '修复示例家谱全部人物列表及亲属姓名链接无法打开人物资料的问题。' },
+  { version: '1.6.24', summary: '统一示例页顶部操作按钮高度，底部创建与切换按钮固定并排，减少底栏占用空间。' },
+  { version: '1.6.23', summary: '修谱指南支持后台富文本编辑、草稿预览发布和上下架管理，小程序动态读取已发布文章与列表文案。' },
+  { version: '1.6.22', summary: '统一示例家谱底部创建入口与浏览操作，支持查看方式和导出选择，邀请家人直接分享示例。' },
+  { version: '1.6.21', summary: '沿用原有示例页布局和人物交互，补充公开阅读入口，保留新访客默认示例与获客统计。' },
+  { version: '1.6.20', summary: '新访客直接体验后台配置的示例家谱，简化首屏操作和创建入口，补充入口曝光、加载失败与建谱转化统计。' },
+  { version: '1.6.19', summary: '新增修谱指南和公开示例阅读入口，优化新访客体验与微信搜索收录，增加搜索获客统计。' },
   { version: '1.6.18', summary: '优化家谱导航、首页工具与邀请分享，更新介绍页和家庭页交互，收紧无子女兄弟姐妹间距并同步图片与 PDF 排版。' },
   { version: '1.6.17', summary: '新增家谱头像显示与默认样式设置，支持横排双行、竖排按需双列姓名，统一图片和 PDF 大图排版。' },
   { version: '1.6.16', summary: '修复子女排行内外不一致和同组重复长女，统一父母排行依据与编辑预览，并保持 PDF 布局一致。' },
@@ -478,7 +487,7 @@ test('账户资料更新和导出请求具备用户级限流', function () {
   assert.match(userApi, /'auth\.updateProfile':\s*\{ max: 20, windowMs: 60 \* 60 \* 1000 \}/);
   assert.match(userApi, /'auth\.updateAvatar':\s*\{ max: 20, windowMs: 60 \* 60 \* 1000 \}/);
   assert.match(userApi, /'account\.export':\s*\{ max: 3, windowMs: 24 \* 60 \* 60 \* 1000 \}/);
-  assert.match(userApi, /if \(RATE_LIMITS\[type\]\) await enforceRateLimit/);
+  assert.match(userApi, /if \(RATE_LIMITS\[type\].*\) await enforceRateLimit/);
 });
 
 test('管理员可以软删除不会使家谱断裂的单条关系', function () {
@@ -685,7 +694,7 @@ test('家谱显示偏好集中设置，新用户采用默认节点且性别开�
   assert.match(tree, /openDisplaySettings/);
   assert.doesNotMatch(tree, /toggleNameLayout/);
   assert.match(treeTemplate, /class="graph-control graph-control-text" bindtap="openDisplaySettings"[^>]*><text class="graph-control-label">设置/);
-  assert.match(exampleTemplate, /class="graph-control graph-control-text" bindtap="openDisplaySettings">设置<\/view>/);
+  assert.match(exampleTemplate, /class="graph-control graph-control-text" bindtap="openDisplaySettings"[^>]*><text class="graph-control-label">设置/);
   assert.match(members, /bindtap="openDisplaySettings"[\s\S]{0,180}家谱显示设置/);
   assert.match(settings, /app\.getPreference\(this\.data\.familyId\)/);
   assert.match(settings, /api\.call\('family\.setPreference'/);

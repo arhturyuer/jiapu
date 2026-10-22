@@ -1,5 +1,5 @@
 // Keep business and media deletion workflows outside the batching allowlist.
-const COLLECTIONS = new Set(['idempotency_records', 'rate_limits', 'analytics_snapshots', 'analytics_snapshot_items', 'analytics_reports']);
+const COLLECTIONS = new Set(['idempotency_records', 'rate_limits', 'analytics_snapshots', 'analytics_snapshot_items', 'analytics_reports', 'growth_visitors', 'growth_events']);
 
 async function removeExpired(db, collectionName, where, limit) {
   if (!COLLECTIONS.has(collectionName) || !where || !where.expiresAt) throw new Error('RETENTION_BATCH_REJECTED');

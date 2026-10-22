@@ -1,0 +1,12 @@
+.guide-page { max-width: 720px; margin: 0 auto; padding-bottom: calc(32px + env(safe-area-inset-bottom)); }
+.guide-title, .guide-heading, .guide-copy, .guide-summary { display: block; overflow-wrap: anywhere; }
+.guide-title { font-size: var(--reading-font-24, 24px); line-height: 1.5; font-weight: 600; color: #245C4A; }
+.guide-copy, .guide-summary { font-size: var(--reading-font-16, 16px); line-height: 1.9; margin-top: 12px; }
+.guide-summary { color: #65706A; }
+.guide-section, .guide-link { display: block; margin-top: 18px; padding: 20px; }
+.guide-heading { font-size: var(--reading-font-18, 18px); font-weight: 600; line-height: 1.6; }
+.guide-nav { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 24px; color: #245C4A; font-size: var(--reading-font-16, 16px); }
+.guide-create { margin-top: 24px; }
+.guide-body { font-size: var(--reading-font-16, 16px); line-height: 1.9; color: #263c32; }
+.guide-body rich-text { font-size: inherit; overflow-wrap: anywhere; }
+.empty-panel button { margin-top: 16px; }

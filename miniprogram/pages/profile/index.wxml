@@ -2,6 +2,8 @@
 <template name="readingHelpEntry">
   <view class="section-heading"><text class="section-title">帮助与反馈</text></view>
   <view class="help-card surface-card">
+    <navigator url="/pages/guides/index" class="setting-row reading-help-row" hover-class="setting-row-active" aria-label="修谱指南"><view class="setting-copy"><text class="setting-title">修谱指南</text><text class="setting-desc">从整理资料开始，一步步修好家谱</text></view><text class="setting-arrow" aria-hidden="true">›</text></navigator>
+    <view class="help-divider" aria-hidden="true"></view>
     <view class="feedback-card" wx:if="{{showFeedback}}">
       <view class="feedback-copy">
         <text class="setting-title">用户反馈群</text>

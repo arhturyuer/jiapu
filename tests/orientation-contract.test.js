@@ -22,7 +22,7 @@ function read(relativePath) {
     assert.match(template, /bindtap="zoomGraphIn"[\s\S]*bindtap="zoomGraphOut"[\s\S]*bindtap="fitWholeGraph"[\s\S]*bindtap="togglePageOrientation"/);
     assert.doesNotMatch(template, /bindtap="locateGraphFocus"/);
     assert.doesNotMatch(template, /class="graph-control[^>]+bindtap="(?:toggleNameLayout|expandAllBranches)"/);
-    if (pageName === 'tree') {
+    {
       const controls = template.match(/<view class="graph-controls"[\s\S]*?<\/scroll-view>/)[0];
       assert.equal((controls.match(/class="graph-control(?: |")/g) || []).length, 6);
       assert.doesNotMatch(controls, /generatePoster|openPdfExport|更多/);
@@ -31,9 +31,6 @@ function read(relativePath) {
       assert.match(controls, /bindtap="fitWholeGraph"[^>]*><text class="graph-control-label">全图/);
       assert.doesNotMatch(template, /reading-graph-tools|reading-more/);
       assert.match(template, /bindtap="openExportSheet"/);
-    } else {
-      assert.match(template, /class="graph-control graph-control-text" bindtap="openDisplaySettings">设置<\/view>/);
-      assert.match(template, /bindtap="generatePoster">图片<\/view>\s*<view[^>]*bindtap="openPdfExport">PDF<\/view>\s*<view[^>]*bindtap="toggleCleanScreen"[^>]*aria-label="清屏查看家谱"[^>]*>\s*<view class="clean-screen-icon"[^>]*>[\s\S]*?<\/view>\s*<\/view>\s*<\/view>/);
     }
     assert.match(template, /<button class="clean-screen-exit"[^>]*aria-label="退出清屏"[^>]*>\s*<text wx:if="\{\{elderMode\}\}">退出清屏<\/text>\s*<view class="clean-screen-icon is-exit"/);
     assert.match(template, /<text wx:if="\{\{elderMode\}\}">退出清屏<\/text>/);

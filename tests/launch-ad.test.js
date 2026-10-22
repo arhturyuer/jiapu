@@ -8,6 +8,7 @@ const launchAdLayout = require('../miniprogram/utils/launch-ad-layout');
 const adAccess = require('../miniprogram/utils/ad-access');
 const commerce = require('../miniprogram/config/commerce');
 const api = require('../miniprogram/utils/api');
+const publicContent = require('../miniprogram/utils/public-content');
 const previousMemberAdDebug = commerce.memberAdDebugEnabled.staging;
 // 开屏回归也会调用人物广告准备，隔离仅用于真机验收的边界诊断。
 test.before(function () { commerce.memberAdDebugEnabled.staging = false; });
@@ -433,6 +434,12 @@ test('启动等待期间不执行邀请业务；分享、扫码及提醒参数�
     const loading = page.onLoad(query);
     page.onShow();
     page.onReady();
+    if (publicContent.isPublic(route)) {
+      await loading;
+      assert.deepEqual(calls, [['load', query], ['show'], ['ready']]);
+      assert.equal(visits.length, 0);
+      continue;
+    }
     assert.deepEqual(calls, []);
     await loading;
     assert.equal(visits[0].options.url, '/pages/launch-ad/index');
@@ -715,25 +722,16 @@ test('广告刷新忽略切换家谱、关闭弹框及过期事件；购买返�
   assert.equal(page.data.memberAdVisible, false);
 });
 
-test('介绍页分享冷启动在开屏结束后恢复来源，热启动不重复拦截', async function (t) {
+test('公开介绍页冷启动和热启动都跳过开屏并保留分享参数', async function (t) {
   const query = { source: 'share_menu' };
   const { app, visits } = fixture(t, { entry: { path: 'pages/share-intro/index', query: query } });
+  assert.equal(app._launchAd.phase, 'finished');
   const intro = sourcePage('pages/share-intro/index');
-  intro.page.onLoad(query);
-  assert.equal(visits[0].options.url, '/pages/launch-ad/index');
-  assert.deepEqual(intro.calls, []);
-  const page = splash(app, true);
-  await page.onLoad();
-  if (page.data.adVisible) page.adClose();
-  assert.equal(visits.at(-1).kind, 'redirect');
-  assert.equal(visits.at(-1).options.url, '/pages/share-intro/index?source=share_menu');
-  const restored = sourcePage('pages/share-intro/index');
-  restored.page.onLoad({});
-  assert.deepEqual(restored.calls, [['load', query]]);
-  const before = visits.length;
+  await intro.page.onLoad(query);
+  assert.deepEqual(intro.calls, [['load', query]]);
+  assert.equal(visits.length, 0);
   const warm = sourcePage('pages/share-intro/index');
-  warm.page.onLoad(query);
+  await warm.page.onLoad(query);
   assert.deepEqual(warm.calls, [['load', query]]);
-  assert.equal(visits.length, before);
-  page.onUnload();
+  assert.equal(visits.length, 0);
 });

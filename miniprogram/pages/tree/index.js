@@ -26,7 +26,7 @@ const myMiniProgramGuide = require('../../utils/my-miniprogram-guide');
 
 const MAX_INTERACTIVE_NODES = 80;
 
-Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap({
+Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap(Object.assign({
   onNavigationLayout: navigationPage.changed,
   data: {
     navigationHeight: 64,
@@ -82,6 +82,11 @@ Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap({
     showFamilySheet: false,
     showPerspectiveSheet: false,
     showExportSheet: false,
+    showSpouseOrder: false,
+    spousePerson: null,
+    spouseItems: [],
+    spouseDirty: false,
+    spouseSaving: false,
     showChildOrderSheet: false,
     childOrderParent: null,
     childOrderItems: [],
@@ -150,6 +155,7 @@ Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap({
   },
 
   onUnload: function () {
+    this._spouseDisposed = true;
     this._unloaded = true;
     this.closeBrowseSheets();
     this.cancelNewFamilyTour();
@@ -1455,4 +1461,4 @@ Page(launchAd.wrap(myMiniProgramGuide.wrap(graphGesturePage.wrap({
   },
 
   stopEvent: function () {}
-}))));
+}, require('../../utils/spouse-order-panel')(app))))));

@@ -5,6 +5,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const api = require('../miniprogram/utils/api');
 const shareCard = require('../miniprogram/utils/share-card');
+const growth = require('../miniprogram/utils/growth');
+test.beforeEach(() => growth.enter({ scene: 1007 }));
 
 const root = path.resolve(__dirname, '..');
 
@@ -83,16 +85,17 @@ test('介绍页记录一次打开，并将分享来源传到示例与创建', as
     landing.onLoad({ source: 'share_menu' });
     await new Promise(function (resolve) { setImmediate(resolve); });
     landing.openExamples();
-    landing.createFamily();
+    await landing.createFamily();
     assert.deepEqual(urls, [
       '/pages/examples/index?source=share_menu',
       '/pages/create-family/index?source=share_menu&opened=1'
     ]);
-    assert.deepEqual(calls, [{ type: 'share.record', payload: { stage: 'opened', kind: 'discovery' } }]);
+    assert.ok(calls.some(item => item.type === 'growth.record' && item.payload.event === 'create_click'));
+    assert.equal(calls.filter(item => item.type === 'share.record').length, 0);
   } finally { api.call = previousCall; global.wx = previousWx; }
 });
 
-test('经示例列表与示例图创建时保留来源，创建页不重复记录打开', function () {
+test('经示例列表与示例图创建时保留来源，创建页不重复记录打开', async function () {
   const previousCall = api.call;
   const previousWx = global.wx;
   const calls = [];
@@ -104,18 +107,18 @@ test('经示例列表与示例图创建时保留来源，创建页不重复记�
     examples.loadExamples = function () { return Promise.resolve(); };
     examples.onLoad({ source: 'share_menu' });
     examples.openExample({ currentTarget: { dataset: { slug: 'family-demo' } } });
-    examples.createFamily();
+    await examples.createFamily();
 
     const example = loadPage('../miniprogram/pages/example/index');
     example.loadExample = function () { return Promise.resolve(); };
     example.onLoad({ slug: 'family-demo', source: 'share_menu' });
-    example.createFamily();
+    await example.createFamily();
     example.data.selectedPerson = { _id: 'person-1' };
     example.openMemberDetail();
 
     const detail = loadPage('../miniprogram/pages/example-person-detail/index');
     detail.onLoad({ slug: 'family-demo', id: 'person-1', source: 'share_menu' });
-    detail.explainCreate();
+    await detail.explainCreate();
     detail.viewFromPerson();
 
     const create = loadPage('../miniprogram/pages/create-family/index');
@@ -129,18 +132,20 @@ test('经示例列表与示例图创建时保留来源，创建页不重复记�
       '/pages/create-family/index?source=share_menu&opened=1&example=family-demo',
       '/pages/example/index?slug=family-demo&personId=person-1&source=share_menu'
     ]);
-    assert.deepEqual(calls, []);
+    assert.ok(calls.some(item => item.type === 'growth.record' && item.payload.event === 'create_click'));
+    calls.length = 0;
     create.onLoad({ source: 'share_menu' });
     assert.deepEqual(calls, [{ type: 'share.record', payload: { stage: 'opened', kind: 'discovery' } }]);
   } finally { api.call = previousCall; global.wx = previousWx; }
 });
 
-test('介绍页使用独立首页导航，装饰插图和隐私说明不改变两个入口', function () {
+test('介绍页使用返回导航，装饰插图和隐私说明不改变两个入口', function () {
   const config = require('../miniprogram/pages/share-intro/index.json');
   const template = fs.readFileSync(path.join(root, 'miniprogram/pages/share-intro/index.wxml'), 'utf8');
   assert.equal(config.navigationStyle, 'custom');
   assert.equal(config.usingComponents['page-navigation'], '/components/page-navigation/index');
-  assert.match(template, /<page-navigation[^>]* home /);
+  assert.match(template, /<page-navigation[^>]* back /);
+  assert.doesNotMatch(template, /<page-navigation[^>]* home /);
   assert.match(template, /src="\/images\/share\/intro-family\.svg" mode="aspectFit" aria-hidden="true"/);
   assert.match(template, /家谱默认仅受邀家人可访问。/);
   const scrollEnd = template.indexOf('</scroll-view>');
@@ -149,17 +154,18 @@ test('介绍页使用独立首页导航，装饰插图和隐私说明不改变�
   assert.ok(scrollEnd > 0 && dock > scrollEnd, '两个行动入口必须在滚动正文之外');
   const buttons = Array.from(template.matchAll(/<button class="([^"]+)" bindtap="([^"]+)">([^<]+)<\/button>/g));
   assert.deepEqual(buttons.map(match => [match[1], match[2], match[3]]), [
+    ['intro-enter', 'enterFamily', '进入已有家谱'],
     ['primary-button intro-button', 'createFamily', '创建我的家谱'],
     ['secondary-button intro-button', 'openExamples', '先看示例家谱']
   ]);
   assert.ok(template.indexOf('家谱默认仅受邀家人可访问。') < scrollEnd, '访问范围提示不占用底栏');
 
   const navigation = fs.readFileSync(path.join(root, 'miniprogram/components/page-navigation/index.wxml'), 'utf8');
-  assert.match(navigation, /wx:if="\{\{home\}\}"[^>]*bindtap="goHome"[^>]*aria-label="回家谱首页"/);
-  assert.match(navigation, /wx:elif="\{\{back\}\}"/);
+  assert.match(navigation, /wx:if="\{\{home \|\| back\}\}"[^>]*bindtap="\{\{home \? 'goHome' : 'goBack'\}\}"/);
+  assert.match(navigation, /aria-label="\{\{home \|\| !canGoBack \? '返回家谱首页' : '返回上一页'\}\}"/);
 });
 
-test('非分享来源两个入口保持无来源参数', function () {
+test('非分享来源两个入口保持无来源参数', async function () {
   const previousWx = global.wx;
   const urls = [];
   global.wx = { navigateTo: options => urls.push(options.url) };
@@ -167,7 +173,7 @@ test('非分享来源两个入口保持无来源参数', function () {
     const landing = loadPage('../miniprogram/pages/share-intro/index');
     landing.onLoad({});
     landing.openExamples();
-    landing.createFamily();
+    await landing.createFamily();
     assert.deepEqual(urls, ['/pages/examples/index', '/pages/create-family/index']);
   } finally { global.wx = previousWx; }
 });

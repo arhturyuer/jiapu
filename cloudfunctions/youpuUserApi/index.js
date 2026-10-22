@@ -9,6 +9,8 @@ const jobDispatcher = require('./job-dispatcher');
 const subscriptionNotification = require('./subscription-notification');
 const stagingAccountReset = require('./staging-account-reset');
 const analytics = require('./analytics');
+const growthModule = require('./growth');
+const guidesModule = require('./guides');
 const requestContext = require('./request-context');
 const familyCopy = require('./family-copy');
 const pdfExport = require('./pdf-export');
@@ -17,6 +19,7 @@ const pdfGraphSource = require('./pdf-graph-source');
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
 const db = cloud.database();
+const spouseOrderService = require('./spouse-order-service').createService({ db, listAll, mustGet, assert });
 const _ = db.command;
 const analyticsTracker = analytics.createTracker(db);
 const PAGE_SIZE = 50;
@@ -25,6 +28,14 @@ const GRAPH_RELATION_LIMIT = 2000;
 const MODERATION_CONFIG_ID = 'moderation';
 const ACTIVE_ROLES = domain.ACTIVE_ROLES;
 const RATE_LIMITS = {
+  'relation.reorderSpouses': { max: 30, windowMs: 60 * 1000 },
+  'public.guides.list': { max: 120, windowMs: 60 * 1000 },
+  'public.guides.get': { max: 120, windowMs: 60 * 1000 },
+  'public.examples.list': { max: 120, windowMs: 60 * 1000 },
+  'public.examples.get': { max: 120, windowMs: 60 * 1000 },
+  'public.examples.resolvePoster': { max: 60, windowMs: 60 * 1000 },
+  'public.share.record': { max: 120, windowMs: 60 * 60 * 1000 },
+  'growth.record': { max: 300, windowMs: 60 * 60 * 1000 },
   'membership.redeem': { max: 20, windowMs: 60 * 60 * 1000 },
   'pdf.create': { max: 20, windowMs: 24 * 60 * 60 * 1000, transactional: true },
   // Copy quota is charged atomically with task creation, in Beijing calendar days.
@@ -53,6 +64,8 @@ const RATE_LIMITS = {
 };
 const MUTATION_TYPES = new Set([
   'membership.redeem',
+  'public.share.record',
+  'growth.record',
   'pdf.create',
   'analytics.track',
   'auth.updateProfile',
@@ -81,6 +94,7 @@ const MUTATION_TYPES = new Set([
   'person.createRelated',
   'relation.linkExisting',
   'relation.reorderChildren',
+  'relation.reorderSpouses',
   'relation.remove',
   'person.update',
   'person.delete',
@@ -243,6 +257,15 @@ async function inspectPrivateUpload(fileId) {
 }
 
 const testAccounts = stagingAccountReset.createService({ db, command: _, assert, hash, randomToken, listAll });
+const guidesService = guidesModule.createService({ db, cloud, assert });
+const growthService = growthModule.createService({ db, assert, getContext: () => cloud.getWXContext() || {}, actorId: userId,
+  isTest: context => testAccounts.usesTestIdentity(context),
+  validateGuide: guidesService.published,
+  validateExample: async slug => {
+    const result = await db.collection('example_templates').where({ slug, status: 'published' }).limit(1).get();
+    assert(result.data && result.data[0] && result.data[0].publishedContent, 'EXAMPLE_NOT_FOUND', '示例暂不可用');
+  }
+});
 
 const familyCopyService = familyCopy.createService({
   db, assert, getOpenid, requireActiveUser, requireMembership, membershipId, mutate, moderateText,
@@ -438,6 +461,7 @@ function publicPerson(person) {
     deathDateRange: personDate.effectiveRange(person, 'death'),
     birthPlace: person.birthPlace || '',
     bio: person.bio || '',
+    spouseDisplayOrder: person.spouseDisplayOrder || [],
     avatarAssetId: person.avatarAssetId || '',
     createdAt: person.createdAt || null,
     updatedAt: person.updatedAt || null
@@ -829,7 +853,7 @@ async function updateFamilyContent(scope, familyId, options) {
 }
 
 async function audit(scope, data) {
-  if (data.familyId && ['family.update', 'person.create_related', 'person.update', 'person.delete', 'relation.link_existing', 'relation.remove', 'relation.reorder_children', 'change.approve'].includes(data.action)) {
+  if (data.familyId && ['family.update', 'person.create_related', 'person.update', 'person.delete', 'relation.link_existing', 'relation.remove', 'relation.reorder_children', 'relation.reorder_spouses', 'change.approve'].includes(data.action)) {
     if (!requestContext.hasFamilyRevision(scope, data.familyId)) await updateFamilyContent(scope, data.familyId, { data: {} });
   }
   await scope.collection('audit_logs').add({
@@ -878,7 +902,7 @@ async function mutate(type, event, openid, handler) {
     return result || {};
   });
   const notify = (type === 'invite.accept' && result && !result.alreadyJoined) ||
-    (['person.createRelated', 'relation.linkExisting', 'relation.reorderChildren', 'person.update'].includes(type) && result && result.pending);
+    (['person.createRelated', 'relation.linkExisting', 'relation.reorderChildren', 'relation.reorderSpouses', 'person.update'].includes(type) && result && result.pending);
   if (notify && notificationTemplateIds()[type === 'invite.accept' ? 'join' : 'review']) {
     const eventId = notificationEventId(type, openid, requestId);
     await sendNotificationEvent(eventId).catch(async function (error) {
@@ -938,6 +962,7 @@ async function createRelationTx(transaction, familyId, type, firstId, secondId, 
     updatedAt: db.serverDate()
   };
   await transaction.collection('relations').doc(id).set({ data: documentData(relation) });
+  if (type === 'spouse' && [first, second].some(p => p.spouseDisplayOrder && p.spouseDisplayOrder.length)) await spouseOrderService.added(transaction, familyId, relation, [first, second]);
   return relation;
 }
 
@@ -1100,10 +1125,11 @@ async function linkExistingTx(transaction, familyId, anchorPersonId, relatedPers
 
 async function authIdentity() { return { userId: userId(getOpenid()) }; }
 
-async function authLogin() {
+async function authLogin(event) {
   const openid = getOpenid();
   const user = await ensureUser(openid);
   requestContext.rememberUser(user);
+  try { if (event && event.growthEntry === true) await growthService.link(user); } catch (error) { console.warn(JSON.stringify({ type: 'growth_link_failed', code: error.code || 'CAPTURE_FAILED' })); }
   let deletion = null;
   if (user.status === 'pending_delete') {
     deletion = await maybeGet(db, 'account_deletion_requests', 'del_' + userId(openid));
@@ -1640,6 +1666,7 @@ async function graphGet(event) {
       birthDateInfo: person.birthDateInfo || null,
       birthDateRange: personDate.effectiveRange(person, 'birth'),
       avatarAssetId: person.avatarAssetId || '',
+      spouseDisplayOrder: person.spouseDisplayOrder || [],
       profileMissingFields: profileMissingFields(person)
     };
   });
@@ -1913,6 +1940,13 @@ async function personGet(event) {
     if (relation.type === 'parent_child') role = relation.toPersonId === person._id ? 'parent' : 'child';
     relatives.push({ relationId: relation._id, role: role, person: publicPerson(related) });
   }
+  if ((access.family && access.family.hasSpouseDisplayOrder) || [person].concat(Array.from(relatedById.values())).some(p => p.spouseDisplayOrder && p.spouseDisplayOrder.length)) {
+    const graph = await spouseOrderService.snapshot(person.familyId);
+    const ids = require('./pdf-shared/graph-layout').groupPersonsByGeneration(graph.persons, graph.relations).orderedPersons.map(p => p._id);
+    const slots = relatives.map((r, i) => r.role === 'spouse' ? i : -1).filter(i => i >= 0);
+    const spouses = slots.map(i => relatives[i]).sort((a, b) => ids.indexOf(a.person._id) - ids.indexOf(b.person._id));
+    slots.forEach((slot, i) => { relatives[slot] = spouses[i]; });
+  }
   return { person: publicPerson(person), relatives: relatives, currentRole: access.membership.role };
 }
 
@@ -2166,6 +2200,43 @@ async function relationReorderChildren(event) {
   });
 }
 
+async function relationReorderSpouses(event) {
+  const openid = getOpenid();
+  await requireActiveUser(openid);
+  const familyId = cleanText(event.familyId, 80); const personId = cleanText(event.personId, 80);
+  const rawIds = Array.isArray(event.orderedPersonIds) ? event.orderedPersonIds : [];
+  const ids = cleanPersonIds(rawIds, GRAPH_PERSON_LIMIT);
+  assert(rawIds.length === ids.length, 'INVALID_SPOUSE_ORDER', '夫妻顺序不完整或包含重复成员');
+  const revision = event.relationRevision;
+  assert(Number.isInteger(revision) && revision >= 0, 'GRAPH_REVISION_REQUIRED', '请刷新家谱后再调整夫妻顺序');
+  const access = await requireMembership(familyId, ['admin', 'member'], db, openid);
+  const completed = await maybeGet(db, 'idempotency_records', idempotencyId(openid, 'relation.reorderSpouses', cleanText(event.requestId, 80)));
+  if (completed && completed.status === 'completed') return completed.result || {};
+  const graph = await spouseOrderService.snapshot(familyId);
+  const person = graph.persons.find(p => p._id === personId);
+  assert(person, 'PERSON_NOT_FOUND', '成员不属于当前家谱或已删除');
+  assert(Number(access.family.relationRevision || 0) === revision, 'GRAPH_CHANGED', '家谱关系刚有变化，请刷新后重试');
+  require('./pdf-shared/spouse-order').proposal(graph.persons, graph.relations, personId, ids);
+  return mutate('relation.reorderSpouses', event, openid, async function (transaction) {
+    const current = await requireMembership(familyId, ['admin', 'member'], transaction, openid);
+    assert(Number(current.family.relationRevision || 0) === revision, 'GRAPH_CHANGED', '家谱关系刚有变化，请刷新后重试');
+    if (current.membership.role === 'member') {
+      const request = await transaction.collection('change_requests').add({ data: {
+        familyId, type: 'reorder_spouses', title: '调整“' + person.name + '”的夫妻顺序',
+        relationSummary: '从左到右：' + ids.map(id => graph.persons.find(p => p._id === id).name).join('、'),
+        payload: { personId, orderedPersonIds: ids, relationRevision: revision }, status: 'pending',
+        createdBy: userId(openid), requesterName: current.membership.displayName || '家人', createdAt: db.serverDate(), updatedAt: db.serverDate()
+      } });
+      await recordNotificationEvent(transaction, 'review', event, openid, familyId, request._id);
+      return { pending: true, requestId: request._id };
+    }
+    await spouseOrderService.reorder(transaction, familyId, personId, ids, graph);
+    await updateFamilyContent(transaction, familyId, { data: { hasSpouseDisplayOrder: true, relationRevision: _.inc(1), updatedAt: db.serverDate() } });
+    await audit(transaction, { familyId, openid, actorName: current.membership.displayName, action: 'relation.reorder_spouses', objectType: 'person', objectId: personId, summary: '调整夫妻顺序', requestId: event.requestId });
+    return { pending: false, personId, relationRevision: revision + 1, familyCounters: publicFamilyCounters(current.family, 0, 0) };
+  });
+}
+
 async function relationRemove(event) {
   const openid = getOpenid();
   await requireActiveUser(openid);
@@ -2191,6 +2262,7 @@ async function relationRemove(event) {
     await transaction.collection('relations').doc(relation._id).update({
       data: { status: 'deleted', deletedAt: db.serverDate(), updatedAt: db.serverDate() }
     });
+    await spouseOrderService.removed(transaction, relation.familyId, relations, [relation]);
     await updateFamilyContent(transaction, relation.familyId, {
       data: {
         relationCount: _.inc(-1),
@@ -2287,6 +2359,7 @@ async function personDelete(event) {
         data: { status: 'deleted', deletedAt: db.serverDate(), updatedAt: db.serverDate() }
       });
     }
+    await spouseOrderService.removed(transaction, person.familyId, relations, related);
     await updateFamilyContent(transaction, person.familyId, {
       data: {
         personCount: _.inc(-1),
@@ -2340,12 +2413,13 @@ async function changeReview(event) {
   const snapshotRequest = await mustGet(db, 'change_requests', changeRequestId, 'REQUEST_NOT_FOUND', '修改申请不存在');
   const snapshotAccess = await requireMembership(snapshotRequest.familyId, ['admin'], db, openid);
   let graphSnapshot = null;
-  if (event.decision === 'approve' && ['create_related', 'link_existing_relation', 'reorder_children'].includes(snapshotRequest.type)) {
+  if (event.decision === 'approve' && ['create_related', 'link_existing_relation', 'reorder_children', 'reorder_spouses'].includes(snapshotRequest.type)) {
     graphSnapshot = {
       relationRevision: Number(snapshotAccess.family.relationRevision || 0),
       relations: await listAll('relations', { familyId: snapshotRequest.familyId, status: 'active' }, GRAPH_RELATION_LIMIT)
     };
   }
+  if (graphSnapshot && snapshotRequest.type === 'reorder_spouses') graphSnapshot.persons = await listAll('persons', { familyId: snapshotRequest.familyId, status: 'active' }, GRAPH_PERSON_LIMIT);
   return mutate('change.review', event, openid, async function (transaction) {
     const request = await mustGet(transaction, 'change_requests', changeRequestId, 'REQUEST_NOT_FOUND', '修改申请不存在');
     const access = await requireMembership(request.familyId, ['admin'], transaction, openid);
@@ -2408,6 +2482,16 @@ async function changeReview(event) {
       await transaction.collection('persons').doc(person._id).update({
         data: personUpdateData(request.payload.changes)
       });
+    }
+    if (approved && request.type === 'reorder_spouses') {
+      assert(graphSnapshot && request.payload && Number(access.family.relationRevision || 0) === graphSnapshot.relationRevision
+        && request.payload.relationRevision === graphSnapshot.relationRevision, 'GRAPH_CHANGED', '家谱关系刚有变化，请让提交人刷新后重试');
+      const rawIds = request.payload.orderedPersonIds;
+      const ids = cleanPersonIds(rawIds, GRAPH_PERSON_LIMIT);
+      assert(Array.isArray(rawIds) && ids.length === rawIds.length, 'INVALID_SPOUSE_ORDER', '夫妻顺序不完整');
+      await spouseOrderService.reorder(transaction, request.familyId, request.payload.personId, ids, graphSnapshot);
+      await updateFamilyContent(transaction, request.familyId, { data: { hasSpouseDisplayOrder: true, relationRevision: _.inc(1), updatedAt: db.serverDate() } });
+      familyCounters = publicFamilyCounters(access.family, 0, 0);
     }
     if (approved && request.type === 'reorder_children') {
       familyCounters = publicFamilyCounters(access.family, 0, 0);
@@ -2802,6 +2886,32 @@ async function shareRecord(event) {
   });
 }
 
+// Public content shares count without creating business accounts. Invitations
+// stay on the authenticated share.record route.
+async function publicShareRecord(event) {
+  const context = cloud.getWXContext() || {};
+  if (!context.OPENID || growthModule.source(event.scene) === 'excluded') return { recorded: false };
+  const kind = cleanText(event.kind, 30);
+  const stage = cleanText(event.stage, 20);
+  assert(['example', 'discovery'].includes(kind) && !event.invitationId, 'SHARE_KIND_INVALID', '仅支持公开内容分享');
+  assert(['opened', 'prepared', 'sent'].includes(stage), 'SHARE_STAGE_INVALID', '分享统计状态不合法');
+  if (kind === 'example') {
+    const result = await db.collection('example_templates').where({ slug: cleanText(event.slug, 80), status: 'published' }).limit(1).get();
+    assert(result.data && result.data[0] && result.data[0].publishedContent, 'EXAMPLE_NOT_FOUND', '示例暂不可用');
+  }
+  const id = idempotencyId(context.OPENID, 'public.share.record', event.requestId);
+  return db.runTransaction(async function (scope) {
+    const existing = await maybeGet(scope, 'idempotency_records', id);
+    if (existing && existing.status === 'completed') return existing.result;
+    await incrementShareMetric(scope, kind, stage);
+    const result = { recorded: true, kind, stage };
+    await scope.collection('idempotency_records').doc(id).set({ data: {
+      status: 'completed', result, createdAt: db.serverDate(), expiresAt: new Date(Date.now() + 7 * 86400000)
+    } });
+    return result;
+  });
+}
+
 async function reportCreate(event) {
   const openid = getOpenid();
   const user = await requireActiveUser(openid);
@@ -3119,9 +3229,8 @@ function publicExampleContent(template) {
   };
 }
 
-async function examplesList(event) {
-  const openid = getOpenid();
-  await requireActiveUser(openid);
+async function examplesList(event, publicRead) {
+  if (!publicRead) await requireActiveUser(getOpenid());
   const tag = cleanText(event.tag, 20);
   const allTemplates = await listAll('example_templates', { status: 'published' }, 100);
   let templates = allTemplates;
@@ -3146,9 +3255,8 @@ async function examplesList(event) {
   };
 }
 
-async function examplesGet(event) {
-  const openid = getOpenid();
-  await requireActiveUser(openid);
+async function examplesGet(event, publicRead) {
+  if (!publicRead) await requireActiveUser(getOpenid());
   const slug = cleanText(event.slug, 80);
   assert(slug, 'EXAMPLE_SLUG_REQUIRED', '缺少示例家谱信息');
   const result = await db.collection('example_templates').where({ slug: slug, status: 'published' }).limit(1).get();
@@ -3197,9 +3305,8 @@ async function examplesGetMiniCode(event) {
   return { mimeType: 'image/png', base64: buffer.toString('base64') };
 }
 
-async function examplesResolvePoster(event) {
-  const openid = getOpenid();
-  await requireActiveUser(openid);
+async function examplesResolvePoster(event, publicRead) {
+  if (!publicRead) await requireActiveUser(getOpenid());
   const scene = cleanText(event.scene, 40);
   assert(/^e[0-9a-f]{20}[fp][0-9a-f]{10}$/.test(scene), 'EXAMPLE_POSTER_INVALID', '示例家谱图片已失效');
   const slugHash = scene.slice(1, 21);
@@ -3849,7 +3956,7 @@ async function analyticsTrack(event) {
 // Old clients contribute successful business calls; cached displays are captured
 // explicitly by the new client. Analytics failures never change a business result.
 async function recordBusinessActivity(type, request, data) {
-  if (['analytics.track', 'account.resetTest', 'auth.identity'].includes(type)) return;
+  if (type.startsWith('public.') || type.startsWith('growth.') || ['analytics.track', 'account.resetTest', 'auth.identity'].includes(type)) return;
   const openid = getOpenid();
   const actorId = userId(openid);
   const user = requestContext.user(actorId) || await maybeGet(db, 'users', actorId);
@@ -3869,6 +3976,13 @@ async function recordBusinessActivity(type, request, data) {
 }
 
 const handlers = {
+  'public.guides.list': guidesService.list,
+  'public.guides.get': guidesService.get,
+  'public.examples.list': event => examplesList(event, true),
+  'public.examples.get': event => examplesGet(event, true),
+  'public.examples.resolvePoster': event => examplesResolvePoster(event, true),
+  'public.share.record': publicShareRecord,
+  'growth.record': growthService.record,
   'analytics.track': analyticsTrack,
   'auth.identity': authIdentity,
   'auth.login': authLogin,
@@ -3919,6 +4033,7 @@ const handlers = {
   'person.createRelated': personCreateRelated,
   'relation.linkExisting': relationLinkExisting,
   'relation.reorderChildren': relationReorderChildren,
+  'relation.reorderSpouses': relationReorderSpouses,
   'relation.remove': relationRemove,
   'person.update': personUpdate,
   'person.delete': personDelete,
@@ -3965,7 +4080,7 @@ exports.main = async function (event) {
       if (type !== 'account.resetTest' && MUTATION_TYPES.has(type) && testAccounts.usesTestIdentity(context) && request.testActorId) {
         assert(request.testActorId === anonymousActorId, 'ACCOUNT_SESSION_CHANGED', '账户已重置，请重新进入');
       }
-      if (RATE_LIMITS[type]) await enforceRateLimit(getOpenid(), type);
+      if (RATE_LIMITS[type] && (context.OPENID || type.startsWith('public.'))) await enforceRateLimit(context.OPENID || 'public-anonymous', type);
       const data = await handler(request);
       // Mutations may revoke membership or change account/family state. Capture
       // only fresh post-commit state; never reuse a transaction's old snapshot.

@@ -1,0 +1,7 @@
+{
+  "navigationBarTitleText": "官方示例说明",
+  "usingComponents": {
+    "page-navigation": "/components/page-navigation/index"
+  },
+  "navigationStyle": "custom"
+}

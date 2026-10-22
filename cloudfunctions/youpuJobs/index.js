@@ -8,6 +8,7 @@ const pdfExport = require('./pdf-export');
 const jobDispatcher = require('./job-dispatcher');
 const retentionCleanup = require('./retention-cleanup');
 const maintenanceBatch = require('./maintenance-batch');
+const guidesSeed = require('./guides-seed');
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
@@ -49,6 +50,10 @@ const COLLECTIONS = [
   'analytics_snapshots',
   'analytics_snapshot_items',
   'analytics_history',
+  'growth_visitors',
+  'growth_events',
+  'guides',
+  'guide_assets',
   'share_metrics_daily'
 ];
 
@@ -112,9 +117,10 @@ async function ensureCollections(event) {
       }
     }
   }
+  await guidesSeed.initialize(db);
   await db.collection('system_config').doc('schema').set({
     data: {
-      version: 12,
+      version: 14,
       graphPersonLimit: 500,
       archiveRetentionDays: 30,
       deletionCoolingDays: 7,
@@ -123,6 +129,9 @@ async function ensureCollections(event) {
   });
   if (!await maybeGet('system_config', 'analytics')) {
     await db.collection('system_config').doc('analytics').set({ data: { trackingStartedAt: db.serverDate(), version: 1 } });
+  }
+  if (!await maybeGet('system_config', 'growth')) {
+    await db.collection('system_config').doc('growth').set({ data: { trackingStartedAt: db.serverDate(), version: 1 } });
   }
   let initialOperator = null;
   const authUid = String((event && event.initialOperatorAuthUid) || '').trim().slice(0, 128);
@@ -732,8 +741,8 @@ async function familyBackupDataset(task) {
   const exportedAt = new Date().toISOString();
   const entries = [
     { name: '家谱信息.json', content: Buffer.from(JSON.stringify({ name: family.name || '', description: family.description || '', status: family.status || '', createdAt: family.createdAt || null, exportedAt: exportedAt }, null, 2)) },
-    { name: '人物.csv', content: Buffer.from(toCsv(persons.map(function (item) { return { id: item._id, name: item.name, gender: item.gender, lifeStatus: item.lifeStatus, birthDate: item.birthDate, deathDate: item.deathDate, birthDateInfo: item.birthDateInfo ? JSON.stringify(item.birthDateInfo) : '', deathDateInfo: item.deathDateInfo ? JSON.stringify(item.deathDateInfo) : '', birthPlace: item.birthPlace, bio: item.bio, status: item.status }; }), [
-      { key: 'id', label: '人物ID' }, { key: 'name', label: '姓名' }, { key: 'gender', label: '性别' }, { key: 'lifeStatus', label: '生存状态' }, { key: 'birthDate', label: '出生日期（公历）' }, { key: 'deathDate', label: '离世日期（公历）' }, { key: 'birthDateInfo', label: '出生时间原始历法和精度' }, { key: 'deathDateInfo', label: '离世时间原始历法和精度' }, { key: 'birthPlace', label: '出生地' }, { key: 'bio', label: '生平' }, { key: 'status', label: '状态' }
+    { name: '人物.csv', content: Buffer.from(toCsv(persons.map(function (item) { return { id: item._id, name: item.name, gender: item.gender, spouseDisplayOrder: JSON.stringify(item.spouseDisplayOrder || []), lifeStatus: item.lifeStatus, birthDate: item.birthDate, deathDate: item.deathDate, birthDateInfo: item.birthDateInfo ? JSON.stringify(item.birthDateInfo) : '', deathDateInfo: item.deathDateInfo ? JSON.stringify(item.deathDateInfo) : '', birthPlace: item.birthPlace, bio: item.bio, status: item.status }; }), [
+      { key: 'id', label: '人物ID' }, { key: 'name', label: '姓名' }, { key: 'gender', label: '性别' }, { key: 'spouseDisplayOrder', label: '夫妻显示顺序（含本人ID）' }, { key: 'lifeStatus', label: '生存状态' }, { key: 'birthDate', label: '出生日期（公历）' }, { key: 'deathDate', label: '离世日期（公历）' }, { key: 'birthDateInfo', label: '出生时间原始历法和精度' }, { key: 'deathDateInfo', label: '离世时间原始历法和精度' }, { key: 'birthPlace', label: '出生地' }, { key: 'bio', label: '生平' }, { key: 'status', label: '状态' }
     ]), 'utf8') },
     { name: '关系.csv', content: Buffer.from(toCsv(relations.map(function (item) { return { id: item._id, type: item.type, from: item.fromPersonId, to: item.toPersonId, childOrder: item.childOrder, childOrderUpdatedAt: item.childOrderUpdatedAt, status: item.status }; }), [
       { key: 'id', label: '关系ID' }, { key: 'type', label: '关系类型' }, { key: 'from', label: '人物一' }, { key: 'to', label: '人物二' }, { key: 'childOrder', label: '子女排行顺序' }, { key: 'childOrderUpdatedAt', label: '排行更新时间' }, { key: 'status', label: '状态' }
@@ -951,6 +960,8 @@ async function retentionRun() {
     analyticsSnapshots: await removeMany('analytics_snapshots', { expiresAt: _.lt(new Date()) }, 5000),
     analyticsSnapshotItems: await removeMany('analytics_snapshot_items', { expiresAt: _.lt(new Date()) }, 5000),
     analyticsReports: await removeMany('analytics_reports', { expiresAt: _.lt(new Date()) }, 5000),
+    growthVisitors: await removeMany('growth_visitors', { expiresAt: _.lt(new Date()) }, 5000),
+    growthEvents: await removeMany('growth_events', { expiresAt: _.lt(new Date()) }, 5000),
     staleExports: await recoverStaleExportTasks(),
     expiredExports: await expireExportTasks()
   };

@@ -2,11 +2,12 @@
 import { computed, onMounted, reactive, ref } from 'vue';
 import { callOps, getErrorMessage, hasLoginState, signIn, signOut } from './cloudbase';
 import ExampleManager from './components/ExampleManager.vue';
+import GuideManager from './components/GuideManager.vue';
 import FeedbackGroupManager from './components/FeedbackGroupManager.vue';
 import DataManager from './components/DataManager.vue';
 import MembershipManager from './components/MembershipManager.vue';
 
-type ModuleKey = 'analytics' | 'dashboard' | 'commerce' | 'users' | 'families' | 'examples' | 'feedbackGroup' | 'reports' | 'moderation' | 'deletions' | 'audits' | 'operators';
+type ModuleKey = 'analytics' | 'dashboard' | 'commerce' | 'users' | 'families' | 'examples' | 'guides' | 'feedbackGroup' | 'reports' | 'moderation' | 'deletions' | 'audits' | 'operators';
 type ModerationScope = 'pending' | 'reviewed';
 type ModerationMode = 'strict' | 'review';
 type ParticipationFilter = 'all' | 'visitor' | 'creator' | 'member' | 'creator_member' | 'participating';
@@ -54,6 +55,7 @@ const navItems: Array<{ key: ModuleKey; label: string; caption: string }> = [
   { key: 'users', label: '用户', caption: '账号处置' },
   { key: 'families', label: '家谱', caption: '风险治理' },
   { key: 'examples', label: '示例家谱', caption: '内容发布' },
+  { key: 'guides', label: '修谱指南', caption: '图文发布' },
   { key: 'feedbackGroup', label: '反馈群', caption: '用户沟通' },
   { key: 'reports', label: '举报', caption: '工单闭环' },
   { key: 'moderation', label: '内容复核', caption: '图片审核' },
@@ -62,7 +64,7 @@ const navItems: Array<{ key: ModuleKey; label: string; caption: string }> = [
   { key: 'operators', label: '运营账号', caption: '白名单' }
 ];
 
-const actionByModule: Record<Exclude<ModuleKey, 'analytics' | 'dashboard' | 'examples' | 'feedbackGroup'>, string> = {
+const actionByModule: Record<Exclude<ModuleKey, 'analytics' | 'dashboard' | 'examples' | 'guides' | 'feedbackGroup'>, string> = {
   commerce: 'commerce.orders',
   users: 'users.list',
   families: 'families.list',
@@ -78,6 +80,7 @@ const booting = ref(true);
 const authenticated = ref(false);
 const operator = ref<Operator | null>(null);
 const activeModule = ref<ModuleKey>('dashboard');
+const guideManager = ref<InstanceType<typeof GuideManager> | null>(null);
 const moderationScope = ref<ModerationScope>('pending');
 const moderationMode = ref<ModerationMode>('strict');
 const userParticipationFilter = ref<ParticipationFilter>('all');
@@ -294,6 +297,7 @@ async function submitLogin(): Promise<void> {
 }
 
 async function logout(): Promise<void> {
+  if (activeModule.value === 'guides' && !guideManager.value?.canLeave()) return;
   await signOut();
   authenticated.value = false;
   operator.value = null;
@@ -339,7 +343,7 @@ async function loadModule(module: ModuleKey, direction: 'reset' | 'next' | 'prev
       resetListPagination();
       return;
     }
-    if (module === 'examples' || module === 'feedbackGroup') {
+    if (module === 'examples' || module === 'guides' || module === 'feedbackGroup') {
       rows.value = [];
       resetListPagination();
       return;
@@ -385,6 +389,7 @@ function clearListFilters(): void {
 
 async function navigateModule(module: ModuleKey): Promise<void> {
   if (loading.value) return;
+  if (activeModule.value === 'guides' && module !== 'guides' && !guideManager.value?.canLeave()) return;
   clearListFilters();
   await loadModule(module);
 }
@@ -644,6 +649,7 @@ onMounted(bootstrap);
       </section>
 
       <ExampleManager v-else-if="activeModule === 'examples'" :is-super-admin="operator?.role === 'super_admin'" />
+      <GuideManager v-else-if="activeModule === 'guides'" ref="guideManager" />
       <FeedbackGroupManager v-else-if="activeModule === 'feedbackGroup'" />
 
       <section v-else-if="activeModule === 'commerce'" class="commerce-module">

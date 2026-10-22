@@ -56,6 +56,10 @@ const collections = [
   'analytics_snapshots',
   'analytics_snapshot_items',
   'analytics_history',
+  'growth_visitors',
+  'growth_events',
+  'guides',
+  'guide_assets',
   'share_metrics_daily'
 ];
 

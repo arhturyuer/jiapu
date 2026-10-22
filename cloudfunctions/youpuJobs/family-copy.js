@@ -224,6 +224,7 @@ function createWorker(options) {
         const group = dataset.persons.slice(offset, offset + BATCH_SIZE);
         await write(task, token, async function (tx) {
           for (const person of group) await tx.collection('persons').doc(id(task, 'pcopy', person._id)).set({ data: Object.assign(fields(person, ['name', 'gender', 'birthPlace', 'bio', 'lifeStatus', 'birthDate', 'birthDateInfo', 'birthDateRange', 'deathDate', 'deathDateInfo', 'deathDateRange']), {
+            spouseDisplayOrder: Array.isArray(person.spouseDisplayOrder) ? person.spouseDisplayOrder.map(personId => id(task, 'pcopy', personId)) : [],
             familyId: task.targetFamilyId, avatarAssetId: '', status: 'active', createdBy: task.userId, createdAt: db.serverDate(), updatedAt: db.serverDate()
           }) });
         }, { personsDone: offset + group.length, stage: 'persons' });
@@ -275,6 +276,7 @@ function createWorker(options) {
         const currentAccess = await access(task, tx);
         const user = currentAccess.user;
         const family = { name: task.name, description: task.description, creatorId: task.userId, status: 'active', privacy: 'private', schemaVersion: 3,
+          hasSpouseDisplayOrder: people.some(p => p.spouseDisplayOrder && p.spouseDisplayOrder.length),
           personCount: people.length, relationCount: relations.length, relationRevision: relations.length, contentRevision: 0, adminCount: 1,
           createdAt: db.serverDate(), updatedAt: db.serverDate() };
         if (await read(tx, 'families', task.targetFamilyId)) fail('COPY_INVALID_GRAPH');

@@ -1,6 +1,6 @@
 
 <view class="reading-root intro-root {{elderMode ? 'reading-elder' : ''}} {{readingLarge ? 'reading-large' : ''}}" style="{{readingStyle}}">
-<page-navigation title="认识有谱家谱" home page-gutter />
+<page-navigation title="认识有谱家谱" back page-gutter />
 <scroll-view class="intro-scroll" scroll-y show-scrollbar="{{false}}">
 <view class="intro-page page-shell">
   <view class="intro-hero surface-card">
@@ -18,6 +18,7 @@
     </view>
   </view>
 
+  <view class="intro-links"><navigator url="/pages/guides/index">修谱指南</navigator><navigator url="/pages/examples/index">官方示例家谱</navigator><navigator url="/pages/about/index">关于有谱</navigator><button class="intro-enter" bindtap="enterFamily">进入已有家谱</button></view>
   <text class="intro-privacy">家谱默认仅受邀家人可访问。</text>
 </view>
 </scroll-view>

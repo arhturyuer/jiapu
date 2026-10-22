@@ -32,3 +32,5 @@
   .release-summary { margin-top: 5px; }
 }
 /* large-screen:end */
+
+.public-links{display:flex;flex-wrap:wrap;gap:20px;padding:20px;color:#245C4A;}

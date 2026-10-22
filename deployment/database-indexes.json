@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 12,
+  "schemaVersion": 14,
   "indexes": {
     "users": [
       { "name": "openid_unique", "unique": true, "sparse": true, "fields": [{ "field": "openid", "order": "asc" }] },
@@ -317,6 +317,21 @@
         }
       ]
     }
-  ]
+  ],
+    "guides": [
+      {"name": "slug_unique", "unique": true, "fields": [{"field": "slug", "order": "asc"}]},
+      {"name": "status_id", "fields": [{"field": "status", "order": "asc"}, {"field": "_id", "order": "asc"}]}
+    ],
+    "guide_assets": [
+      {"name": "guide_id", "fields": [{"field": "guideId", "order": "asc"}, {"field": "_id", "order": "asc"}]}
+    ],
+    "growth_visitors": [
+      {"name": "firstDay_id", "fields": [{"field": "firstDay", "order": "asc"}, {"field": "_id", "order": "asc"}]},
+      {"name": "expiresAt_id", "fields": [{"field": "expiresAt", "order": "asc"}, {"field": "_id", "order": "asc"}]}
+    ],
+    "growth_events": [
+      {"name": "day_id", "fields": [{"field": "day", "order": "asc"}, {"field": "_id", "order": "asc"}]},
+      {"name": "expiresAt_id", "fields": [{"field": "expiresAt", "order": "asc"}, {"field": "_id", "order": "asc"}]}
+    ]
   }
 }

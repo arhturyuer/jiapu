@@ -132,6 +132,39 @@ test('导航高度同步只触发一次现有图谱重测，保留缩放并忽�
   assert.equal(page.data.navigationHeight, 91);
 });
 
+test('示例、认识有谱和修谱指南按页面栈返回，直接打开使用统一首页图标', t => {
+  const { value, definition } = component(t);
+  const visited = [];
+  let stack = [{}];
+  global.getCurrentPages = () => stack;
+  global.wx = { getStorageSync: () => ({}), getAppBaseInfo: () => ({}),
+    getWindowInfo: () => ({ windowWidth: 375, windowHeight: 800, statusBarHeight: 47 }),
+    navigateBack: options => visited.push({ type: 'back', ...options }),
+    switchTab: options => visited.push({ type: 'home', ...options }) };
+  const read = file => fs.readFileSync(path.resolve(__dirname, '../miniprogram', file), 'utf8');
+  for (const name of ['example', 'share-intro', 'guides']) {
+    const template = read('pages/' + name + '/index.wxml');
+    assert.match(template, /<page-navigation\b[^>]*\bback\b/);
+    assert.doesNotMatch(template, /<page-navigation\b[^>]*\bhome\b/);
+    value.data.back = true;
+    value.data.home = false;
+    for (const depth of [1, 2, 3]) {
+      stack = Array.from({ length: depth }, () => ({}));
+      definition.lifetimes.attached.call(value);
+      assert.equal(value.data.canGoBack, depth > 1);
+      value.goBack();
+      assert.equal(visited.at(-1).type, depth > 1 ? 'back' : 'home');
+      if (depth > 1) assert.equal(visited.at(-1).delta, 1);
+      else assert.equal(visited.at(-1).url, '/pages/tree/index');
+      definition.pageLifetimes.hide.call(value);
+    }
+  }
+  const navigation = read('components/page-navigation/index.wxml');
+  assert.doesNotMatch(navigation, /⌂/);
+  assert.match(navigation, /wx:if="\{\{home \|\| !canGoBack\}\}" class="navigation-home-icon" src="\/images\/icons\/navigation-home.svg"/);
+  assert.match(navigation, /<view wx:else class="navigation-back-icon"/);
+});
+
 test('可点击长短标题都显式占满胶囊前安全宽度，覆盖原生按钮固定宽度和自动居中', t => {
   const { value } = component(t);
   const info = { windowWidth: 414, windowHeight: 896, statusBarHeight: 47 };
@@ -252,7 +285,7 @@ test('首页仅在标题启用切谱，操作区与示例分享保持各自契�
   assert.match(navigation, /<text wx:else class="navigation-title"/);
   for (const name of ['example', 'members']) assert.doesNotMatch(read('pages/' + name + '/index.wxml'), /title-switchable|bindtitleswitch/);
   assert.match(read('pages/members/index.wxml'), /<page-navigation\b[^>]*\bpage-gutter\b[^>]*bindlayout="onNavigationLayout"/);
-  assert.match(read('pages/example/index.wxml'), /open-type="share"[^>]*>分享<\/button>/);
+  assert.match(read('pages/example/index.wxml'), /open-type="share"[^>]*><text[^>]*>邀请家人<\/text><\/button>/);
 });
 
 for (const name of ['tree', 'example']) {
@@ -269,13 +302,14 @@ for (const name of ['tree', 'example']) {
     t.after(() => Object.assign(global, previous));
     page.setData = function (patch) { Object.assign(this.data, patch); };
     page.data.navigationHeight = 91;
-    const toolbar = name === 'tree' ? 64 : 177;
+    const toolbar = name === 'tree' ? 64 : page.data.headerHeight;
+    const footer = name === 'tree' ? 0 : page.data.footerHeight;
     [false, true].forEach(clean => {
       page.data.isCleanScreen = clean;
       const reserved = clean ? 0 : toolbar;
       const viewport = page.getGraphViewport();
       assert.equal(viewport.top, 91 + reserved);
-      assert.equal(viewport.height, 800 - 91 - reserved);
+      assert.equal(viewport.height, 800 - 91 - reserved - (clean ? 0 : footer));
       page.measureGraphViewport(wx.getWindowInfo(), measured => {
         assert.equal(measured.top, viewport.top);
         assert.equal(measured.height, viewport.height);

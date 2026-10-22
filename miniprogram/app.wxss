@@ -363,3 +363,8 @@ image {
 
 /* large-screen:layout */
 @media (min-width:600px) { page { font-size: var(--reading-font-16, 16px); } }
+
+/* Let the membership action use the full space beside the close target. */
+.reading-root .member-sheet-ad-header { min-height:var(--reading-target,44px); flex-wrap:nowrap; gap:8px; }
+.reading-root .member-sheet-ad-header .member-sheet-ad-close { flex:none; width:var(--reading-target,44px); min-width:var(--reading-target,44px); min-height:var(--reading-target,44px); height:auto; margin:0; padding:0; }
+.reading-root .member-sheet-ad-header .member-sheet-membership-link { flex:1; width:0; min-width:0; min-height:var(--reading-target,44px); height:auto; margin:0; padding:6px 0; line-height:1.5; text-align:right; white-space:normal; overflow-wrap:anywhere; }

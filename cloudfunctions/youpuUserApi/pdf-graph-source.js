@@ -1,6 +1,6 @@
 const domain = require('./domain');
 const personDate = require('./person-date');
-const PERSON_FIELDS = ['_id', 'name', 'gender', 'lifeStatus', 'birthDate', 'deathDate', 'birthDateInfo', 'deathDateInfo', 'birthDateRange', 'deathDateRange', 'birthPlace', 'bio', 'avatarAssetId'];
+const PERSON_FIELDS = ['_id', 'name', 'gender', 'lifeStatus', 'birthDate', 'deathDate', 'birthDateInfo', 'deathDateInfo', 'birthDateRange', 'deathDateRange', 'birthPlace', 'bio', 'avatarAssetId', 'spouseDisplayOrder'];
 function fields(row, keys) { return Object.fromEntries(keys.filter(key => row[key] !== undefined).map(key => [key, row[key]])); }
 function familyPerson(person) {
   const result = fields(person, PERSON_FIELDS);

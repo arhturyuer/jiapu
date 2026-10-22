@@ -8,6 +8,20 @@ function node(layout, id) { return layout.nodes.find(n => n._id === id); }
 function positions(layout, ids) { return ids.map(id => { const n = node(layout, id); return [id, n.x, n.y, n.width]; }); }
 function gap(layout, a, b) { return node(layout, b).x - node(layout, a).x - node(layout, a).width; }
 function layout(f, options) { return graph.layoutGraph(f.persons, f.relations, options); }
+function halfSiblings(branch = 'b') {
+  const f = fixture([], ['a', 'b', 'c']);
+  for (const id of ['mother-a', 'mother-b']) {
+    f.person(id, '母亲'); f.persons.find(p => p._id === id).gender = 'female';
+    f.edge('root', id, 'spouse');
+  }
+  f.edge('mother-a', 'a');
+  for (const id of ['b', 'c']) f.edge('mother-b', id);
+  f.children(branch);
+  return f;
+}
+function ranks(result) {
+  return result.nodes.map(n => [n._id, n.childRankParentId, n.childRankLabel, n.childSequenceIndex]);
+}
 function geometry(result) {
   for (const a of result.nodes) for (const b of result.nodes) {
     if (a._id === b._id) continue;
@@ -23,6 +37,76 @@ function geometry(result) {
 
 for (const nameLayout of ['horizontal', 'vertical']) {
   const spacing = nameLayout === 'horizontal' ? 72 : 52;
+  for (const branch of ['a', 'b']) test(nameLayout + ': half siblings tuck across mothers beside descendant branch ' + branch, () => {
+    const f = halfSiblings(branch);
+    const original = layout(f, { nameLayout, geometryVersion: 2 });
+    const result = layout(f, { nameLayout });
+    assert.ok(gap(original, 'a', 'b') > 1000);
+    assert.equal(gap(result, 'a', 'b'), spacing);
+    assert.equal(gap(result, 'b', 'c'), spacing);
+    const fixed = f.persons.map(p => p._id).filter(id => !['a', 'b', 'c'].includes(id) || id === branch);
+    assert.deepEqual(positions(result, fixed), positions(original, fixed));
+    assert.deepEqual(ranks(result), ranks(original));
+    for (const [mother, children] of [['mother-a', ['a']], ['mother-b', ['b', 'c']]]) {
+      const rails = result.lines.filter(l => l.lineRole === 'rail' && l.familyKey.startsWith('pair:' + mother + '|root@'));
+      assert.equal(rails.length, 1);
+      assert.deepEqual(rails[0].relationIds.slice().sort(), children.flatMap(id => ['parent_child:' + mother + ':' + id, 'parent_child:root:' + id]).sort());
+      const before = original.lines.find(l => l._id === rails[0]._id);
+      assert.ok(rails[0].length <= before.length);
+    }
+    geometry(result);
+    f.children(branch === 'a' ? 'b' : 'a');
+    const added = layout(f, { nameLayout });
+    assert.ok(gap(added, 'a', 'b') > spacing);
+    geometry(added);
+  });
+
+  test(nameLayout + ': half siblings preserve spouses, long names, view state and PDF snapshots', () => {
+    const f = halfSiblings();
+    f.person('wife', '复姓长姓名测试'); f.persons.find(p => p._id === 'wife').gender = 'female';
+    f.edge('a', 'wife', 'spouse');
+    const result = layout(f, { nameLayout });
+    assert.equal(gap(result, 'wife', 'b'), spacing);
+    assert.equal(gap(result, 'a', 'wife'), nameLayout === 'horizontal' ? 76 : 48);
+    const ids = result.nodes.map(n => n._id);
+    assert.deepEqual(positions(layout(f, { nameLayout, selectedPersonId: 'a' }), ids), positions(result, ids));
+    const perspective = layout(f, { nameLayout, mode: 'perspective', viewpointId: 'a' });
+    assert.equal(gap(perspective, 'wife', 'b'), spacing);
+    geometry(perspective);
+    const folded = layout(f, { nameLayout, collapsedIds: ['b'] });
+    assert.equal(folded.hiddenCount, 20);
+    assert.equal(gap(folded, 'wife', 'b'), spacing);
+    geometry(folded);
+    const value = snapshot.create(f.persons, f.relations, nameLayout, 0);
+    for (const source of ['../cloudfunctions/youpuUserApi/pdf-shared/', '../cloudfunctions/youpuJobs/pdf/shared/']) {
+      const server = require(source + 'graph-layout');
+      assert.deepEqual(server.layoutGraph(f.persons, f.relations, { nameLayout }), result);
+      const restored = require(source + 'pdf-layout-snapshot').restore(value, f.persons, f.relations, 0, nameLayout);
+      assert.deepEqual(positions(restored, ids), positions(result, ids));
+      assert.deepEqual(restored.lines, result.lines);
+    }
+    const legacy = snapshot.create(f.persons, f.relations, nameLayout, 0, 2);
+    const oldLayout = layout(f, { nameLayout, geometryVersion: 2 });
+    for (const restore of [snapshot, require('../cloudfunctions/youpuUserApi/pdf-shared/pdf-layout-snapshot'), require('../cloudfunctions/youpuJobs/pdf/shared/pdf-layout-snapshot')]) {
+      assert.deepEqual(positions(restore.restore(legacy, f.persons, f.relations, 0, nameLayout), ids), positions(oldLayout, ids));
+    }
+    f.persons.reverse(); f.relations.reverse();
+    assert.deepEqual(layout(f, { nameLayout }), result);
+    geometry(result);
+  });
+
+  test(nameLayout + ': children of different fathers in one spouse component do not tuck together', () => {
+    const f = halfSiblings();
+    f.person('other-father', '另一父亲'); f.edge('other-father', 'mother-b', 'spouse');
+    f.relations = f.relations.filter(r => !(r.fromPersonId === 'root' && ['b', 'c'].includes(r.toPersonId)));
+    for (const id of ['b', 'c']) f.edge('other-father', id);
+    const original = layout(f, { nameLayout, geometryVersion: 2 });
+    const result = layout(f, { nameLayout });
+    assert.deepEqual(positions(result, ['a', 'b']), positions(original, ['a', 'b']));
+    assert.ok(gap(result, 'a', 'b') > spacing);
+    geometry(result);
+  });
+
   for (const branch of ['a', 'b', 'c']) test(nameLayout + ': childless siblings tuck beside ' + branch + ' without moving its descendants', () => {
     const f = fixture([branch]);
     const result = layout(f, { nameLayout });
@@ -98,7 +182,7 @@ for (const nameLayout of ['horizontal', 'vertical']) {
     geometry(full);
   });
 
-  test(nameLayout + ': separate marriages retain their own leaf and descendant groups', () => {
+  test(nameLayout + ': separate marriages retain their wires while leaves center between descendant branches', () => {
     const f = fixture();
     f.person('other-parent', '另一家长'); f.edge('root', 'other-parent', 'spouse');
     f.person('d', '成员丁', '1974-01-01'); f.person('e', '成员戊', '1975-01-01');
@@ -106,7 +190,7 @@ for (const nameLayout of ['horizontal', 'vertical']) {
     f.children('d', 12);
     const result = layout(f, { nameLayout });
     assert.equal(gap(result, 'a', 'b'), spacing);
-    assert.equal(gap(result, 'b', 'c'), spacing);
+    assert.equal(gap(result, 'b', 'c'), gap(result, 'c', 'd'));
     assert.equal(gap(result, 'd', 'e'), spacing);
     assert.ok(node(result, 'c').x < node(result, 'd').x);
     const rails = result.lines.filter(l => l.lineRole === 'rail');

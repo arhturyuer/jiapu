@@ -1,7 +1,7 @@
 const navigationPage = require('../../utils/navigation-page');
 const nodePresentation = require('../../utils/node-presentation');
 const readingGraph = require('../../utils/reading-graph');
-const deviceLayout = require('../../utils/device-layout');
+const graphToolsLayout = require('../../utils/graph-tools-layout');
 const pdfEntry = require('../../utils/pdf-entry');
 const launchAd = require('../../utils/launch-ad');
 const app = getApp();
@@ -18,6 +18,7 @@ const adAccess = require('../../utils/ad-access');
 const exampleDisplayPreference = require('../../utils/example-display-preference');
 const examplePosterCode = require('../../utils/example-poster-code');
 const treePosterFlow = require('../../utils/tree-poster-flow');
+const growth = require('../../utils/growth');
 const MAX_INTERACTIVE_NODES = 80;
 
 function exampleDetailUrl(slug, personId, source) {
@@ -33,6 +34,8 @@ Page(launchAd.wrap(graphGesturePage.wrap({
   onNavigationLayout: navigationPage.changed,
   data: {
     navigationHeight: 64,
+    isDefaultEntry: false, showExportSheet: false,
+    headerHeight: 164, footerHeight: 116, graphToolsStyle: '', graphHelpStyle: '', graphToolsScrollable: false,
     selectedKinship: null,
     exampleTabs: [], selectedExampleTabId: '', tabsError: '',
     loading: true, error: '', slug: '', example: null, rawPersons: [], rawRelations: [], nodes: [], lines: [], junctions: [], crossings: [],
@@ -49,6 +52,8 @@ Page(launchAd.wrap(graphGesturePage.wrap({
     const value = options || {};
     this._scene = decodedScene(value.scene);
     this._defaultEntry = value.entry === 'default' && !value.slug && !value.scene;
+    this.setData({ isDefaultEntry: this._defaultEntry });
+    if (this._defaultEntry) this._landingReceipt = growth.record('landing', 'pages/example/index', '', 'default_example');
     this._initialPersonId = value.personId || '';
     this._shareSource = this._scene ? 'example_poster' : (value.source || '');
     this.setData({ slug: this._scene ? '' : (value.slug || '') });
@@ -59,7 +64,6 @@ Page(launchAd.wrap(graphGesturePage.wrap({
     this._hidden = false;
     this._adPageHidden = false;
     adAccess.hide(this, true);
-    if (app.recordExampleVisit && this.data.example && !this.data.loading && !this.data.error) app.recordExampleVisit(this.data.slug);
     this.resetPageOrientation();
     const tabsPromise = this._reloadTabsOnShow ? this.loadExampleTabs() : null;
     if (this._pendingExampleSlug) {
@@ -76,6 +80,7 @@ Page(launchAd.wrap(graphGesturePage.wrap({
     this.syncPageOrientationSoon();
   },
   onHide: function () {
+    this.closeBrowseSheets();
     this._adPageHidden = true;
     adAccess.hide(this, true);
     this._hidden = true;
@@ -88,6 +93,7 @@ Page(launchAd.wrap(graphGesturePage.wrap({
   },
   onPullDownRefresh: function () { const tabsPromise = this.loadExampleTabs({ force: true }); this.loadExample({ force: true, tabsPromise: tabsPromise }).then(function () { wx.stopPullDownRefresh(); }); },
   onUnload: function () {
+    this.closeBrowseSheets();
     this._adPageHidden = true;
     adAccess.hide(this, true);
     this._unloaded = true;
@@ -100,6 +106,7 @@ Page(launchAd.wrap(graphGesturePage.wrap({
   },
 
   loadExample: function (options) {
+    this.closeBrowseSheets();
     adAccess.hide(this, true);
     graphGesturePage.invalidate(this);
     const self = this;
@@ -107,10 +114,10 @@ Page(launchAd.wrap(graphGesturePage.wrap({
     const requestId = this._loadRequestId = (this._loadRequestId || 0) + 1;
     const valid = function () { return requestId === self._loadRequestId && !self._unloaded && !self._hidden; };
     this._renderPending = false;
-    this.setData({ loading: true, error: '' });
+    this.setData({ loading: true, error: '', shareCard: shareCard.create({ kind: 'example' }) });
     let target;
     if (this._scene && !this.data.slug) {
-      target = api.call('examples.resolvePoster', { scene: this._scene }).then(function (data) {
+      target = api.call('public.examples.resolvePoster', { scene: this._scene }).then(function (data) {
         if (valid()) self._initialPersonId = data.viewPersonId || '';
         return data.slug;
       });
@@ -151,6 +158,7 @@ Page(launchAd.wrap(graphGesturePage.wrap({
           self._graphViewport = viewport;
           if (initialPersonId && persons.some(function (person) { return person._id === initialPersonId; })) self.setPerspective(initialPersonId, { initialView: true });
           else self.renderGraph('full', '', { collapsedPersonIds: collapsed, nameLayout: preference.nameLayout, initialView: true });
+          self.recordEntryGrowth('example', example.slug);
         };
         if (self.createSelectorQuery || wx.createSelectorQuery) self.measureGraphViewport(self.getWindowSize(), render);
         else render(self.getGraphViewport());
@@ -158,7 +166,7 @@ Page(launchAd.wrap(graphGesturePage.wrap({
         self.preloadMemberAd();
         if (['example_share', 'example_poster'].includes(self._shareSource) && !self._shareOpenRecorded) {
           self._shareOpenRecorded = true;
-          api.call('share.record', { stage: 'opened', kind: 'example', slug: example.slug }).catch(function () {});
+          growth.shareOpen('example', example.slug);
         }
       });
     }).catch(function (error) {
@@ -166,8 +174,16 @@ Page(launchAd.wrap(graphGesturePage.wrap({
       const fallback = error.code === 'EXAMPLES_EMPTY' ? '目前没有可体验的示例家谱'
         : error.code === 'EXAMPLE_SLUG_REQUIRED' ? '缺少示例家谱信息' : '示例家谱暂时不可用';
       self.setData({ loading: false, error: api.userMessage(error, fallback) });
+      if (self.data.isDefaultEntry) self.recordEntryGrowth('load_error', '');
     });
   },
+  recordEntryGrowth: function (event, slug) {
+    const page = this;
+    return Promise.resolve(this._landingReceipt).then(function () {
+      if (!page._hidden && !page._unloaded) return growth.record(event, 'pages/example/index', slug, page.data.isDefaultEntry ? 'default_example' : '');
+    });
+  },
+  retryExample: function () { return this.loadExample({ force: true }); },
 
   loadExampleTabs: function (options) {
     const self = this;
@@ -185,6 +201,7 @@ Page(launchAd.wrap(graphGesturePage.wrap({
       if (requestId === self._tabsRequestId && !self._unloaded && !self._hidden) {
         self._tabsLoading = false;
         self.setData({ tabsError: '示例列表暂不可用，点击重试' });
+        self.syncExampleTabs();
       }
       return null;
     });
@@ -199,7 +216,10 @@ Page(launchAd.wrap(graphGesturePage.wrap({
       return { slug: item.slug, title: item.title || item.name || item.slug, id: 'example-tab-' + index };
     });
     const selected = tabs.find(function (item) { return item.slug === slug; });
-    this.setData({ exampleTabs: tabs, selectedExampleTabId: selected ? selected.id : '' });
+    const page = this;
+    this.setData({ exampleTabs: tabs, selectedExampleTabId: selected ? selected.id : '' }, function () {
+      if ((page.createSelectorQuery || wx.createSelectorQuery) && page._lastLayout && !page._renderPending && !page.data.loading && !page._hidden && !page._unloaded) page.onResize({ size: page.getWindowSize() });
+    });
   },
   selectExampleTab: function (event) { return this.switchExample(event.currentTarget.dataset.slug); },
   switchExample: function (slug) {
@@ -263,9 +283,11 @@ Page(launchAd.wrap(graphGesturePage.wrap({
     const width = Number(size.windowWidth) || 375;
     const height = Number(size.windowHeight) || 667;
     const safeBottom = size.safeArea ? Math.max(0, (Number(size.screenHeight) || height) - size.safeArea.bottom) : 0;
-    const fullCanvas = (width > height && !this.data.isLargeDevice) || this.data.isCleanScreen;
-    const reserved = fullCanvas ? 0 : 354 * deviceLayout.read(null, size).uiUnit;
-    return { left: 0, top: (this.data.navigationHeight || 0) + reserved, width: width, height: Math.max(80, height - (this.data.navigationHeight || 0) - reserved - (fullCanvas ? 0 : safeBottom)), rpxToPx: width / 750, windowWidth: width };
+    const landscape = width > height && !this.data.isLargeDevice;
+    const header = this.data.isCleanScreen || landscape ? 0 : this.data.headerHeight;
+    const footer = this.data.isCleanScreen ? 0 : this.data.footerHeight + safeBottom;
+    const top = (this.data.navigationHeight || 0) + header;
+    return { left: 0, top: top, width: width, height: Math.max(1, height - top - footer), rpxToPx: width / 750, windowWidth: width };
   },
   getWindowSize: function () {
     try { return wx.getWindowInfo ? wx.getWindowInfo() : wx.getSystemInfoSync(); } catch (error) { return { windowWidth: 375, windowHeight: 667 }; }
@@ -292,6 +314,7 @@ Page(launchAd.wrap(graphGesturePage.wrap({
     this._lastLayout = result;
     this.setData(Object.assign({ selectedKinship: this.data.showMemberSheet ? kinship.memberKinshipCard(kinshipDetails, selectedPersonId, viewpoint ? viewpoint.name : '', this.data.rawPersons) : null, nodes: result.nodes, lines: result.lines, junctions: result.junctions || [], crossings: result.crossings || [], canvasWidth: result.width, canvasHeight: result.height, viewpointName: viewpoint ? viewpoint.name : '', hiddenBranchCount: result.hiddenCount || 0, canExpandAll: (result.hiddenCount || 0) > 0 && this.data.rawPersons.length <= MAX_INTERACTIVE_NODES }, optionsValue.statePatch || {}), function () {
       if (optionsValue.preserveViewport) return;
+      if (optionsValue.initialView && (self.createSelectorQuery || wx.createSelectorQuery)) self._graphViewport = null;
       if (mode === 'perspective' && viewpointId) self.fitGraph(viewpointId, false, { minimumFocusScale: 0.6, initialView: optionsValue.initialView }); else self.fitGraph('', true, { initialView: optionsValue.initialView });
     });
   },
@@ -395,18 +418,78 @@ Page(launchAd.wrap(graphGesturePage.wrap({
     });
   },
   measureGraphViewport: function (size, callback) {
-    const width = Number(size.windowWidth) || 375; const height = Number(size.windowHeight) || 667;
-    const fallback = this.fallbackGraphViewport(Object.assign({}, this.getWindowSize(), size));
+    const width = Number(size.windowWidth) || 375;
+    const page = this, sequence = this._orientationResizeSequence, slug = this.data.slug;
+    const readingSize = this.data.readingBodySize, elderMode = this.data.elderMode;
     const query = this.createSelectorQuery ? this.createSelectorQuery() : wx.createSelectorQuery();
     query.select('.graph-viewport').boundingClientRect();
     query.select('.graph-unit-probe').boundingClientRect();
-    query.exec(function (result) { const rect = result && result[0]; callback(rect && rect.width && rect.height ? { left: rect.left, top: rect.top, width: rect.width, height: rect.height, rpxToPx: result[1] && result[1].width > 0 ? result[1].width / 100 : width / 750, windowWidth: width } : fallback); });
+    query.select('.example-header').boundingClientRect();
+    query.select('.example-footer').boundingClientRect();
+    if (query.selectAll) query.selectAll('.graph-control-label').boundingClientRect();
+    query.exec(function (result) {
+      result = result || [];
+      if (page._hidden || page._deviceHidden || page._unloaded || sequence !== page._orientationResizeSequence || slug !== page.data.slug
+        || readingSize !== page.data.readingBodySize || elderMode !== page.data.elderMode) return;
+      const patch = {};
+      if (result[2] && result[2].height > 0) patch.headerHeight = result[2].height;
+      const window = Object.assign({}, page.getWindowSize(), size), safe = window.safeArea || {};
+      const safeBottom = Math.max(0, (window.screenHeight || window.windowHeight || 0) - (safe.bottom || window.screenHeight || window.windowHeight || 0));
+      if (result[3] && result[3].height > 0) patch.footerHeight = Math.max(0, result[3].height - safeBottom);
+      if (Object.keys(patch).some(key => patch[key] !== page.data[key])) page.setData(patch);
+      const rect = result[0], unit = result[1];
+      const viewport = rect && rect.width > 0 && rect.height > 0 ? {
+        left: rect.left, top: rect.top, width: rect.width, height: rect.height,
+        rpxToPx: unit && unit.width > 0 ? unit.width / 100 : width / 750, windowWidth: width
+      } : page.fallbackGraphViewport(window);
+      const tools = graphToolsLayout.layout(viewport, {
+        landscape: page.data.isLandscape, largeDevice: page.data.isLargeDevice, elderMode: elderMode,
+        bodySize: readingSize, labels: Array.isArray(result[4]) ? result[4] : [],
+        safeLeft: safe.left, safeRight: Math.max(0, width - (safe.right || width))
+      });
+      page.setData({ graphToolsStyle: tools.style, graphHelpStyle: tools.helpStyle, graphToolsScrollable: tools.scroll });
+      callback(viewport);
+    });
   },
   openDisplaySettings: function () {
     const slug = this.displayPreferenceSlug();
     if (slug) wx.navigateTo({ url: '/pages/display-settings/index?exampleSlug=' + encodeURIComponent(slug) });
   },
-  openPdfExport: function () { pdfEntry.open(this, 'example'); },
+  closeBrowseSheets: function () {
+    if (this._perspectiveFilterTimer) clearTimeout(this._perspectiveFilterTimer);
+    this._perspectiveFilterTimer = null;
+    this._viewSheetSlug = '';
+    this._exportSheetSlug = '';
+    if (this.data.showPerspectiveSheet || this.data.showExportSheet) this.setData({ showPerspectiveSheet: false, showExportSheet: false });
+  },
+
+  openExportSheet: function () {
+    if (!this.canOpenBrowseSheet() || !this.data.nodes.length) return;
+    this.closeBrowseSheets();
+    this._exportSheetSlug = this.data.slug;
+    this.setData({ showExportSheet: true });
+  },
+
+  closeExportSheet: function () {
+    this._exportSheetSlug = '';
+    this.setData({ showExportSheet: false });
+  },
+
+  chooseExport: function (event) {
+    if (!this.canOpenBrowseSheet() || !this.data.showExportSheet || this._exportSheetSlug !== this.data.slug) return;
+    const format = event.currentTarget.dataset.format;
+    if (['image', 'poster', 'book'].indexOf(format) < 0 || format === 'image' && this.data.posterGenerating) return;
+    this.closeExportSheet();
+    if (format === 'image') this.generatePoster();
+    else this.openPdfExport(format);
+  },
+
+  canOpenBrowseSheet: function () {
+    return Boolean(this.data.example && !this.data.loading && !this.data.error
+      && !this._deviceHidden && !this._hidden && !this._pageHidden && !this._unloaded);
+  },
+
+  openPdfExport: function (format) { pdfEntry.open(this, 'example', format); },
 
   generatePoster: function () {
     const example = this.data.example;
@@ -423,7 +506,7 @@ Page(launchAd.wrap(graphGesturePage.wrap({
         });
       },
       onPrepared: function () {
-        api.call('share.record', { stage: 'prepared', kind: 'example', slug: page.data.slug }).catch(function () {});
+        api.call('public.share.record', { stage: 'prepared', kind: 'example', slug: page.data.slug }).catch(function () {});
       },
       sharePayload: function () {
         return { kind: 'example', slug: page.data.slug };
@@ -437,20 +520,11 @@ Page(launchAd.wrap(graphGesturePage.wrap({
     });
   },
   preloadMemberAd: function () {
-    if (this.data.loading || this.data.error || !this.data.example) return Promise.resolve();
+    if (this.data.isDefaultEntry || this.data.loading || this.data.error || !this.data.example) return Promise.resolve();
     return adAccess.preloadMember(this, app, app.getCurrentFamily ? app.getCurrentFamily() : null);
   },
   noop: function () {},
-  readingMoreAction: function (event) {
-    const action = event.currentTarget.dataset.action;
-    if (['fitWholeGraph', 'openDisplaySettings', 'generatePoster', 'openPdfExport', 'togglePageOrientation', 'toggleCleanScreen'].indexOf(action) < 0) return;
-    this.setData({ showReadingMore: false });
-    this[action]();
-  },
   onReadingChange: readingGraph.changed,
-  lookClearly: readingGraph.lookClearly,
-  openReadingPeople: readingGraph.openPeople,
-  toggleReadingMore: function () { this.setData({ showReadingMore: !this.data.showReadingMore }); },
   showPerson: function (event) {
     const personId = event.currentTarget.dataset.id;
     const person = this.data.rawPersons.find(function (item) { return item._id === personId; });
@@ -469,8 +543,8 @@ Page(launchAd.wrap(graphGesturePage.wrap({
     const family = app.getCurrentFamily ? app.getCurrentFamily() : null;
     if (person) this.setData({ selectedKinship: this.data.viewMode === 'perspective' ? kinship.memberKinshipCard(this._lastLayout && this._lastLayout.kinshipDetails, personId, this.data.viewpointName, this.data.rawPersons) : null,
       selectedPersonId: personId, selectedPerson: this.decorateSelectedPerson(person), showMemberSheet: true,
-      memberAdReserved: adAccess.reserveMemberSpace(app, family, this) });
-    if (person) return adAccess.openMember(this, app, family);
+      memberAdReserved: !this.data.isDefaultEntry && adAccess.reserveMemberSpace(app, family, this) });
+    if (person && !this.data.isDefaultEntry) return adAccess.openMember(this, app, family);
   },
   decorateSelectedPerson: function (person) {
     const node = (this._lastLayout && this._lastLayout.nodes || []).find(function (item) { return item._id === person._id; });
@@ -485,10 +559,55 @@ Page(launchAd.wrap(graphGesturePage.wrap({
   openAdMembership: function () { adAccess.openMembership(this, app, true); },
   clearGraphSelection: function () { if (this.data.selectedPersonId && !this.data.showMemberSheet) this.renderGraph(this.data.viewMode, this.data.viewpointId, { preserveViewport: true, selectedPersonId: '', statePatch: { selectedPersonId: '', selectedPerson: null } }); },
   closeMemberSheet: function () { adAccess.closeMember(this); this.setData({ showMemberSheet: false, selectedKinship: null }); },
-  openPerspectiveSheet: function () { if (this.data.loading || this.data.error) return; this.setData({ showPerspectiveSheet: true, perspectiveKeyword: '', perspectiveResults: this.data.rawPersons }); },
-  closePerspectiveSheet: function () { this.setData({ showPerspectiveSheet: false }); },
-  filterPerspectives: function (event) { const keyword = (event.detail.value || '').trim(); this.setData({ perspectiveKeyword: keyword }); if (this._perspectiveFilterTimer) clearTimeout(this._perspectiveFilterTimer); const self = this; this._perspectiveFilterTimer = setTimeout(function () { self._perspectiveFilterTimer = null; self.setData({ perspectiveResults: self.data.rawPersons.filter(function (person) { return !keyword || person.name.indexOf(keyword) >= 0; }) }); }, 120); },
-  selectPerspective: function (event) { this.setPerspective(event.currentTarget.dataset.id); this.closePerspectiveSheet(); },
+  openPerspectiveSheet: function () {
+    if (!this.canOpenBrowseSheet()) return;
+    this.closeBrowseSheets();
+    this._viewSheetSlug = this.data.slug;
+    this.setData({
+      showPerspectiveSheet: true,
+      perspectiveKeyword: '',
+      perspectiveResults: this.data.rawPersons
+    });
+  },
+
+  closePerspectiveSheet: function () {
+    if (this._perspectiveFilterTimer) clearTimeout(this._perspectiveFilterTimer);
+    this._perspectiveFilterTimer = null;
+    this._viewSheetSlug = '';
+    this.setData({ showPerspectiveSheet: false });
+  },
+
+  filterPerspectives: function (event) {
+    const keyword = event.detail.value.trim();
+    this.setData({ perspectiveKeyword: keyword });
+    if (this._perspectiveFilterTimer) clearTimeout(this._perspectiveFilterTimer);
+    const self = this;
+    const slug = this._viewSheetSlug;
+    this._perspectiveFilterTimer = setTimeout(function () {
+      self._perspectiveFilterTimer = null;
+      if (!self.canOpenBrowseSheet() || !self.data.showPerspectiveSheet || slug !== self._viewSheetSlug
+        || slug !== self.data.slug) return;
+      self._perspectiveFilterTimer = null;
+      self.setData({ perspectiveResults: self.data.rawPersons.filter(function (person) {
+        return !keyword || person.name.indexOf(keyword) >= 0;
+      }) });
+    }, 120);
+  },
+
+  selectPerspective: function (event) {
+    if (!this.canOpenBrowseSheet() || !this.data.showPerspectiveSheet || this._viewSheetSlug !== this.data.slug) return;
+    const personId = event.currentTarget.dataset.id;
+    if (!this.data.rawPersons.some(function (person) { return person._id === personId; })) return;
+    if (this.data.viewMode !== 'perspective' || this.data.viewpointId !== personId) this.setPerspective(personId);
+    this.closePerspectiveSheet();
+  },
+
+  selectFullView: function () {
+    if (!this.canOpenBrowseSheet() || !this.data.showPerspectiveSheet || this._viewSheetSlug !== this.data.slug) return;
+    if (this.data.viewMode !== 'full') this.showFullGraph();
+    this.closePerspectiveSheet();
+  },
+
   setPerspective: function (personId, options) {
     const collapsed = graphLayout.expandCollapsedIds(this.data.rawPersons, this.data.rawRelations, this.data.collapsedPersonIds, personId);
     this.renderGraph('perspective', personId, { initialView: Boolean(options && options.initialView), collapsedPersonIds: collapsed, selectedPersonId: '', statePatch: { viewMode: 'perspective', viewpointId: personId, collapsedPersonIds: collapsed, selectedPersonId: '', selectedPerson: null, showMemberSheet: false } });
@@ -501,9 +620,9 @@ Page(launchAd.wrap(graphGesturePage.wrap({
   openMemberDetail: function () { if (this.data.selectedPerson) { const personId = this.data.selectedPerson._id; this.closeMemberSheet(); wx.navigateTo({ url: exampleDetailUrl(this.data.slug, personId, this._shareSource) }); } },
   explainCreate: function () { const self = this; wx.showModal({ title: '在自己的家谱中继续', content: '创建自己的家谱后，你可以添加亲属、编辑资料、管理关系并邀请家人共同维护。', confirmText: '去创建', success: function (result) { if (result.confirm) self.createFamily(); } }); },
   createFamily: function () {
-    wx.navigateTo({ url: this._shareSource === 'share_menu'
+    return growth.create('pages/example/index', this.data.slug, this._shareSource === 'share_menu'
       ? '/pages/create-family/index?source=share_menu&opened=1&example=' + encodeURIComponent(this.data.slug)
-      : '/pages/create-family/index?source=example&example=' + encodeURIComponent(this.data.slug) });
+      : '/pages/create-family/index?source=example&example=' + encodeURIComponent(this.data.slug), this.data.isDefaultEntry ? 'default_example' : '');
   },
   prepareExampleShare: function () {
     const example = this.data.example || {};
@@ -520,14 +639,17 @@ Page(launchAd.wrap(graphGesturePage.wrap({
     });
   },
   onShareAppMessage: function () {
+    if (!this.canOpenBrowseSheet()) return shareCard.create({ kind: 'discovery', variant: 'intro' });
     const card = this.data.shareCard || shareCard.create({ kind: 'example' });
     const slug = this.data.slug;
-    api.call('share.record', { stage: 'prepared', kind: 'example', slug: slug }).catch(function () {});
+    const requestId = this._loadRequestId;
+    const page = this;
+    api.call('public.share.record', { stage: 'prepared', kind: 'example', slug: slug }).catch(function () {});
     return {
       title: card.title,
       path: card.path + (this.data.viewMode === 'perspective' && this.data.viewpointId ? '&personId=' + encodeURIComponent(this.data.viewpointId) : ''),
       imageUrl: card.imageUrl,
-      success: function () { api.call('share.record', { stage: 'sent', kind: 'example', slug: slug }).catch(function () {}); }
+      success: function () { if (requestId === page._loadRequestId && slug === page.data.slug && !page._unloaded) api.call('public.share.record', { stage: 'sent', kind: 'example', slug: slug }).catch(function () {}); }
     };
   }
-})));
+}), 'pages/example/index'));

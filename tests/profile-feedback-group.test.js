@@ -334,13 +334,18 @@ test('账户重置丢弃旧响应，取消或失败后恢复读取，成功后�
   }
 });
 
-test('帮助区域共用于两种账户状态，保留原排列和隐私页跳转，图片完整显示', () => {
+test('帮助区域共用于两种账户状态，修谱指南排首位，保留反馈和阅读设置', () => {
   const template = fs.readFileSync(path.join(root, 'miniprogram/pages/profile/index.wxml'), 'utf8');
   const style = fs.readFileSync(path.join(root, 'miniprogram/pages/profile/index.wxss'), 'utf8');
   const privacy = fs.readFileSync(path.join(root, 'miniprogram/pages/privacy/index.js'), 'utf8');
   assert.equal((template.match(/帮助与反馈/g) || []).length, 1);
   assert.match(template, /<\/block>\s*<view class="section-block">\s*<template is="readingHelpEntry"/);
   assert.match(template, /template name="readingHelpEntry"[\s\S]*帮助与反馈/);
+  const help = template.match(/<template name="readingHelpEntry">([\s\S]*?)<\/template>/)[1];
+  assert.match(help, /class="help-card surface-card">\s*<navigator url="\/pages\/guides\/index"/);
+  assert.match(help, /修谱指南<\/text>[\s\S]*<\/navigator>\s*<view class="help-divider"/);
+  assert.ok(help.indexOf('修谱指南') < help.indexOf('用户反馈群'));
+  assert.ok(help.indexOf('用户反馈群') < help.indexOf('长辈模式与字号'));
   assert.match(template, /用户反馈群<\/text>[\s\S]*<text class="setting-desc" wx:else>长按识别二维码，进群交流、反馈问题<\/text>/);
   assert.match(template, /class="setting-desc" wx:if="{{feedbackError}}">{{feedbackError}}<\/text>/);
   assert.match(template, /mode="aspectFit" show-menu-by-longpress="{{true}}"/);

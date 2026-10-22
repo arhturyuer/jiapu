@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { callOps, getErrorMessage } from '../cloudbase';
+import GrowthManager from './GrowthManager.vue';
 import { createReportCache } from '../report-cache';
 type Value = number | null;
 interface DailyRow { [key: string]: Value | string | boolean; day: string; partial: boolean; activityComplete: boolean; mature: boolean }
@@ -152,6 +153,7 @@ onBeforeUnmount(() => { requestVersion += 1; closeDetails(); emit('loading', fal
 
 <template>
   <section class="data-manager" :aria-busy="loading">
+    <GrowthManager :refresh-key="refreshKey" />
     <form class="data-filters" @submit.prevent="load">
       <div class="data-presets" aria-label="快捷日期"><button type="button" :disabled="loading" @click="preset(1)">今天</button><button type="button" :disabled="loading" @click="preset(1, true)">昨天</button><button v-for="days in [7, 30, 90]" :key="days" type="button" :disabled="loading" @click="preset(days)">近 {{ days }} 天</button></div>
       <div class="data-filter-fields"><label>开始日期<input v-model="startDay" type="date" :max="endDay" required /></label><label>结束日期<input v-model="endDay" type="date" :min="startDay" :max="today()" required /></label><label>转化观察窗口<select v-model="window"><option v-for="(label, value) in windows" :key="value" :value="value">{{ label }}</option></select></label><label>付费环境<select v-model="paymentMode"><option v-for="(label, value) in modes" :key="value" :value="value">{{ label }}</option></select></label><button class="primary compact" :disabled="loading">{{ loading ? '查询中…' : '查询数据' }}</button><button type="button" class="secondary compact" :disabled="!report || loading || !!error || !!dirty" @click="exportCsv">导出每日 CSV</button></div>

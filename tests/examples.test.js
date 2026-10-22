@@ -173,21 +173,24 @@ test('示例图谱复用真实家谱的选中连线、定位与只读资料交�
   assert.doesNotMatch(graph, /person\.update|person\.createRelated|relation\.remove/);
 });
 
-test('示例家谱竖屏区分创建引导与示例查看，横屏仅显示画布', function () {
+test('所有示例入口使用底部创建模块和真实家谱浏览工具', function () {
   const page = read('miniprogram/pages/example/index.wxml');
   const style = read('miniprogram/pages/example/index.wxss');
   const treeStyle = read('miniprogram/pages/tree/index.wxss');
   const source = read('miniprogram/pages/example/index.js');
   assert.match(page, /example-selector/);
-  assert.match(page, /example-toolbar/);
-  assert.match(page, /以下为示例家谱/);
-  assert.match(page, /class="example-create-actions"[\s\S]*bindtap="createFamily">创建我的家谱[\s\S]*bindtap="openExamples">切换示例/);
+  assert.match(page, /tree-toolbar/);
+  assert.match(page, /浏览示例家谱/);
+  assert.match(page, /<navigator url="\/pages\/share-intro\/index">认识有谱<\/navigator>/);
+  assert.match(page, /<navigator url="\/pages\/guides\/index">修谱指南<\/navigator>/);
+  assert.doesNotMatch(page, />示例说明</);
+  assert.match(page, /class="example-create-actions"[\s\S]*bindtap="createFamily">创建我的家谱[\s\S]*bindtap="openExamples">切换家谱示例/);
   assert.doesNotMatch(page, /tour-mask|showTour/);
   assert.match(style, /\.example-page\.is-landscape \.example-header \{[^}]*display:none/);
   assert.match(style, /\.example-page\.is-landscape \.graph-viewport \{[^}]*flex:1/);
   assert.match(page, /scroll-x[\s\S]*bindtap="selectExampleTab"/);
-  assert.doesNotMatch(page, /example-footer/);
-  assert.match(page, /<button class="toolbar-share" size="mini" open-type="share" disabled="\{\{loading \|\| error \|\| !example\}\}">分享<\/button>/);
+  assert.match(page, /example-footer[\s\S]*认识有谱[\s\S]*修谱指南[\s\S]*example-create-actions/);
+  assert.match(page, /<button class="toolbar-share" open-type="share" disabled="\{\{loading \|\| error \|\| !example\}\}"><text[^>]*>邀请家人<\/text><\/button>/);
   assert.doesNotMatch(page, /showShareSheet|closeShareSheet|分享示例家谱/);
   assert.doesNotMatch(source, /showShareSheet|startShare|closeShareSheet/);
   assert.doesNotMatch(style, /\.create \{ display:none/);

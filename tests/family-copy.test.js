@@ -289,3 +289,16 @@ test('有效空家谱可复制，空文件头像按缺失处理', async () => {
   const task = await h.create(); await h.worker.process(task.taskId);
   assert.equal((await h.api.status({ taskId: task.taskId })).task.missingAvatars.length, 1);
 });
+
+test('夫妻显示顺序复制时重映射所有人物ID并独立保留', async () => {
+  const h = harness('admin');
+  h.db.put('persons', 'p1', { ...h.db.get('persons', 'p1'), spouseDisplayOrder: ['p2', 'p1'] });
+  const task = await h.create(); await h.worker.process(task.taskId);
+  const status = (await h.api.status({ taskId: task.taskId })).task;
+  assert.equal(status.status, 'completed');
+  const copied = h.db.all('persons').filter(p => p.familyId === status.family._id);
+  const male = copied.find(p => p.gender === 'male'); const female = copied.find(p => p.gender === 'female');
+  assert.deepEqual(male.spouseDisplayOrder, [female._id, male._id]);
+  assert.deepEqual(h.db.get('persons', 'p1').spouseDisplayOrder, ['p2', 'p1']);
+  assert.equal(h.db.get('families', status.family._id).hasSpouseDisplayOrder, true);
+});

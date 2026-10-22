@@ -1,6 +1,7 @@
 const launchAd = require('../../utils/launch-ad');
 const app = getApp();
 const api = require('../../utils/api');
+const growth = require('../../utils/growth');
 const kinship = require('../../utils/kinship');
 const personGender = require('../../utils/person-gender');
 
@@ -20,13 +21,16 @@ Page(launchAd.wrap({
     this.setData({ slug: options.slug || '', personId: options.id || '', shareSource: options.source === 'share_menu' ? 'share_menu' : '' });
     if (!options.slug || !options.id) this.setData({ loading: false, error: '缺少示例人物信息，请返回家谱重新选择。' });
   },
-  onShow: function () { if (this.data.slug && this.data.personId) this.loadPerson(); },
+  onShow: function () { if (this.data.slug && this.data.personId) return this.loadPerson(); },
   onPullDownRefresh: function () { this.loadPerson({ force: true }).then(function () { wx.stopPullDownRefresh(); }); },
   loadPerson: function (options) {
     const self = this;
+    const request = this._request = (this._request || 0) + 1;
     this.setData({ loading: true, error: '', openRelationId: '' });
     return app.getExample(this.data.slug, options).then(function (data) {
+      if (self._unloaded || request !== self._request) return;
       const example = data.example || {};
+      if (wx.setNavigationBarTitle) wx.setNavigationBarTitle({ title: example.title + ' · 示例人物' });
       const person = (example.persons || []).find(function (item) { return item._id === self.data.personId; });
       if (!person) throw new Error('该示例人物已不存在');
       const people = example.persons || [];
@@ -36,8 +40,10 @@ Page(launchAd.wrap({
         return { relationId: relation._id, person: personGender.decorate(Object.assign({}, related, { initial: (related.name || '家').slice(0, 1) })), label: labelForRelation(person, relation, related) };
       });
       self.setData({ loading: false, person: personGender.decorate(Object.assign({}, person, { initial: (person.name || '家').slice(0, 1), lifeText: person.lifeStatus === 'living' ? '健在' : person.lifeStatus === 'deceased' ? '已故' : '未填写' })), relatives: relatives });
-    }).catch(function (error) { self.setData({ loading: false, error: api.userMessage(error, '资料加载失败') }); });
+    }).catch(function (error) { if (self._unloaded || request !== self._request) return; self.setData({ loading: false, error: api.userMessage(error, '资料加载失败') }); });
   },
+  onUnload: function () { this._unloaded = true; this._request = (this._request || 0) + 1; },
+  noop: function () {},
   openRelative: function (event) {
     if (this._suppressRelationTapUntil && Date.now() < this._suppressRelationTapUntil) return;
     if (this.data.openRelationId) return this.setData({ openRelationId: '' });
@@ -63,6 +69,6 @@ Page(launchAd.wrap({
     this._relationTouch = null;
   },
   onRelationTouchCancel: function (event) { this.onRelationTouchEnd(event); },
-  explainCreate: function () { wx.navigateTo({ url: createFamilyUrl(this.data.slug, this.data.shareSource) }); },
+  explainCreate: function () { return growth.create('pages/example-person-detail/index', this.data.slug, createFamilyUrl(this.data.slug, this.data.shareSource)); },
   viewFromPerson: function () { wx.redirectTo({ url: '/pages/example/index?slug=' + encodeURIComponent(this.data.slug) + '&personId=' + encodeURIComponent(this.data.personId) + (this.data.shareSource ? '&source=share_menu' : '') }); }
-}));
+}, 'pages/example-person-detail/index'));

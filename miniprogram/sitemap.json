@@ -1,7 +1,66 @@
 {
-  "desc": "关于本文件的更多信息，请参考文档 https://developers.weixin.qq.com/miniprogram/dev/framework/sitemap.html",
-  "rules": [{
-    "action": "allow",
-    "page": "*"
-  }]
+  "desc": "仅收录公开介绍、修谱指南与官方虚构示例；真实家谱及邀请不公开索引。",
+  "rules": [
+    {
+      "action": "allow",
+      "page": "pages/share-intro/index",
+      "params": [],
+      "matching": "exact"
+    },
+    {
+      "action": "allow",
+      "page": "pages/about/index",
+      "params": [],
+      "matching": "exact"
+    },
+    {
+      "action": "allow",
+      "page": "pages/guides/index",
+      "params": [],
+      "matching": "exact"
+    },
+    {
+      "action": "allow",
+      "page": "pages/guide/index",
+      "params": [
+        "slug"
+      ],
+      "matching": "exact"
+    },
+    {
+      "action": "allow",
+      "page": "pages/examples/index",
+      "params": [],
+      "matching": "exact"
+    },
+    {
+      "action": "allow",
+      "page": "pages/example/index",
+      "params": [
+        "slug"
+      ],
+      "matching": "exact"
+    },
+    {
+      "action": "allow",
+      "page": "pages/example-person-detail/index",
+      "params": [
+        "slug",
+        "id"
+      ],
+      "matching": "exact"
+    },
+    {
+      "action": "allow",
+      "page": "pages/example-reading/index",
+      "params": [
+        "slug"
+      ],
+      "matching": "exact"
+    },
+    {
+      "action": "disallow",
+      "page": "*"
+    }
+  ]
 }

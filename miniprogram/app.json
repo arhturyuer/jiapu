@@ -29,7 +29,10 @@
     "pages/membership/index",
     "pages/activity/index",
     "pages/family-backup/index",
-    "pages/reading-settings/index"
+    "pages/reading-settings/index",
+    "pages/guides/index",
+    "pages/guide/index",
+    "pages/example-reading/index"
   ],
   "window": {
     "backgroundColor": "#F7F4EC",

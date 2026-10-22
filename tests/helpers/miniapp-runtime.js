@@ -27,6 +27,8 @@ function miniapp(options) {
       if (name === './config/env') return environment;
       if (name === './utils/activity-ledger') return ledgerContext.module.exports;
       if (name === './utils/profile-image-cache') return { clear() {} };
+      if (name === './utils/public-content') return require('../../miniprogram/utils/public-content');
+      if (name === './utils/growth') return { enter() {}, record() { return Promise.resolve(); } };
       return {};
     } };
   vm.runInNewContext(source('miniprogram/app.js'), context);

@@ -17,7 +17,7 @@ function countedDatabase(database, counts, segment = () => 'business') {
           counts.commits++; return result;
         } finally { counts.retries += Math.max(0, attempts - 1); }
       };
-      if (['doc', 'where', 'limit', 'skip', 'orderBy', 'field', 'aggregate', 'match', 'group', 'project'].includes(key)) {
+      if (typeof value === 'function' && ['doc', 'where', 'limit', 'skip', 'orderBy', 'field', 'aggregate', 'match', 'group', 'project'].includes(key)) {
         return (...args) => wrap(value.apply(object, args), name);
       }
       if (['get', 'count', 'end', 'set', 'update', 'remove', 'add'].includes(key)) return (...args) => {
@@ -38,10 +38,11 @@ function runtime(directory, database, options = {}) {
   const db = countedDatabase(database, counts, () => segments.getStore() || 'business');
   const file = path.resolve(directory, 'index.js');
   const localRequire = createRequire(file);
-  const actor = options.actor || 'fixture-actor';
+  const actor = options.actor === undefined ? 'fixture-actor' : options.actor;
   const cloud = { init() {}, database: () => db, DYNAMIC_CURRENT_ENV: Symbol('fixture'),
     getWXContext: () => ({ OPENID: actor, ENV: options.environment || 'fixture-staging' }),
     openapi: { security: { msgSecCheck: async () => ({ result: { suggest: 'pass' } }) } } };
+  Object.assign(cloud, options.cloud || {});
   const context = { module: { exports: {} }, exports: {}, __dirname: path.dirname(file), __filename: file,
     require: name => {
       if (name === 'wx-server-sdk') return cloud;

@@ -10,4 +10,4 @@ Page(launchAd.wrap({
   onShow: function () {
     this.setData(releaseInfo.getAboutReleaseInfo(typeof wx === 'undefined' ? null : wx));
   }
-}));
+}, 'pages/about/index'));

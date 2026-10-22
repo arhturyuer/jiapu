@@ -1,8 +1,7 @@
 <view class="navigation-space" style="{{navigationStyle}}" aria-hidden="true"></view>
-<view class="navigation" style="{{navigationStyle}}">
+<view class="navigation {{elderMode ? 'navigation-elder' : ''}}" style="{{navigationStyle}}">
   <view class="navigation-row" style="{{rowStyle}}">
-    <button class="navigation-back navigation-home" wx:if="{{home}}" style="{{backStyle}}" bindtap="goHome" disabled="{{homeNavigating}}" hover-class="navigation-title-pressed" aria-label="回家谱首页"><view class="navigation-home-icon" aria-hidden="true"><view class="navigation-home-roof"></view><view class="navigation-home-body"></view><view class="navigation-home-door"></view></view></button>
-    <button class="navigation-back" wx:elif="{{back}}" style="{{backStyle}}" bindtap="goBack" aria-label="{{canGoBack ? '返回上一页' : '返回家谱首页'}}"><text aria-hidden="true">{{canGoBack ? '‹' : '⌂'}}</text></button>
+    <button wx:if="{{home || back}}" class="navigation-back {{home || !canGoBack ? 'navigation-home' : ''}}" style="{{backStyle}}" bindtap="{{home ? 'goHome' : 'goBack'}}" disabled="{{home && homeNavigating}}" hover-class="navigation-title-pressed" aria-label="{{home || !canGoBack ? '返回家谱首页' : '返回上一页'}}"><image wx:if="{{home || !canGoBack}}" class="navigation-home-icon" src="/images/icons/navigation-home.svg" mode="aspectFit" aria-hidden="true" /><view wx:else class="navigation-back-icon" aria-hidden="true"></view></button>
     <button wx:if="{{titleSwitchable}}" class="navigation-title navigation-title-switch" style="{{titleStyle}}height:{{titleHeight}}px;position:absolute;display:flex;align-items:center;justify-content:flex-start;margin:0;padding:0;min-width:0;max-width:none;text-align:left;" bindtap="switchTitle" hover-class="navigation-title-pressed" aria-label="{{title + '，切换家谱'}}"><view class="navigation-switch-icon" aria-hidden="true"><view class="navigation-switch-line is-forward"></view><view class="navigation-switch-line is-backward"></view></view><text class="navigation-title-label" aria-hidden="true">{{title}}</text></button>
     <text wx:else class="navigation-title" style="{{titleStyle}}" aria-label="{{title}}">{{title}}</text>
   </view>

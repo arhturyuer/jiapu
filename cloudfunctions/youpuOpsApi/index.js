@@ -4,6 +4,8 @@ const crypto = require('crypto');
 const participation = require('./participation');
 const exampleValidation = require('./example-validation');
 const analyticsService = require('./analytics-service');
+const growthModule = require('./growth');
+const guidesModule = require('./guides');
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
@@ -883,6 +885,12 @@ async function commerceSummary(event, context) {
     sku: Object.keys(sku).map(function (key) { return sku[key]; }),
     generatedAt: now.toISOString()
   };
+}
+
+const growthService = growthModule.createService({ db, command: _, listAll, listByIds, maybeGet });
+async function growthSummary(event, context) {
+  await requireOperator(context, ['super_admin', 'operator']);
+  return growthService.summary(event);
 }
 
 const dataAnalytics = analyticsService.createService({ db, command: _, listAll, listByIds, maybeGet });
@@ -1962,7 +1970,9 @@ async function examplesArchive(event, context) {
 }
 
 const codeService = redemptionCodes.createService({ db, assert, requireOperator, opsMutate, writeOpsAudit, maybeGet });
+const guideHandlers = guidesModule.createService({ db, cloud, assert, requireOperator, opsMutate, writeOpsAudit });
 const handlers = {
+  ...guideHandlers,
   'commerce.records': codeService.listRecords,
   'commerce.recordDetail': codeService.detail,
   'commerce.codes.generate': codeService.generate,
@@ -1971,6 +1981,7 @@ const handlers = {
   'commerce.codes.revoke': codeService.revoke,
   'session.me': sessionMe,
   'analytics.summary': analyticsSummary,
+  'growth.summary': growthSummary,
   'analytics.details': analyticsDetails,
   'dashboard.summary': dashboardSummary,
   'commerce.summary': commerceSummary,

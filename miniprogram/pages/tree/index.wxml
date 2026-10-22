@@ -4,7 +4,7 @@
 <page-meta page-orientation="{{pageOrientation}}" bindresize="onPageResize"></page-meta>
 <view class="reading-root navigation-graph {{readingLarge ? 'reading-graph-page' : ''}} {{elderMode ? 'reading-elder' : ''}} {{readingLarge ? 'reading-large' : ''}}" style="{{readingStyle}}{{readingDockStyle}}--navigation-height:{{navigationHeight}}px;">
 <page-navigation title="{{currentFamily.name || '有谱'}}" page-gutter title-switchable="{{currentFamily && !loading && !loadError && !accountPending}}" bindtitleswitch="openFamilySheet" bindlayout="onNavigationLayout" />
-<view class="tree-page {{isLandscape && !isLargeDevice ? 'is-landscape' : ''}} {{isLargeDevice ? 'is-large-device' : ''}} {{isCleanScreen ? 'is-clean-screen' : ''}}" style="--tree-toolbar-height:{{toolbarHeight}}px;">
+<view class="tree-page browse-graph {{isLandscape && !isLargeDevice ? 'is-landscape' : ''}} {{isLargeDevice ? 'is-large-device' : ''}} {{isCleanScreen ? 'is-clean-screen' : ''}}" style="--tree-toolbar-height:{{toolbarHeight}}px;">
   <view class="loading-panel" wx:if="{{loading}}">
     <view aria-hidden="true" class="loading-dot"></view>
     <text>正在整理家谱...</text>
@@ -191,6 +191,10 @@
             <text class="action-title">{{selectedPerson.isCollapsed ? '展开后代' : '折叠后代'}}</text>
             <text class="action-desc">{{selectedPerson.isCollapsed ? '恢复显示这个分支' : '暂时收起这个分支'}}</text>
           </view>
+          <view data-reading-control="true" aria-role="button" class="action-cell" bindtap="openSpouseOrderSheet" wx:if="{{canEdit && selectedPerson.hasSpouse}}">
+            <text class="action-title">调整夫妻顺序</text>
+            <text class="action-desc">包含本人，按从左到右排列</text>
+          </view>
           <view data-reading-control="true" aria-role="button" class="action-cell" bindtap="openChildOrderSheet" wx:if="{{canEdit && selectedPerson.hasMultipleChildren}}">
             <text class="action-title">调整子女排行</text>
             <text class="action-desc">按出生日期与已确认顺序排列</text>
@@ -219,6 +223,28 @@
           </view>
         </view>
       </view>
+    </view>
+  </view>
+
+  <view class="sheet-mask" wx:if="{{showSpouseOrder}}" bindtap="closeSpouseOrderSheet">
+    <view data-reading-control="true" aria-role="button" class="bottom-sheet child-order-sheet" catchtap="stopEvent">
+      <view class="sheet-handle"></view>
+      <view class="sheet-title">调整夫妻顺序</view>
+      <text class="child-order-help">本人及配偶按图上从左到右排列，可自由调整。</text>
+      <scroll-view class="child-order-list" scroll-y>
+        <view class="child-order-row" wx:for="{{spouseItems}}" wx:key="_id">
+          <view class="small-avatar gender-avatar {{item.genderClass}}">{{item.initial}}</view>
+          <view class="child-order-copy">
+            <view class="child-order-name-row"><text class="child-order-name">{{item.name}}</text><text class="child-order-rank" wx:if="{{item.isSelf}}">本人</text></view>
+          </view>
+          <view class="child-order-actions">
+            <view data-reading-control="true" aria-role="button" class="child-order-button {{(!item.canMoveUp || spouseSaving) ? 'is-disabled' : ''}}" data-id="{{item._id}}" data-direction="up" catchtap="moveSpouseOrder">上移</view>
+            <view data-reading-control="true" aria-role="button" class="child-order-button {{(!item.canMoveDown || spouseSaving) ? 'is-disabled' : ''}}" data-id="{{item._id}}" data-direction="down" catchtap="moveSpouseOrder">下移</view>
+          </view>
+        </view>
+      </scroll-view>
+      <button class="primary-button child-order-save" loading="{{spouseSaving}}" disabled="{{!spouseDirty || spouseSaving}}" bindtap="saveSpouseOrder">{{spouseDirty ? '保存顺序' : '顺序未变更'}}</button>
+      <button class="secondary-button" disabled="{{spouseSaving}}" bindtap="closeSpouseOrderSheet">取消</button>
     </view>
   </view>
 

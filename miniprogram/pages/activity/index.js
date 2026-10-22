@@ -11,6 +11,7 @@ const ACTION_OPTIONS = [
   { key: 'relation.linkExisting', label: '添加家庭关系' },
   { key: 'relation.remove', label: '移除家庭关系' },
   { key: 'relation.reorderChildren', label: '调整子女排行' },
+  { key: 'relation.reorder_spouses', label: '调整夫妻顺序' },
   { key: 'invite.create', label: '创建家庭邀请' },
   { key: 'invite.revoke', label: '撤销家庭邀请' },
   { key: 'membership.updateRole', label: '调整家人权限' },

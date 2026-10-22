@@ -48,7 +48,7 @@ test('消息字段和跳转链接指向对应家谱及待处理页', function ()
 test('业务事务记录通知事件，分享入口只在点击时请求订阅', function () {
   const api = source('cloudfunctions/youpuUserApi/index.js');
   const jobs = source('cloudfunctions/youpuJobs/index.js');
-  assert.equal((api.match(/recordNotificationEvent\(transaction, 'review'/g) || []).length, 4);
+  assert.equal((api.match(/recordNotificationEvent\(transaction, 'review'/g) || []).length, 5);
   assert.match(api, /if \(!existing\) await recordNotificationEvent\(transaction, 'join'/);
   assert.match(api, /await sendNotificationEvent\(eventId\)/);
   assert.match(api, /cloud\.openapi\.subscribeMessage\.send\(payload\)/);

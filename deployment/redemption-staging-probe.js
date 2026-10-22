@@ -131,7 +131,7 @@ async function runCases(run) {
   const activeGrants = await list('membership_grants', { familyId: f.familyIds[0], status: 'active' });
   check(activeGrants.length === 1 && activeGrants[0].recordType === 'redemption', 'PROBE_REFUND_GRANTS');
   results.refundRetainsRedemption = true; results.purchaseAfterRedemption = true; results.batchSize50 = true;
-  const schema = await read(db, 'system_config', 'schema'); check(schema.version === 12, 'PROBE_SCHEMA'); results.schemaVersion = schema.version;
+  const schema = await read(db, 'system_config', 'schema'); check(schema.version === 14, 'PROBE_SCHEMA'); results.schemaVersion = schema.version;
   const gateway = await cloud.callFunction({ name: 'youpuUserApi', data: { type: 'membership.redeem', familyId: f.familyIds[6], code: unused[3].code, requestId: f.prefix + '_gateway' } });
   check(gateway.result && !gateway.result.success && ['UNAUTHENTICATED', 'NO_FAMILY_ACCESS'].includes(gateway.result.code), 'PROBE_USER_GATEWAY');
   const deniedOps = await cloud.callFunction({ name: 'youpuOpsApi', data: { action: 'commerce.codes.generate', productId: 'youpu_vip_30d', quantity: 1, requestId: f.prefix + '_gateway_ops' } });

@@ -1,6 +1,7 @@
 const launchAd = require('../../utils/launch-ad');
 const app = getApp();
 const api = require('../../utils/api');
+const growth = require('../../utils/growth');
 
 Page(launchAd.wrap({
   data: {
@@ -16,11 +17,11 @@ Page(launchAd.wrap({
 
   onLoad: function (options) {
     this._selectionMode = Boolean(options && options.select === '1');
-    this.setData({ shareSource: options && options.source === 'share_menu' ? 'share_menu' : '' });
-    this.loadExamples();
+    this.setData({ selectionMode: this._selectionMode, shareSource: options && options.source === 'share_menu' ? 'share_menu' : '' });
+    return this.loadExamples();
   },
 
-  onUnload: function () { if (this._tagTimer) clearTimeout(this._tagTimer); },
+  onUnload: function () { this._unloaded = true; this.loadRequestId = (this.loadRequestId || 0) + 1; if (this._tagTimer) clearTimeout(this._tagTimer); },
 
   onPullDownRefresh: function () {
     if (this._tagTimer) clearTimeout(this._tagTimer);
@@ -33,7 +34,7 @@ Page(launchAd.wrap({
     const requestId = this.loadRequestId;
     this.setData({ loading: true, error: '' });
     return app.getExamplesList(this.data.activeTag, options).then(function (data) {
-      if (requestId !== self.loadRequestId) return;
+      if (self._unloaded || requestId !== self.loadRequestId) return;
       self.setData({
         loading: false,
         examples: (data.items || []).map(function (item) {
@@ -44,7 +45,7 @@ Page(launchAd.wrap({
         expandedById: {}
       }, function () { self.measureDescriptions(requestId); });
     }).catch(function (error) {
-      if (requestId !== self.loadRequestId) return;
+      if (self._unloaded || requestId !== self.loadRequestId) return;
       self.setData({ loading: false, error: api.userMessage(error, '示例家谱暂时不可用') });
     });
   },
@@ -56,7 +57,7 @@ Page(launchAd.wrap({
       .selectAll('.card-desc-visible').boundingClientRect()
       .selectAll('.card-desc-measure').boundingClientRect()
       .exec(function (results) {
-        if (requestId !== self.loadRequestId) return;
+        if (self._unloaded || requestId !== self.loadRequestId) return;
         const visible = results[0] || [];
         const full = results[1] || [];
         const overflowById = {};
@@ -101,8 +102,8 @@ Page(launchAd.wrap({
   },
 
   createFamily: function () {
-    wx.navigateTo({ url: this.data.shareSource
+    return growth.create('pages/examples/index', '', this.data.shareSource
       ? '/pages/create-family/index?source=share_menu&opened=1'
-      : '/pages/create-family/index?source=examples' });
+      : '/pages/create-family/index?source=examples');
   }
-}));
+}, 'pages/examples/index'));

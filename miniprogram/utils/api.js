@@ -42,6 +42,14 @@ function normalizeCloudError(error) {
 }
 
 function call(type, data) {
+  const currentApp = typeof getApp === 'function' && getApp();
+  if (!/^(public\.|growth\.|auth\.)/.test(type) && currentApp && currentApp._publicBrowsing !== undefined &&
+      currentApp.globalData && !currentApp.globalData.user && currentApp.ensureLogin) {
+    return currentApp.ensureLogin().then(function () {
+      if (!currentApp.globalData.user) throw Object.assign(new Error('请重新打开小程序后再试'), { code: 'UNAUTHENTICATED' });
+      return call(type, data);
+    });
+  }
   const payload = Object.assign({}, data || {});
   if (type === 'change.review' && payload.requestId && !payload.changeRequestId) {
     payload.changeRequestId = payload.requestId;

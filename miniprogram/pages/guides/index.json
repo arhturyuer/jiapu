@@ -1,0 +1,7 @@
+{
+  "navigationBarTitleText": "修谱指南",
+  "usingComponents": {
+    "page-navigation": "/components/page-navigation/index"
+  },
+  "navigationStyle": "custom"
+}

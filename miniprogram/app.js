@@ -1,4 +1,6 @@
 const api = require('./utils/api');
+const publicContent = require('./utils/public-content');
+const growth = require('./utils/growth');
 const environmentConfig = require('./config/env');
 const launchAd = require('./utils/launch-ad');
 const reading = require('./utils/reading-preference');
@@ -71,11 +73,15 @@ App({
 
     this.restoreLocalState();
     launchAd.begin(this, options);
-    this.ensureLogin().catch(function () {});
+    this._publicBrowsing = publicContent.isPublic(this._launchAd.target.path);
+    if (!this._publicBrowsing) this.ensureLogin().catch(function () {});
   },
 
-  onShow: function () {
+  onShow: function (options) {
     reading.refresh();
+    growth.enter(options);
+    if (options && options.path && options.path !== 'pages/launch-ad/index') this._publicBrowsing = publicContent.isPublic(options.path);
+    if (this._publicBrowsing) return;
     const self = this;
     if (this._analyticsTimer) clearInterval(this._analyticsTimer);
     // Local date checks only; daily dedup prevents periodic cloud requests.
@@ -194,7 +200,7 @@ App({
           if (error.code !== 'UNKNOWN_ACTION') throw error;
         }
       }
-      if (!data) { data = await api.call('auth.login'); fetchedAt = Date.now(); }
+      if (!data) { data = await api.call('auth.login', self._growthTouched ? { growthEntry: true } : undefined); fetchedAt = Date.now(); }
       self.assertSessionVersion(sessionVersion);
       if (scope !== self.loginScope()) throw Object.assign(new Error('环境已变化，请重新进入'), { code: 'ACCOUNT_SESSION_CHANGED' });
       const previous = self.globalData.user || candidate && candidate.user;
@@ -474,6 +480,7 @@ App({
   },
 
   recordVisibleActivity: function () {
+    if (this._publicBrowsing) return;
     this.recordVisit('foreground');
     if (typeof getCurrentPages !== 'function') return;
     const pages = getCurrentPages();
@@ -498,14 +505,14 @@ App({
   getExamplesList: function (tag, options) {
     const selectedTag = tag || '';
     return this.loadCached(this.getCacheEntry('examplesList', selectedTag), function () {
-      return api.call('examples.list', { tag: selectedTag });
+      return api.call('public.examples.list', { tag: selectedTag });
     }, options);
   },
 
   getExample: function (slug, options) {
     return this.loadCached(this.getCacheEntry('example', slug), function () {
-      return api.call('examples.get', { slug: slug });
-    }, options).then(data => { this.recordExampleVisit(slug); return data; });
+      return api.call('public.examples.get', { slug: slug });
+    }, options);
   },
 
   getPreference: function (familyId, options) {
@@ -680,7 +687,7 @@ App({
     if (data.pending) { this.invalidateCache({ dashboard: familyId }); return; }
     if (type === 'person.update' && data.person) this.applyPersonUpdate(familyId, data.person);
     else if (type === 'change.review' && !data.approved) this.invalidateCache({ dashboard: familyId });
-    else if (['person.createRelated', 'person.delete', 'relation.linkExisting', 'relation.remove', 'relation.reorderChildren', 'change.review'].indexOf(type) >= 0) this.invalidateFamilyContent(familyId, data.familyCounters);
+    else if (['person.createRelated', 'person.delete', 'relation.linkExisting', 'relation.remove', 'relation.reorderChildren', 'relation.reorderSpouses', 'change.review'].indexOf(type) >= 0) this.invalidateFamilyContent(familyId, data.familyCounters);
   },
 
   invalidateFamilyData: function (familyId) {

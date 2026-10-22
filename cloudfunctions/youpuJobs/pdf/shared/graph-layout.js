@@ -29,6 +29,7 @@ const CROSSING_RADIUS = 7;
 const kinship = require('./kinship');
 const personGenderDisplay = require('./person-gender');
 const childRank = require('./child-rank');
+const spouseOrder = require('./spouse-order');
 const personDate = require('./person-date');
 const nodePresentation = require('./node-presentation');
 
@@ -231,7 +232,7 @@ function assignGenerations(persons, relations, components) {
   return result;
 }
 
-function orderSpouseMembers(members, relations) {
+function defaultSpouseMembers(members, relations) {
   if (members.length <= 1) return members.slice();
   if (members.length === 2) {
     return members.slice().sort(function (first, second) {
@@ -262,6 +263,10 @@ function orderSpouseMembers(members, relations) {
     else right.push(person);
   });
   return left.concat(hub, right);
+}
+
+function orderSpouseMembers(members, relations) {
+  return spouseOrder.apply(members, relations, defaultSpouseMembers(members, relations));
 }
 
 function connectedPersonGroups(persons, relations) {

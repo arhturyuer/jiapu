@@ -1,0 +1,51 @@
+/* Shared family and example browsing controls. */
+.browse-graph .tree-toolbar { height:auto; min-height:64px; padding:8px 32rpx; gap:8px; }
+.browse-graph .view-mode-entry, .browse-graph .toolbar-export { min-height:44px; display:flex; align-items:center; gap:6px; padding:8px; border:1px solid #D8DED9; border-radius:10px; color:#245C4A; background:transparent; font-size:var(--reading-font-14,16px); line-height:1.5; }
+.browse-graph .view-mode-entry { flex:1; min-width:0; justify-content:space-between; }
+.browse-graph .view-mode-label { min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.browse-graph .toolbar-arrow { position:relative; display:block; flex:none; align-self:center; width:12px; height:12px; }
+.browse-graph .toolbar-arrow::before, .browse-graph .toolbar-arrow::after { content:''; position:absolute; top:50%; width:7px; height:1.5px; margin-top:-.75px; border-radius:1px; background:currentColor; }
+.browse-graph .toolbar-arrow::before { left:0; transform:rotate(45deg); }
+.browse-graph .toolbar-arrow::after { right:0; transform:rotate(-45deg); }
+.browse-graph .toolbar-action-label { flex:none; white-space:nowrap; overflow-wrap:normal; word-break:keep-all; }
+.browse-graph .toolbar-export { flex:none; width:72px; min-width:calc(2em + 40px); justify-content:center; white-space:nowrap; }
+.browse-graph .tree-toolbar .toolbar-share { flex:none; width:96px; min-width:calc(4em + 24px); height:44px; padding:8px; white-space:nowrap; }
+.browse-graph .family-option-copy { flex:1; min-width:0; }
+.browse-graph .family-option-name { white-space:normal; overflow-wrap:anywhere; }
+.browse-graph .family-option-check { flex:none; margin-left:12px; white-space:nowrap; }
+.reading-large .browse-graph .tree-toolbar { display:flex; flex-wrap:wrap; height:auto; gap:8px; }
+.reading-large .browse-graph .view-mode-entry { flex:1 0 100%; min-height:var(--reading-target,44px); }
+.reading-large .browse-graph .view-mode-label { white-space:normal; overflow-wrap:anywhere; }
+.reading-large .browse-graph .tree-toolbar .toolbar-export, .reading-large .browse-graph .tree-toolbar .toolbar-share { flex:1 0 calc(4em + 24px); width:auto; min-width:calc(4em + 24px); height:auto; min-height:var(--reading-target,44px); padding:8px; white-space:nowrap; overflow-wrap:normal; }
+.reading-root .browse-graph.is-landscape .tree-toolbar, .reading-root .browse-graph.is-clean-screen .tree-toolbar { display:none; }
+.reading-root .browse-graph .graph-controls { position:absolute; display:block; right:var(--graph-tools-right,12px); bottom:12px; width:var(--graph-tools-width,44px); height:var(--graph-tools-height,294px); max-width:calc(100% - 24px); max-height:none; overflow:visible; }
+.browse-graph .graph-tools-scroll { width:100%; height:100%; }
+.browse-graph .graph-controls-grid { display:grid; grid-template-columns:repeat(var(--graph-tools-columns,1),var(--graph-tool-width,44px)); gap:6px; }
+.reading-root .browse-graph .graph-control { width:var(--graph-tool-width,44px); height:var(--graph-tool-height,44px); min-width:var(--reading-target,44px); min-height:var(--reading-target,44px); padding:0; border-width:1px; border-radius:10px; font-size:var(--reading-font-17,17px); line-height:1.5; }
+.reading-root .browse-graph .graph-control-text { font-size:var(--reading-font-12,14px); }
+.browse-graph .graph-control-label { display:block; flex:none; white-space:nowrap; }
+.browse-graph .graph-control:last-child { grid-column:-2 / -1; }
+.reading-root .browse-graph.is-clean-screen .graph-controls { display:none; }
+.reading-root .browse-graph .graph-help { position:absolute; left:12px; right:auto; bottom:12px; max-width:calc(100% - 88px); transform:none; white-space:normal; }
+.reading-root .browse-graph.is-landscape .graph-help { display:none; }
+.reading-root .browse-graph .perspective-sheet { display:flex; flex-direction:column; min-height:0; max-height:100%; }
+.browse-graph .view-full-option { flex:none; min-height:var(--reading-target,44px); padding:12px; display:flex; justify-content:space-between; align-items:center; gap:12px; border:1px solid #D8DED9; border-radius:10px; }
+.browse-graph .view-full-option.selected, .browse-graph .perspective-option.selected { background:#E4EFEA; }
+.browse-graph .view-picker-help { flex:none; display:block; margin:12px 0 8px; font-size:var(--reading-font-12,14px); color:#65706A; }
+.browse-graph .perspective-sheet .person-search { flex:none; }
+.browse-graph .perspective-sheet .perspective-list { flex:1; height:0; min-height:120px; }
+.browse-graph .perspective-name { min-width:0; overflow-wrap:anywhere; }
+.browse-graph .view-selected { flex:none; margin-left:auto; color:#245C4A; font-size:var(--reading-font-12,14px); }
+.browse-graph .export-sheet .export-option { width:100%; min-height:60px; padding:14px 0; display:flex; flex-direction:column; align-items:flex-start; text-align:left; gap:6px; color:#17231F; background:transparent; border-bottom:1px solid #D8DED9; border-radius:0; line-height:1.5; }
+.browse-graph .export-option-title { font-size:var(--reading-font-16,16px); font-weight:600; }
+.browse-graph .export-option-desc { font-size:var(--reading-font-12,14px); color:#65706A; }
+.browse-graph .export-option[disabled] { opacity:.55; }
+@media (min-width:600px) {
+  .browse-graph .tree-toolbar { padding-left:16px; padding-right:16px; }
+  /* Wide windows have room for all three controls, including enlarged text. */
+  .reading-large .browse-graph .tree-toolbar { flex-wrap:nowrap; }
+  .reading-large .browse-graph .view-mode-entry { flex:1; min-width:0; }
+  .reading-large .browse-graph .view-mode-label { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .reading-large .browse-graph .tree-toolbar .toolbar-export { flex:none; width:72px; min-width:calc(2em + 40px); }
+  .reading-large .browse-graph .tree-toolbar .toolbar-share { flex:none; width:96px; min-width:calc(4em + 24px); }
+}

@@ -1,6 +1,8 @@
 const commerceConfig = require('../config/commerce');
 const adAccess = require('./ad-access');
 const deviceLayout = require('./device-layout');
+const publicContent = require('./public-content');
+const growth = require('./growth');
 const LAUNCH_PAGE = 'pages/launch-ad/index';
 const TAB_PAGES = ['pages/tree/index', 'pages/members/index', 'pages/profile/index'];
 
@@ -8,9 +10,9 @@ function begin(app, options) {
   const unit = commerceConfig.resolveLaunch(app.globalData.environment);
   const supported = typeof wx.canIUse === 'function' && wx.canIUse('ad-custom');
   const entry = options || {};
-  app._launchAd = { phase: unit && supported ? 'pending' : 'finished', unit: unit,
-    entry: entry, target: { path: entry.path && entry.path !== LAUNCH_PAGE ? entry.path : 'pages/tree/index',
-      query: Object.assign({}, entry.query || {}) }, family: null };
+  const target = publicContent.defaultTarget(entry, Boolean(app._preferredFamilyId || app.globalData.currentFamily || app.getCurrentFamily && app.getCurrentFamily()));
+  app._launchAd = { phase: !publicContent.isPublic(target.path) && unit && supported ? 'pending' : 'finished', unit: unit,
+    entry: entry, target: target, family: null };
 }
 
 // Membership is checked on the launch page, never while a business page is visible.
@@ -57,8 +59,33 @@ function restore(app, callbacks) {
 
 // Wrap page definitions explicitly, leaving the global Page constructor intact.
 // Deferred lifecycle calls also support retained tab pages after switchTab.
-function wrap(definition) {
+function wrap(definition, publicPath) {
   const app = getApp();
+  if (publicPath) {
+    ['onLoad', 'onShow'].forEach(function (name) {
+      const original = definition[name];
+      definition[name] = function () {
+        app._publicBrowsing = true;
+        this._growthHidden = false;
+        const page = this;
+        const result = original && original.apply(page, arguments);
+        Promise.resolve(result).then(function () {
+          if (page._unloaded || page._growthHidden || page._hidden || page.data.loading || page.data.error) return;
+          if (publicPath === 'pages/legal/index') return;
+          const slug = page.data.slug || page.data.guide && page.data.guide.slug || '';
+          Promise.resolve(page._landingReceipt).then(function () {
+            if (!page._growthHidden && !page._unloaded) growth.record(publicPath === 'pages/example/index' ? 'example' : 'view', publicPath, slug, page.data.isDefaultEntry ? 'default_example' : '');
+          });
+        }).catch(function () {});
+        return result;
+      };
+    });
+    ['onHide', 'onUnload'].forEach(function (name) {
+      const original = definition[name];
+      definition[name] = function () { this._growthHidden = true; if (original) return original.apply(this, arguments); };
+    });
+    return deviceLayout.wrap(definition);
+  }
   const originals = {};
   ['onLoad', 'onShow', 'onReady', 'onHide', 'onUnload'].forEach(function (name) { originals[name] = definition[name]; });
   function enqueue(page, name, args) {
@@ -80,6 +107,7 @@ function wrap(definition) {
   }
   definition.onLoad = function (options) {
     const page = this;
+    app._publicBrowsing = false;
     const state = app._launchAd;
     if (!state || state.phase !== 'pending') {
       if (state && state.restoring && state.target && page.route === state.target.path) {
@@ -99,6 +127,7 @@ function wrap(definition) {
   };
   ['onShow', 'onReady'].forEach(function (name) {
     definition[name] = function () {
+      if (name === 'onShow') app._publicBrowsing = false;
       if (!this._launchGate) return originals[name] && originals[name].apply(this, arguments);
       if (name === 'onShow') this._launchGate.visible = true;
       enqueue(this, name, Array.from(arguments));

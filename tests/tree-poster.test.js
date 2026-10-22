@@ -134,7 +134,8 @@ test('真实与示例家谱共用一键生成和两个底部操作', function ()
   const previewScript = fs.readFileSync(path.join(root, 'miniprogram/pages/poster-preview/index.js'), 'utf8');
   assert.match(treeTemplate, /bindtap="openExportSheet"/);
   assert.match(treeTemplate, /data-format="image" bindtap="chooseExport" disabled="\{\{posterGenerating\}\}"/);
-  assert.match(exampleTemplate, /bindtap="openDisplaySettings">设置<\/view><view[^>]*bindtap="generatePoster">图片<\/view>/);
+  assert.match(exampleTemplate, /bindtap="openExportSheet"/);
+  assert.match(exampleTemplate, /data-format="image" bindtap="chooseExport" disabled="\{\{posterGenerating\}\}"/);
   assert.doesNotMatch(treeTemplate, /currentRole[^>]*generatePoster/);
   assert.match(inviteUtility, /api\.call\('invite\.createPoster'/);
   assert.match(treeScript, /treePosterFlow\.generate\(this/);
@@ -226,7 +227,7 @@ test('示例家谱图片码保留全谱或人物视角', function () {
   assert.match(source, /async function examplesResolvePoster[\s\S]*\^e\[0-9a-f\]\{20\}\[fp\]\[0-9a-f\]\{10\}\$/);
   assert.match(source, /'examples\.getMiniCode': examplesGetMiniCode/);
   assert.match(source, /'examples\.resolvePoster': examplesResolvePoster/);
-  assert.match(examplePage, /decodedScene\(value\.scene\)[\s\S]*api\.call\('examples\.resolvePoster'/);
+  assert.match(examplePage, /decodedScene\(value\.scene\)[\s\S]*api\.call\('public\.examples\.resolvePoster'/);
   assert.match(examplePage, /_shareSource = this\._scene \? 'example_poster'/);
 });
 

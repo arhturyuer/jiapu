@@ -42,7 +42,7 @@ function bookModel(snapshot) {
     }
   }
   for (const key of spouseEdges) {
-    const list = JSON.parse(key); list.forEach(id => used.add(id));
+    const list = JSON.parse(key).sort((a, b) => ids.get(a).localeCompare(ids.get(b))); list.forEach(id => used.add(id));
     if (!representedSpouses.has(key)) units.push({ key: 'spouse:' + key, parents: list, children: [], spouse: true });
   }
   people.filter(person => !used.has(person._id)).forEach(person => units.push({ key: 'person:' + person._id, parents: [person._id], children: [], spouse: false }));

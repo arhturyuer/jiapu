@@ -5,6 +5,20 @@ const nodePresentation = require('./node-presentation');
 // the complete graph, before any branches are hidden.
 function compact(graph, relations, metrics, connect) {
   const runs = [];
+  const unitByPerson = {};
+  const fathersByChild = {};
+  graph.units.forEach(function (unit) {
+    unit.members.forEach(function (person) { unitByPerson[person._id] = unit; });
+  });
+  relations.forEach(function (relation) {
+    if (relation.type !== 'parent_child') return;
+    const parentUnit = unitByPerson[relation.fromPersonId];
+    if (!parentUnit || !parentUnit.members.some(function (person) {
+      return person._id === relation.fromPersonId && person.gender === 'male';
+    })) return;
+    if (!fathersByChild[relation.toPersonId]) fathersByChild[relation.toPersonId] = [];
+    fathersByChild[relation.toPersonId].push(relation.fromPersonId);
+  });
   Object.keys(graph.unitsByGeneration).forEach(function (level) {
     const row = graph.unitsByGeneration[level].slice().sort(function (a, b) { return a.x - b.x; });
     const groups = [];
@@ -12,11 +26,29 @@ function compact(graph, relations, metrics, connect) {
       const parent = graph.primaryParentByRoot[unit._id];
       const source = graph.familySourceByChildRoot[unit._id];
       const key = parent && source ? parent + '\0' + source.key : 'root:' + unit._id;
+      const fathers = unit.members.reduce(function (ids, person) {
+        return ids.concat((fathersByChild[person._id] || []).filter(function (id) {
+          return unitByPerson[id]._id === parent && ids.indexOf(id) < 0;
+        }));
+      }, []);
       const previous = groups[groups.length - 1];
-      if (previous && previous.key === key) previous.units.push(unit);
-      else groups.push({ key: key, units: [unit] });
+      if (previous && previous.key === key) {
+        previous.units.push(unit);
+        previous.fathers = previous.fathers.filter(function (id) { return fathers.indexOf(id) >= 0; });
+      } else groups.push({ key: key, parent: parent, fathers: fathers, units: [unit] });
     });
+    const families = [];
     groups.forEach(function (group) {
+      const previous = families[families.length - 1];
+      const common = previous ? previous.fathers.filter(function (id) { return group.fathers.indexOf(id) >= 0; }) : [];
+      // Marriage grouping still owns the wires and order. Only adjacent groups
+      // with an actual common father may share the unused space beside a branch.
+      if (previous && group.parent && previous.parent === group.parent && common.length) {
+        previous.units = previous.units.concat(group.units);
+        previous.fathers = common;
+      } else families.push(group);
+    });
+    families.forEach(function (group) {
       const units = group.units;
       if (!units.some(function (unit) { return graph.childrenByRoot[unit._id].length; })) return;
       function movable(unit) {
@@ -48,10 +80,8 @@ function compact(graph, relations, metrics, connect) {
   if (!runs.length) return;
 
   const nodes = {};
-  const unitByPerson = {};
   graph.units.forEach(function (unit) {
     unit.members.forEach(function (person) {
-      unitByPerson[person._id] = unit;
       nodes[person._id] = { _id: person._id, x: unit.x + unit.memberOffsets[person._id],
         y: metrics.marginY + unit.generation * metrics.gapY,
         width: nodePresentation.width(person.name, metrics.nodeWidth, metrics.nameLayout === 'vertical', metrics.legacyGeometry) };

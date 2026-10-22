@@ -1,0 +1,14 @@
+<view class="reading-root {{elderMode ? 'reading-elder' : ''}} {{readingLarge ? 'reading-large' : ''}}" style="{{readingStyle}}">
+  <page-navigation title="修谱指南" back page-gutter />
+  <view class="page-shell guide-page">
+    <view wx:if="{{loading}}" class="empty-panel">正在读取修谱指南…</view>
+    <view wx:elif="{{error}}" class="empty-panel"><text>{{error}}</text><button class="secondary-button" bindtap="loadGuides">重新读取</button></view>
+    <block wx:else>
+      <text class="guide-title">{{settings.title}}</text><text class="guide-summary">{{settings.summary}}</text>
+      <navigator class="surface-card guide-link" wx:for="{{guides}}" wx:key="slug" url="/pages/guide/index?slug={{item.slug}}"><text class="guide-heading">{{item.title}}</text><text class="guide-summary">{{item.summary}}</text></navigator>
+      <view wx:if="{{!guides.length}}" class="empty-panel">暂无已发布的指南，稍后再来看看。</view>
+    </block>
+    <view class="guide-nav"><navigator url="/pages/share-intro/index">认识有谱</navigator><navigator url="/pages/examples/index">官方示例家谱</navigator><navigator url="/pages/about/index">关于有谱</navigator></view>
+    <button class="primary-button guide-create" bindtap="createFamily">创建我的家谱</button>
+  </view>
+</view>

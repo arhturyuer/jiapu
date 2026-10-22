@@ -42,6 +42,7 @@ if (name === 'node-stub' && /check(?:-docs)?\\.mjs$/.test(args[0] || '')) {
   const result = cp.spawnSync(${JSON.stringify(process.execPath)}, args, {stdio:'inherit', env:process.env});
   process.exit(result.status || (result.error ? 1 : 0));
 }
+if (name === 'node-stub' && (args[0] || '').endsWith('package-spouse-order.mjs')) process.exit(process.env.FAIL_STAGE === 'spouse' ? 22 : 0);
 if (name === 'node-stub' && (args[0] || '').endsWith('package-pdf-layout.mjs')) process.exit(process.env.FAIL_STAGE === 'layout' ? 20 : 0);
 if (name === 'node-stub' && (args[0] || '').endsWith('package-membership.mjs')) process.exit(process.env.FAIL_STAGE === 'membership' ? 21 : 0);
 if (name === 'node-stub' && args[0] === '--check') process.exit(process.env.FAIL_STAGE === 'syntax' ? 17 : 0);
@@ -115,7 +116,7 @@ test('检查并发默认四个，可降低至一个，非法或超过四个在�
 
 test('语法、文档、测试和后台检查失败均阻止后续阶段并传播退出状态', function (t) {
   const f = fixture(t);
-  for (const [stage, code] of [['syntax', 17], ['layout', 20], ['membership', 21], ['tests', 18], ['admin', 19]]) {
+  for (const [stage, code] of [['syntax', 17], ['spouse', 22], ['layout', 20], ['membership', 21], ['tests', 18], ['admin', 19]]) {
     const { result, calls } = f.run([], { FAIL_STAGE: stage });
     assert.equal(result.status, code);
     if (stage !== 'admin') assert.ok(!calls.some(function (call) { return call.name === 'pnpm-stub'; }));

@@ -12,7 +12,7 @@ Page(deviceLayout.wrap({
     this._hidden = false;
     const state = app._launchAd;
     if (!state || !state.target) {
-      app._launchAd = { phase: 'finished', target: { path: 'pages/tree/index', query: {} } };
+      app._launchAd = { phase: 'finished', target: require('../../utils/public-content').defaultTarget({}, Boolean(app._preferredFamilyId || app.getCurrentFamily && app.getCurrentFamily())) };
       this.finish();
       return;
     }

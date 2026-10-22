@@ -7,4 +7,5 @@
 
   <view class="about-section"><text class="section-title">版本更新</text><view class="release-list surface-card" wx:if="{{releaseNotes.length}}"><view class="release-item" wx:for="{{releaseNotes}}" wx:key="version"><view class="release-heading"><text class="release-version">v{{item.version}}</text><text class="current-tag" wx:if="{{item.isCurrent}}">当前版本</text></view><text class="release-summary">{{item.summary}}</text></view></view><view class="release-empty surface-card" wx:else>更新记录将在下一版本发布后显示。</view></view>
 </view>
+<view class="public-links"><navigator url="/pages/guides/index">修谱指南</navigator><navigator url="/pages/examples/index">官方示例家谱</navigator><navigator url="/pages/share-intro/index">认识有谱</navigator></view>
 </view>
