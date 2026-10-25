@@ -1,0 +1,25 @@
+<view class="reading-root {{elderMode ? 'reading-elder' : ''}} {{readingLarge ? 'reading-large' : ''}}" style="{{readingStyle}}{{readingDockStyle}}">
+<view class="page-shell contribution-page">
+  <text class="section-title">资料编写记录</text>
+  <text class="intro">{{personId ? '这位人物的资料与相关亲属关系' : '这份家谱的人物、关系与家谱资料'}}，由家人共同编写。</text>
+  <picker aria-label="按编写者筛选" range="{{authors}}" range-key="name" value="{{authorIndex}}" bindchange="changeAuthor" disabled="{{loading}}"><view class="author-picker surface-card"><text>{{authors[authorIndex].name}}</text><text aria-hidden="true">⌄</text></view></picker>
+  <view class="loading-panel" wx:if="{{loading}}"><view aria-hidden="true" class="loading-dot"></view><text>正在读取编写记录…</text></view>
+  <view class="empty-panel" wx:elif="{{error}}"><text class="empty-title">暂时无法读取记录</text><text class="empty-description">{{error}}</text><button class="secondary-button" bindtap="retry">重新加载</button></view>
+  <block wx:else>
+    <view class="record surface-card" wx:for="{{items}}" wx:key="_id">
+      <text class="record-title">{{item.authorName}} {{item.summaryText}}</text>
+      <text class="record-time">{{item.timeText}}</text>
+      <view class="change" wx:for="{{item.changes}}" wx:for-item="change" wx:key="displayKey">
+        <text class="change-label">{{change.objectName}} · {{change.label}}</text>
+        <text class="change-description" wx:if="{{change.description}}">{{change.description}}</text>
+        <text class="change-value" wx:else>从“{{change.before}}”改为“{{change.after}}”</text>
+      </view>
+      <text class="record-note" wx:if="{{item.legacy}}">早期记录未保存修改详情</text>
+      <text class="record-note" wx:if="{{item.reviewerName}}">{{item.reviewerName}} 审核通过 · {{item.reviewTimeText}}</text>
+    </view>
+    <view class="empty-panel" wx:if="{{!items.length}}"><text class="empty-title">暂无编写记录</text><text class="empty-description">资料保存或审核通过后，编写记录会出现在这里。</text></view>
+    <text class="record-note" wx:if="{{moreError}}">{{moreError}}</text>
+    <button class="secondary-button" wx:if="{{hasMore}}" loading="{{loadingMore}}" bindtap="loadMore">{{moreError ? '重试加载' : '加载更早记录'}}</button>
+  </block>
+</view>
+</view>

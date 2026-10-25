@@ -1,0 +1,7 @@
+.contribution-entry { display: flex; min-height: 44px; align-items: center; justify-content: space-between; gap: 20rpx; padding: 16rpx 0; margin-top: 24rpx; border-top: 1rpx solid var(--youpu-line, #d8ded9); color: var(--youpu-brand, #245c4a); font-size: var(--reading-font-14, 16px); line-height: 1.6; }
+.contribution-entry text:first-child { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.detail-page > .contribution-entry { padding: 24rpx 28rpx; }
+@media (min-width: 600px) {
+  .contribution-entry { gap: 10px; padding: 8px 0; margin-top: 12px; border-top-width: 0.5px; }
+  .detail-page > .contribution-entry { padding: 12px 14px; }
+}

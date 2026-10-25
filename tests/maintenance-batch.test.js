@@ -56,3 +56,21 @@ test('注销批处理需要同一用户的 processing 请求及 deleted 状态�
   h.source.put('account_deletion_requests', 'r1', { userId: 'u1', status: 'pending' }); h.source.put('audit_logs', 'a1', { actorId: 'u1' });
   await assert.rejects(batch.apply(h.db, 'audit_logs', { actorId: 'u1' }, {}, 101, claim), { code: 'MAINTENANCE_BATCH_REJECTED' });
 });
+
+test('编写者和审核人分别匿名化，不改其他人的署名且保留编写详情', async () => {
+  const h = fixture(0); const claim = { kind: 'account', requestId: 'r1', userId: 'u1' };
+  h.source.put('users', 'u1', { status: 'deleted' });
+  h.source.put('account_deletion_requests', 'r1', { userId: 'u1', status: 'processing' });
+  h.source.put('audit_logs', 'one', { actorId: 'admin', contribution: { authorId: 'u1', authorName: '原姓名', reviewerId: 'other', reviewerName: '其他人', changes: [{ label: '籍贯' }] } });
+  h.source.put('audit_logs', 'two', { actorId: 'u1', contribution: { authorId: 'other', authorName: '其他人', reviewerId: 'u1', reviewerName: '原姓名', changes: [] } });
+  for (const role of ['author', 'reviewer']) {
+    assert.equal(await batch.apply(h.db, 'audit_logs', { ['contribution.' + role + 'Id']: 'u1' }, { ['contribution.' + role + 'Id']: 'anon', ['contribution.' + role + 'Name']: '已注销用户' }, 5000, claim), 1);
+  }
+  const first = h.source.get('audit_logs', 'one').contribution;
+  assert.equal(first.authorName, '已注销用户');
+  assert.equal(first.reviewerName, '其他人');
+  assert.equal(first.changes[0].label, '籍贯');
+  assert.equal(h.source.get('audit_logs', 'two').contribution.authorName, '其他人');
+  assert.equal(h.source.get('audit_logs', 'two').contribution.reviewerName, '已注销用户');
+  await assert.rejects(batch.apply(h.db, 'audit_logs', { 'contribution.authorId': 'other' }, {}, 10, claim), { code: 'MAINTENANCE_BATCH_REJECTED' });
+});

@@ -1,4 +1,5 @@
 const api = require('./utils/api');
+const contributionCache = require('./utils/contribution-cache');
 const publicContent = require('./utils/public-content');
 const growth = require('./utils/growth');
 const environmentConfig = require('./config/env');
@@ -15,7 +16,7 @@ function emptyDataCache() {
   return {
     familyPages: { active: cacheEntry(), all: cacheEntry() },
     graph: {}, dashboard: {}, personDetail: {}, examplesList: {}, example: {}, invites: {},
-    preference: {}, membershipStatus: {}, profile: cacheEntry()
+    contributionSummary: {}, contributionList: {}, preference: {}, membershipStatus: {}, profile: cacheEntry()
   };
 }
 
@@ -28,6 +29,7 @@ function isFresh(entry) {
 }
 
 App({
+  ...contributionCache,
   loginPromise: null,
   loginUpdatedAt: 0,
   dataCache: emptyDataCache(),
@@ -557,6 +559,7 @@ App({
 
   applyPersonUpdate: function (familyId, person) {
     if (!person || !person._id) return;
+    this.invalidateContributions(familyId);
     const graphEntry = this.getCacheEntry('graph', familyId);
     if (graphEntry.data && !graphEntry.invalidated) {
       this.updateEntry(graphEntry, Object.assign({}, graphEntry.data, {
@@ -586,6 +589,7 @@ App({
 
   applyFamilyUpdate: function (family) {
     if (!family || !family._id) return;
+    this.invalidateContributions(family._id);
     ['active', 'all'].forEach(function (name) {
       const entry = this.dataCache.familyPages[name];
       if (entry.data && !entry.invalidated) {
@@ -673,6 +677,7 @@ App({
   },
 
   invalidateFamilyContent: function (familyId, counters) {
+    this.invalidateContributions(familyId);
     if (!this.applyFamilyCounters(counters)) this.invalidateCache({ families: true });
     this.invalidateCache({ graph: familyId, dashboard: familyId });
     Object.keys(this.dataCache.personDetail || {}).forEach(key => {
@@ -684,6 +689,7 @@ App({
   handleFamilyMutation: function (type, payload, data) {
     const familyId = payload.familyId || data.familyId || data.familyCounters && data.familyCounters.familyId || data.person && data.person.familyId;
     if (!familyId) return;
+    if (type === 'family.update') this.invalidateContributions(familyId);
     if (data.pending) { this.invalidateCache({ dashboard: familyId }); return; }
     if (type === 'person.update' && data.person) this.applyPersonUpdate(familyId, data.person);
     else if (type === 'change.review' && !data.approved) this.invalidateCache({ dashboard: familyId });
@@ -691,6 +697,7 @@ App({
   },
 
   invalidateFamilyData: function (familyId) {
+    this.invalidateContributions(familyId);
     this.invalidateMembershipStatus(familyId);
     if (this.globalData.currentFamily && this.globalData.currentFamily._id === familyId) this.clearPendingBadge();
     this.invalidateCache({

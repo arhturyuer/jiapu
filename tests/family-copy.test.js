@@ -185,7 +185,7 @@ test('资料修改审计在同一事务更新 contentRevision，拒绝和邀请�
   const source = fs.readFileSync('cloudfunctions/youpuUserApi/index.js', 'utf8');
   const code = source.slice(source.indexOf('async function updateFamilyContent('), source.indexOf('async function mutate('));
   const db = createDatabase(); db.put('families', 'source', { status: 'active' });
-  const context = { db, _: db.command, userId: value => value, cleanText: value => value, requestContext: require('../cloudfunctions/youpuUserApi/request-context') };
+  const context = { contributions: require('../cloudfunctions/youpuUserApi/contributions'), db, _: db.command, userId: value => value, cleanText: value => value, requestContext: require('../cloudfunctions/youpuUserApi/request-context') };
   // Audit add is independent of the family revision assertions.
   const scope = () => ({ collection: name => name === 'audit_logs' ? { add: async () => {} } : db.collection(name) });
   vm.runInNewContext(code, context);

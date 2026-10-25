@@ -30,7 +30,7 @@ function createDatabase() {
     if (where && where.op === 'and') return where.value.every(condition => match(row, condition));
     if (where && where.op === 'or') return where.value.some(condition => match(row, condition));
     return Object.entries(where || {}).every(([key, value]) => {
-      const current = row[key];
+      const current = key.split('.').reduce((value, part) => value == null ? undefined : value[part], row);
       if (!value || !value.op) return equal(current, value);
       if (value.op === 'in') return value.value.some(item => equal(current, item));
       if (value.op === 'neq') return !equal(current, value.value);
@@ -112,11 +112,14 @@ function createDatabase() {
             if (db.writeHook) await db.writeHook(name, id, data, transactional);
             if (!replace && !current().has(key)) throw new Error('missing document');
             const row = replace ? { _id: id } : structuredClone(current().get(key));
-            for (const [field, value] of Object.entries(data)) {
-              if (value && value.op === 'inc') row[field] = Number(row[field] || 0) + value.value;
-              else if (value && value.op === 'remove') delete row[field];
-              else if (value && value.op === 'set') row[field] = structuredClone(value.value);
-              else row[field] = structuredClone(value);
+            for (const [path, value] of Object.entries(data)) {
+              const parts = path.split('.');
+              const field = parts.pop();
+              const target = parts.reduce((parent, part) => { if (!parent[part]) parent[part] = {}; return parent[part]; }, row);
+              if (value && value.op === 'inc') target[field] = Number(target[field] || 0) + value.value;
+              else if (value && value.op === 'remove') delete target[field];
+              else if (value && value.op === 'set') target[field] = structuredClone(value.value);
+              else target[field] = structuredClone(value);
             }
             current().set(key, row);
           }

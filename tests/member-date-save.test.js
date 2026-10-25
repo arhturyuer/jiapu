@@ -37,7 +37,7 @@ function server(role = 'admin') {
     }
   };
   const context = {
-    db, _: db.command, personDate: serverDate, domain, requestContext: require('../cloudfunctions/youpuUserApi/request-context'),
+    contributions: require('../cloudfunctions/youpuUserApi/contributions'), db, _: db.command, personDate: serverDate, domain, requestContext: require('../cloudfunctions/youpuUserApi/request-context'),
     cleanDate: domain.cleanDate, cleanText: domain.cleanText,
     assert: function (condition, code, message) { if (!condition) throw Object.assign(new Error(message), { code }); },
     getOpenid: () => 'fake-actor', userId: () => 'fake-user',

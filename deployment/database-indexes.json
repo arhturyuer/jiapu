@@ -155,6 +155,9 @@
       { "name": "status_id", "fields": [{ "field": "status", "order": "asc" }, { "field": "_id", "order": "asc" }] }
     ],
     "audit_logs": [
+      {"name": "family_created_id_desc", "fields": [{"field": "familyId", "order": "asc"}, {"field": "createdAt", "order": "desc"}, {"field": "_id", "order": "desc"}]},
+      {"name": "contribution_author_id", "fields": [{"field": "contribution.authorId", "order": "asc"}, {"field": "_id", "order": "asc"}]},
+      {"name": "contribution_reviewer_id", "fields": [{"field": "contribution.reviewerId", "order": "asc"}, {"field": "_id", "order": "asc"}]},
       { "name": "actor_action_analytics", "fields": [{ "field": "actorId", "order": "asc" }, { "field": "action", "order": "asc" }] },
       { "name": "family_created", "fields": [{ "field": "familyId", "order": "asc" }, { "field": "createdAt", "order": "desc" }] },
       { "name": "family_action_created", "fields": [{ "field": "familyId", "order": "asc" }, { "field": "action", "order": "asc" }, { "field": "createdAt", "order": "desc" }] },

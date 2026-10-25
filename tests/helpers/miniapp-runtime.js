@@ -21,9 +21,12 @@ function miniapp(options) {
     require: name => name === '../config/env' ? environment : { message: () => 'fixture error', fromError: () => ({ message: 'fixture error' }) } };
   vm.runInNewContext(source('miniprogram/utils/api.js'), apiContext);
   const api = apiContext.module.exports;
+  const contributionContext = { module: { exports: {} }, require: name => { if (name === './api') return api; throw new Error(name); } };
+  vm.runInNewContext(source('miniprogram/utils/contribution-cache.js'), contributionContext);
   const context = { App: value => { app = value; }, wx, Date: Clock, setTimeout, clearTimeout,
     console: { log() {}, error() {}, warn() {} }, require: name => {
       if (name === './utils/api') return api;
+      if (name === './utils/contribution-cache') return contributionContext.module.exports;
       if (name === './config/env') return environment;
       if (name === './utils/activity-ledger') return ledgerContext.module.exports;
       if (name === './utils/profile-image-cache') return { clear() {} };

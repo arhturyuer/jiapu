@@ -19,6 +19,7 @@
       <view class="family-progress-main"><view class="progress-track"><view class="progress-value" style="width:{{stats.completion}}%;"></view></view><text class="progress-text">资料完整度 {{stats.completion}}%</text></view>
       <button class="invite-button" catchtap="openShareSheet">邀请家人</button>
     </view>
+    <view data-reading-control="true" aria-role="button" class="contribution-entry" catchtap="openContributions"><text>{{contributionText}}</text><text aria-hidden="true">›</text></view>
   </view>
 
   <view class="onboarding-card surface-card" wx:if="{{onboarding.isCreator && stats.collaboratorCount < 2}}">

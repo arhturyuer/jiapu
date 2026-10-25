@@ -139,6 +139,7 @@ test('关于页使用正式版实际版本并按最新在前展示受控更新�
   const uploadScript = fs.readFileSync(path.join(root, 'deployment/upload-miniprogram.sh'), 'utf8');
   const verifier = fs.readFileSync(path.join(root, 'deployment/verify-release-note.mjs'), 'utf8');
   assert.deepEqual(releaseInfo.validateReleaseNotes(releaseNotes), [
+  { version: '1.6.28', summary: '人物与家谱新增资料编写入口，所有家谱成员可免费查看编写者、字段修改前后值和审核详情。' },
   { version: '1.6.27', summary: '优化示例首页图标和公开页面返回导航，我的页帮助与反馈新增修谱指南入口。' },
   { version: '1.6.26', summary: '新增夫妻顺序手动调整，本人与配偶共同排序，支持单配偶左右互换，并同步图片、PDF和家谱复制。' },
   { version: '1.6.25', summary: '修复示例家谱全部人物列表及亲属姓名链接无法打开人物资料的问题。' },

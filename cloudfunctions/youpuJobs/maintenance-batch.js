@@ -10,7 +10,7 @@ function rejected() { throw Object.assign(new Error('维护任务状态或范围
 function validate(name, where, method, claim) {
   if (!claim || !where || !['update', 'remove'].includes(method)) rejected();
   if (claim.kind === 'account') {
-    const field = ACCOUNT_FIELDS[name];
+    const field = name === 'audit_logs' ? ['actorId', 'contribution.authorId', 'contribution.reviewerId'].find(key => where[key] === claim.userId) : ACCOUNT_FIELDS[name];
     if (method !== 'update' || !claim.requestId || !claim.userId || !field || where[field] !== claim.userId) rejected();
     if (Object.keys(where).some(key => key !== field && !(name === 'invitations' && key === 'status' && where.status === 'active'))) rejected();
   } else if (claim.kind === 'family') {

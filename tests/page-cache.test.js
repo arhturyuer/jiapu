@@ -341,3 +341,95 @@ test('没有家谱的活跃账号仍可加载我的个人资料', async function
   assert.equal(profile.data.adVisible, false);
   global.wx = previousWx;
 });
+
+test('资料编写缓存复用一小时有效期、并发去重、过期读取及强制刷新', async t => {
+  const api = require('../miniprogram/utils/api'); const previous = api.call;
+  t.after(() => { api.call = previous; });
+  let calls = 0; let finish;
+  api.call = () => { calls++; return new Promise(resolve => { finish = resolve; }); };
+  const app = createApp();
+  const first = app.getContributionSummary('f1', 'p1');
+  const second = app.getContributionSummary('f1', 'p1');
+  await Promise.resolve();
+  assert.equal(calls, 1);
+  finish({ authors: [{ key: 'a', name: '小王' }] });
+  await Promise.all([first, second]);
+  await app.getContributionSummary('f1', 'p1');
+  assert.equal(calls, 1);
+  const entry = Object.values(app.dataCache.contributionSummary)[0];
+  entry.updatedAt = Date.now() - 60 * 60 * 1000 - 1;
+  const expired = app.getContributionSummary('f1', 'p1'); await Promise.resolve(); finish({ authors: [] }); await expired;
+  assert.equal(calls, 2);
+  const forced = app.getContributionSummary('f1', 'p1', { force: true });
+  const alsoForced = app.getContributionSummary('f1', 'p1', { force: true });
+  await Promise.resolve(); assert.equal(calls, 3);
+  finish({ authors: [] }); await Promise.all([forced, alsoForced]);
+});
+
+test('编写记录按用户、家谱、人物、编写者和分页游标隔离，摘要与列表共享缓存生命周期', async t => {
+  const api = require('../miniprogram/utils/api'); const previous = api.call;
+  t.after(() => { api.call = previous; });
+  let calls = 0; api.call = async () => ({ marker: ++calls });
+  const app = createApp(); app.globalData.user = { _id: 'u1' };
+  const input = { familyId: 'f1', personId: 'p1' };
+  await app.getContributionList(input); await app.getContributionList(input);
+  assert.equal(calls, 1);
+  for (const query of [{ ...input, familyId: 'f2' }, { ...input, personId: 'p2' }, { ...input, authorKey: 'author' }, { ...input, cursor: 'next' }]) await app.getContributionList(query);
+  assert.equal(calls, 5);
+  app.globalData.user = { _id: 'u2' }; await app.getContributionList(input);
+  assert.equal(calls, 6);
+  app.invalidateContributions('f1'); await app.getContributionList(input);
+  assert.equal(calls, 7);
+  app.globalData.user = { _id: 'u1' }; await app.getContributionList({ ...input, familyId: 'f2' });
+  assert.equal(calls, 7);
+});
+
+test('资料编写缓存跟随实际生效写入失效，待审核和拒绝保留，家谱资料变更也刷新', async t => {
+  const api = require('../miniprogram/utils/api'); const previous = api.call;
+  t.after(() => { api.call = previous; });
+  let calls = 0; api.call = async () => ({ marker: ++calls });
+  const app = createApp();
+  async function read() { return Promise.all([app.getContributionSummary('f1', 'p1'), app.getContributionList({ familyId: 'f1' })]); }
+  await read(); assert.equal(calls, 2);
+  app.handleFamilyMutation('person.update', { familyId: 'f1' }, { pending: true, person: { _id: 'p1', familyId: 'f1' } });
+  app.handleFamilyMutation('change.review', { familyId: 'f1' }, { approved: false });
+  await read(); assert.equal(calls, 2);
+  for (const type of ['person.update', 'person.createRelated', 'person.delete', 'relation.linkExisting', 'relation.remove', 'relation.reorderChildren', 'relation.reorderSpouses', 'change.review', 'family.update']) {
+    app.handleFamilyMutation(type, { familyId: 'f1' }, { approved: true, person: { _id: 'p1', familyId: 'f1' } });
+    const previousCount = calls; await read(); assert.equal(calls, previousCount + 2, type);
+  }
+  app.invalidateFamilyData('f1'); const previousCount = calls; await read(); assert.equal(calls, previousCount + 2);
+});
+
+test('写入发生在读取途中时，编写摘要和列表的旧响应不能回写缓存或页面', async t => {
+  const api = require('../miniprogram/utils/api'); const previous = api.call;
+  t.after(() => { api.call = previous; });
+  const app = createApp(); let calls = 0; let release;
+  api.call = async () => { if (++calls === 1) return new Promise(resolve => { release = resolve; }); return { marker: 'new' }; };
+  const pending = app.getContributionSummary('f1', 'p1'); await Promise.resolve();
+  app.invalidateContributions('f1'); release({ marker: 'old' });
+  assert.equal((await pending).marker, 'new'); assert.equal(calls, 2);
+  calls = 0;
+  const list = app.getContributionList({ familyId: 'f1' }); await Promise.resolve();
+  app.invalidateContributions('f1'); release({ marker: 'old' });
+  assert.equal((await list).marker, 'new'); assert.equal(calls, 2);
+});
+
+test('退出登录或切换环境会清空资料编写缓存，旧会话请求拒绝回写', async t => {
+  const api = require('../miniprogram/utils/api'); const previous = api.call;
+  t.after(() => { api.call = previous; });
+  const app = createApp(); let calls = 0; let release;
+  api.call = async () => ({ marker: ++calls });
+  await app.getContributionSummary('f1', 'p1');
+  await app.getContributionList({ familyId: 'f1' });
+  app.globalData.env = 'different-staging-fixture';
+  await app.getContributionSummary('f1', 'p1');
+  assert.equal(calls, 3);
+  assert.equal(Object.keys(app.dataCache.contributionList).length, 0);
+  api.call = () => new Promise(resolve => { release = resolve; });
+  const pending = app.getContributionList({ familyId: 'f1' }); await Promise.resolve();
+  app.clearCachedAccess(''); release({ marker: 'stale' });
+  await assert.rejects(pending, { code: 'ACCOUNT_SESSION_CHANGED' });
+  assert.equal(Object.keys(app.dataCache.contributionSummary).length, 0);
+  assert.equal(Object.keys(app.dataCache.contributionList).length, 0);
+});

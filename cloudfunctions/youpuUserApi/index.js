@@ -12,6 +12,7 @@ const analytics = require('./analytics');
 const growthModule = require('./growth');
 const guidesModule = require('./guides');
 const requestContext = require('./request-context');
+const contributions = require('./contributions');
 const familyCopy = require('./family-copy');
 const pdfExport = require('./pdf-export');
 const pdfGraphSource = require('./pdf-graph-source');
@@ -856,6 +857,16 @@ async function audit(scope, data) {
   if (data.familyId && ['family.update', 'person.create_related', 'person.update', 'person.delete', 'relation.link_existing', 'relation.remove', 'relation.reorder_children', 'relation.reorder_spouses', 'change.approve'].includes(data.action)) {
     if (!requestContext.hasFamilyRevision(scope, data.familyId)) await updateFamilyContent(scope, data.familyId, { data: {} });
   }
+  const contentAction = contributions.ACTIONS.has(data.action) || data.action === 'change.approve';
+  const draft = contentAction ? contributions.take(scope) : null;
+  const author = draft && data.authorId ? await maybeGet(scope, 'users', data.authorId) : null;
+  const authorDeleted = author && author.status === 'deleted';
+  const contribution = draft ? Object.assign(draft, {
+    authorId: authorDeleted ? author.anonymousActorId || data.authorId : data.authorId || userId(data.openid),
+    authorName: authorDeleted ? '已注销用户' : cleanText(data.authorName || data.actorName, 30) || '一位家人',
+    reviewerId: data.authorId ? userId(data.openid) : '',
+    reviewerName: data.authorId ? cleanText(data.actorName, 30) || '一位家人' : ''
+  }) : null;
   await scope.collection('audit_logs').add({
     data: {
       familyId: data.familyId || '',
@@ -867,6 +878,7 @@ async function audit(scope, data) {
       objectId: data.objectId || '',
       summary: cleanText(data.summary, 120),
       requestId: cleanText(data.requestId, 80),
+      ...(contentAction ? { contributionVersion: 1, contribution } : {}),
       createdAt: db.serverDate()
     }
   });
@@ -927,7 +939,9 @@ async function createPersonTx(transaction, familyId, input, openid) {
       updatedAt: db.serverDate()
     })
   });
-  return Object.assign({ _id: id }, normalized, { familyId: familyId, status: 'active' });
+  const person = Object.assign({ _id: id }, normalized, { familyId: familyId, status: 'active' });
+  contributions.person(transaction, null, person);
+  return person;
 }
 
 async function createRelationTx(transaction, familyId, type, firstId, secondId, openid, options) {
@@ -962,6 +976,7 @@ async function createRelationTx(transaction, familyId, type, firstId, secondId, 
     updatedAt: db.serverDate()
   };
   await transaction.collection('relations').doc(id).set({ data: documentData(relation) });
+  contributions.relation(transaction, relation, fromId === firstId ? first : second, toId === secondId ? second : first);
   if (type === 'spouse' && [first, second].some(p => p.spouseDisplayOrder && p.spouseDisplayOrder.length)) await spouseOrderService.added(transaction, familyId, relation, [first, second]);
   return relation;
 }
@@ -1441,6 +1456,7 @@ async function familyCreate(event) {
         updatedAt: db.serverDate()
       }
     });
+    contributions.family(transaction, null, { name, description });
     const startPerson = await createPersonTx(transaction, familyId, firstPerson, openid);
     if (firstPerson.avatarAssetId) {
       await transaction.collection('media_assets').doc(firstPerson.avatarAssetId).update({
@@ -1522,6 +1538,7 @@ async function familyUpdate(event) {
   await moderateText(openid, [name, description]);
   return mutate('family.update', event, openid, async function (transaction) {
     const access = await requireMembership(event.familyId, ['admin'], transaction, openid);
+    contributions.family(transaction, access.family, { name, description });
     await updateFamilyContent(transaction, event.familyId, {
       data: { name: name, description: description, updatedAt: db.serverDate() }
     });
@@ -2132,7 +2149,28 @@ function validateChildOrder(parentPersonId, orderedChildIds, relations) {
   }), 'GRAPH_CHANGED', '子女关系刚有变化，请刷新后重试');
 }
 
-async function applyChildOrderTx(transaction, familyId, parentPersonId, orderedChildIds) {
+async function captureRemovedRelation(transaction, relation) {
+  const first = await mustGet(transaction, 'persons', relation.fromPersonId, 'PERSON_NOT_FOUND', '成员不存在');
+  const second = await mustGet(transaction, 'persons', relation.toPersonId, 'PERSON_NOT_FOUND', '成员不存在');
+  contributions.relation(transaction, relation, first, second, true);
+}
+
+async function captureChildOrder(transaction, familyId, parentId, ids, graph) {
+  const rank = require('./pdf-shared/child-rank');
+  const names = new Map(graph.persons.map(p => [p._id, p.name]));
+  const before = rank.editorOrder(rank.build(graph.persons, graph.relations), parentId);
+  const after = rank.editorOrder(rank.preview(graph.persons, graph.relations, parentId, ids), parentId);
+  contributions.order(transaction, [parentId].concat(ids), names.get(parentId), '子女排行', before, after, names);
+}
+
+async function captureSpouseOrder(transaction, personId, ids, graph) {
+  const ordered = require('./pdf-shared/graph-layout').groupPersonsByGeneration(graph.persons, graph.relations).orderedPersons.map(p => p._id).filter(id => ids.includes(id));
+  const names = new Map(graph.persons.map(p => [p._id, p.name]));
+  contributions.order(transaction, ids, names.get(personId), '夫妻顺序', ordered, ids, names);
+}
+
+async function applyChildOrderTx(transaction, familyId, parentPersonId, orderedChildIds, graph) {
+  await captureChildOrder(transaction, familyId, parentPersonId, orderedChildIds, graph);
   for (let index = 0; index < orderedChildIds.length; index += 1) {
     const id = relationId(familyId, 'parent_child', parentPersonId, orderedChildIds[index]);
     const relation = await mustGet(transaction, 'relations', id, 'RELATION_NOT_FOUND', '亲子关系不存在或已被移除');
@@ -2159,6 +2197,7 @@ async function relationReorderChildren(event) {
   const parent = await mustGet(db, 'persons', parentPersonId, 'PERSON_NOT_FOUND', '家长成员不存在');
   assert(parent.familyId === familyId && parent.status === 'active', 'CROSS_FAMILY_RELATION', '家长成员不属于当前家谱');
   const relations = await listAll('relations', { familyId: familyId, status: 'active' }, GRAPH_RELATION_LIMIT);
+  const persons = await listAll('persons', { familyId, status: 'active' }, GRAPH_PERSON_LIMIT);
   validateChildOrder(parentPersonId, orderedChildIds, relations);
   assert(Number(snapshotAccess.family.relationRevision || 0) === requestedRevision, 'GRAPH_CHANGED', '家谱关系刚有变化，请刷新后重试');
   return mutate('relation.reorderChildren', event, openid, async function (transaction) {
@@ -2182,7 +2221,7 @@ async function relationReorderChildren(event) {
       return { pending: true, requestId: result._id };
     }
     assert(Number(access.family.relationRevision || 0) === requestedRevision, 'GRAPH_CHANGED', '家谱关系刚有变化，请刷新后重试');
-    await applyChildOrderTx(transaction, familyId, parentPersonId, orderedChildIds);
+    await applyChildOrderTx(transaction, familyId, parentPersonId, orderedChildIds, { persons, relations });
     await updateFamilyContent(transaction, familyId, {
       data: { relationRevision: _.inc(1), updatedAt: db.serverDate() }
     });
@@ -2230,6 +2269,7 @@ async function relationReorderSpouses(event) {
       await recordNotificationEvent(transaction, 'review', event, openid, familyId, request._id);
       return { pending: true, requestId: request._id };
     }
+    await captureSpouseOrder(transaction, personId, ids, graph);
     await spouseOrderService.reorder(transaction, familyId, personId, ids, graph);
     await updateFamilyContent(transaction, familyId, { data: { hasSpouseDisplayOrder: true, relationRevision: _.inc(1), updatedAt: db.serverDate() } });
     await audit(transaction, { familyId, openid, actorName: current.membership.displayName, action: 'relation.reorder_spouses', objectType: 'person', objectId: personId, summary: '调整夫妻顺序', requestId: event.requestId });
@@ -2259,6 +2299,7 @@ async function relationRemove(event) {
     assert(relation.familyId === snapshotRelation.familyId, 'CROSS_FAMILY_RELATION', '关系不属于当前家谱');
     assert(Number(access.family.relationRevision || 0) === relationRevision, 'GRAPH_CHANGED', '家谱关系刚刚发生变化，请重试');
     assert(canRemove, 'RELATION_DISCONNECTS_GRAPH', '移除后会使家谱关系断开，请先建立正确关系，再移除当前关系');
+    await captureRemovedRelation(transaction, relation);
     await transaction.collection('relations').doc(relation._id).update({
       data: { status: 'deleted', deletedAt: db.serverDate(), updatedAt: db.serverDate() }
     });
@@ -2319,6 +2360,7 @@ async function personUpdate(event) {
       await recordNotificationEvent(transaction, 'review', event, openid, person.familyId, result._id);
       return { pending: true, requestId: result._id, person: publicPerson(person) };
     }
+    contributions.person(transaction, person, Object.assign({}, person, changes));
     await transaction.collection('persons').doc(person._id).update({ data: personUpdateData(changes) });
     await audit(transaction, {
       familyId: person.familyId,
@@ -2351,10 +2393,12 @@ async function personDelete(event) {
     const access = await requireMembership(person.familyId, ['admin'], transaction, openid);
     assert(person.status === 'active', 'PERSON_NOT_FOUND', '成员已删除');
     assert(Number(access.family.relationRevision || 0) === relationRevision, 'GRAPH_CHANGED', '家谱关系刚刚发生变化，请重试');
+    contributions.person(transaction, person, null);
     await transaction.collection('persons').doc(person._id).update({
       data: { status: 'deleted', deletedAt: db.serverDate(), updatedAt: db.serverDate() }
     });
     for (const relation of related) {
+      await captureRemovedRelation(transaction, relation);
       await transaction.collection('relations').doc(relation._id).update({
         data: { status: 'deleted', deletedAt: db.serverDate(), updatedAt: db.serverDate() }
       });
@@ -2419,7 +2463,7 @@ async function changeReview(event) {
       relations: await listAll('relations', { familyId: snapshotRequest.familyId, status: 'active' }, GRAPH_RELATION_LIMIT)
     };
   }
-  if (graphSnapshot && snapshotRequest.type === 'reorder_spouses') graphSnapshot.persons = await listAll('persons', { familyId: snapshotRequest.familyId, status: 'active' }, GRAPH_PERSON_LIMIT);
+  if (graphSnapshot && ['reorder_spouses', 'reorder_children'].includes(snapshotRequest.type)) graphSnapshot.persons = await listAll('persons', { familyId: snapshotRequest.familyId, status: 'active' }, GRAPH_PERSON_LIMIT);
   return mutate('change.review', event, openid, async function (transaction) {
     const request = await mustGet(transaction, 'change_requests', changeRequestId, 'REQUEST_NOT_FOUND', '修改申请不存在');
     const access = await requireMembership(request.familyId, ['admin'], transaction, openid);
@@ -2479,6 +2523,7 @@ async function changeReview(event) {
       assert(person.familyId === request.familyId, 'CROSS_FAMILY_RELATION', '申请数据异常');
       if (request.payload.changes.gender !== undefined) assertGenderChangeAllowed(person.gender, request.payload.changes.gender);
       if (changesAffectPersonDates(request.payload.changes)) assertPersonDates(Object.assign({}, person, request.payload.changes));
+      contributions.person(transaction, person, Object.assign({}, person, request.payload.changes));
       await transaction.collection('persons').doc(person._id).update({
         data: personUpdateData(request.payload.changes)
       });
@@ -2489,6 +2534,7 @@ async function changeReview(event) {
       const rawIds = request.payload.orderedPersonIds;
       const ids = cleanPersonIds(rawIds, GRAPH_PERSON_LIMIT);
       assert(Array.isArray(rawIds) && ids.length === rawIds.length, 'INVALID_SPOUSE_ORDER', '夫妻顺序不完整');
+      await captureSpouseOrder(transaction, request.payload.personId, ids, graphSnapshot);
       await spouseOrderService.reorder(transaction, request.familyId, request.payload.personId, ids, graphSnapshot);
       await updateFamilyContent(transaction, request.familyId, { data: { hasSpouseDisplayOrder: true, relationRevision: _.inc(1), updatedAt: db.serverDate() } });
       familyCounters = publicFamilyCounters(access.family, 0, 0);
@@ -2504,7 +2550,7 @@ async function changeReview(event) {
       const orderedChildIds = cleanPersonIds(requestedIds, GRAPH_PERSON_LIMIT);
       assert(orderedChildIds.length === requestedIds.length, 'INVALID_CHILD_ORDER', '子女排行不完整');
       validateChildOrder(parent._id, orderedChildIds, graphSnapshot.relations);
-      await applyChildOrderTx(transaction, request.familyId, parent._id, orderedChildIds);
+      await applyChildOrderTx(transaction, request.familyId, parent._id, orderedChildIds, graphSnapshot);
       await updateFamilyContent(transaction, request.familyId, {
         data: { relationRevision: _.inc(1), updatedAt: db.serverDate() }
       });
@@ -2522,6 +2568,8 @@ async function changeReview(event) {
       familyId: request.familyId,
       openid: openid,
       actorName: access.membership.displayName,
+      authorId: approved ? request.createdBy : '',
+      authorName: approved ? request.requesterName : '',
       action: approved ? 'change.approve' : 'change.reject',
       objectType: 'change_request',
       objectId: request._id,
@@ -3931,6 +3979,8 @@ async function feedbackGroupGet() {
   }
 }
 
+const contributionService = contributions.createService({ db, command: _, assert, getOpenid, requireActiveUser, requireMembership, mustGet, maybeGet, roles: ACTIVE_ROLES });
+
 async function analyticsTrack(event) {
   const openid = getOpenid();
   const user = await requireActiveUser(openid);
@@ -3976,6 +4026,8 @@ async function recordBusinessActivity(type, request, data) {
 }
 
 const handlers = {
+  'contribution.summary': contributionService.summary,
+  'contribution.list': contributionService.list,
   'public.guides.list': guidesService.list,
   'public.guides.get': guidesService.get,
   'public.examples.list': event => examplesList(event, true),

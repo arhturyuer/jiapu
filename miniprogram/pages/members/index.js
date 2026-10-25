@@ -1,3 +1,4 @@
+const contributionEntry = require('../../utils/contribution-entry');
 const navigationPage = require('../../utils/navigation-page');
 const launchAd = require('../../utils/launch-ad');
 const app = getApp();
@@ -35,6 +36,7 @@ function reconcileCurrentFamily(families) {
 Page(launchAd.wrap({
   onNavigationLayout: navigationPage.changed,
   data: {
+    contributionText: '正在读取编写记录…',
     navigationHeight: 64,
     loading: true,
     familyList: [],
@@ -68,8 +70,8 @@ Page(launchAd.wrap({
     this.loadNotificationTemplates();
     return this.loadDashboard({ refreshDashboard: true });
   },
-  onHide: function () { this._adPageHidden = true; adAccess.hide(this, false); },
-  onUnload: function () { this._adPageHidden = true; adAccess.hide(this, false); },
+  onHide: function () { contributionEntry.cancel(this); this._loadRequestId = (this._loadRequestId || 0) + 1; this._adPageHidden = true; adAccess.hide(this, false); },
+  onUnload: function () { contributionEntry.cancel(this); this._loadRequestId = (this._loadRequestId || 0) + 1; this._adPageHidden = true; adAccess.hide(this, false); },
 
   loadNotificationTemplates: function () {
     const self = this;
@@ -78,6 +80,8 @@ Page(launchAd.wrap({
       return templates;
     }).catch(function () { return null; });
   },
+
+  openContributions: function () { contributionEntry.open(this.data.currentFamily && this.data.currentFamily._id); },
 
   openNotificationSettings: function () { this.setData({ showNotificationPrompt: true }); },
   closeNotificationSettings: function () { this.setData({ showNotificationPrompt: false }); },
@@ -99,6 +103,7 @@ Page(launchAd.wrap({
   loadDashboard: function (options) {
     const self = this;
     const config = options || {};
+    contributionEntry.cancel(this);
     adAccess.hide(this, false);
     const requestId = this._loadRequestId = (this._loadRequestId || 0) + 1;
     const hasContent = this._hasLoaded && !this.data.loading;
@@ -107,6 +112,7 @@ Page(launchAd.wrap({
     const currentFamilyId = currentFamily && currentFamily._id;
     const sameFamily = displayedFamilyId === currentFamilyId;
     if (!config.force && !config.refreshDashboard && hasContent && sameFamily && app.isCacheFresh('familyPages', true) && (!currentFamily || app.isCacheFresh('dashboard', currentFamily._id))) {
+      if (currentFamily) contributionEntry.load(this, currentFamily._id);
       return adAccess.refresh(this, app, 'family', currentFamily);
     }
     if (!hasContent) this.setData({ loading: true });
@@ -144,6 +150,7 @@ Page(launchAd.wrap({
     }).then(function (data) {
       if (requestId !== self._loadRequestId) return;
       if (!data) return;
+      contributionEntry.load(self, data.family._id, '', { force: Boolean(config.force || config.refreshDashboard) });
       const membershipPresentation = membershipDisplay.fromFamily(data.family);
       self.setData({
         loading: false,

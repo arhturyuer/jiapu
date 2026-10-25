@@ -1,3 +1,4 @@
+const contributionEntry = require('../../utils/contribution-entry');
 const launchAd = require('../../utils/launch-ad');
 const app = getApp();
 const api = require('../../utils/api');
@@ -7,6 +8,7 @@ const personDate = require('../../utils/person-date');
 
 Page(launchAd.wrap({
   data: {
+    contributionText: '正在读取编写记录…',
     personId: '',
     loading: true,
     error: '',
@@ -32,14 +34,22 @@ Page(launchAd.wrap({
     if (this.data.personId) this.loadPerson();
   },
 
+  onHide: function () { this._personRevision = (this._personRevision || 0) + 1; contributionEntry.cancel(this); },
+  onUnload: function () { this._personRevision = (this._personRevision || 0) + 1; contributionEntry.cancel(this); },
+  openContributions: function () { const person = this.data.person; if (person) contributionEntry.open(person.familyId, person._id); },
+
   onPullDownRefresh: function () {
     this.loadPerson({ force: true }).then(function () { wx.stopPullDownRefresh(); });
   },
 
   loadPerson: function (options) {
     const self = this;
+    const revision = this._personRevision = (this._personRevision || 0) + 1;
+    contributionEntry.cancel(this);
     this.setData({ loading: true, error: '', openRelationId: '' });
     return app.getPersonDetail(this.data.personId, options).then(function (data) {
+      if (revision !== self._personRevision) return;
+      contributionEntry.load(self, data.person.familyId, data.person._id, options);
       const person = personGender.decorate(Object.assign({}, data.person, {
         initial: (data.person.name || '家').slice(0, 1),
         lifeText: data.person.lifeStatus === 'living' ? '健在' : data.person.lifeStatus === 'deceased' ? '已故' : '未填写',
@@ -63,6 +73,7 @@ Page(launchAd.wrap({
       });
       const assetIds = [person.avatarAssetId].concat(relatives.map(function (item) { return item.person.avatarAssetId; }));
       return api.getMediaUrls(assetIds).then(function (urls) {
+        if (revision !== self._personRevision) return;
         person.avatar = urls[person.avatarAssetId] || '';
         relatives.forEach(function (item) {
           item.person.avatar = urls[item.person.avatarAssetId] || '';
@@ -70,6 +81,7 @@ Page(launchAd.wrap({
         self.setData({ person: person, relatives: relatives });
       });
     }).catch(function (error) {
+      if (revision !== self._personRevision) return;
       self.setData({ loading: false, error: api.userMessage(error, '资料加载失败') });
     });
   },

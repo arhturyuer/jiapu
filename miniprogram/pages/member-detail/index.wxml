@@ -42,6 +42,8 @@
     <view class="empty-relation surface-card" wx:else>还没有录入直接亲属</view>
   </view>
 
+  <view data-reading-control="true" aria-role="button" class="contribution-entry surface-card" bindtap="openContributions"><text>{{contributionText}}</text><text aria-hidden="true">›</text></view>
+
   <view class="detail-actions" wx:if="{{canEdit}}">
     <button class="primary-button" bindtap="editPerson">编辑资料</button>
     <button class="secondary-button" bindtap="addRelative">添加亲属</button>

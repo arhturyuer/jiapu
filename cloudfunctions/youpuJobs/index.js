@@ -340,6 +340,12 @@ async function anonymizeUser(request) {
     actorId: anonymousActor,
     actorName: '已注销用户'
   }, 5000);
+  for (const role of ['author', 'reviewer']) {
+    await updateClaimed('audit_logs', { ['contribution.' + role + 'Id']: user._id }, {
+      ['contribution.' + role + 'Id']: anonymousActor,
+      ['contribution.' + role + 'Name']: '已注销用户'
+    }, 5000);
+  }
   await updateClaimed('payment_orders', { payerUserId: user._id }, {
     payerUserId: anonymousActor,
     payerAnalyticsId: user._id,
@@ -753,8 +759,8 @@ async function familyBackupDataset(task) {
     { name: '修改申请.csv', content: Buffer.from(toCsv(changes.map(function (item) { return { type: item.type, title: item.title, status: item.status, createdAt: item.createdAt, updatedAt: item.updatedAt }; }), [
       { key: 'type', label: '类型' }, { key: 'title', label: '摘要' }, { key: 'status', label: '状态' }, { key: 'createdAt', label: '创建时间' }, { key: 'updatedAt', label: '更新时间' }
     ]), 'utf8') },
-    { name: '完整变更历史.csv', content: Buffer.from(toCsv(history.map(function (item) { return { actorName: item.actorName || '一位家人', action: item.action, objectType: item.objectType, summary: item.summary, createdAt: item.createdAt }; }), [
-      { key: 'actorName', label: '操作者' }, { key: 'action', label: '操作类型' }, { key: 'objectType', label: '对象类型' }, { key: 'summary', label: '摘要' }, { key: 'createdAt', label: '时间' }
+    { name: '完整变更历史.csv', content: Buffer.from(toCsv(history.map(function (item) { return { actorName: item.actorName || '一位家人', action: item.action, objectType: item.objectType, summary: item.summary, contribution: item.contribution ? JSON.stringify({ authorName: item.contribution.authorName, reviewerName: item.contribution.reviewerName, changes: item.contribution.changes }) : '', createdAt: item.createdAt }; }), [
+      { key: 'actorName', label: '操作者' }, { key: 'action', label: '操作类型' }, { key: 'objectType', label: '对象类型' }, { key: 'summary', label: '摘要' }, { key: 'contribution', label: '编写详情' }, { key: 'createdAt', label: '时间' }
     ]), 'utf8') }
   ];
   return { family: family, baseEntries: entries, media: approvedMedia, unavailable: unavailable, exportedAt: exportedAt };

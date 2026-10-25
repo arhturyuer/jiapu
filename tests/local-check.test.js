@@ -42,6 +42,7 @@ if (name === 'node-stub' && /check(?:-docs)?\\.mjs$/.test(args[0] || '')) {
   const result = cp.spawnSync(${JSON.stringify(process.execPath)}, args, {stdio:'inherit', env:process.env});
   process.exit(result.status || (result.error ? 1 : 0));
 }
+if (name === 'node-stub' && (args[0] || '').endsWith('package-contributions.mjs')) process.exit(process.env.FAIL_STAGE === 'contributions' ? 23 : 0);
 if (name === 'node-stub' && (args[0] || '').endsWith('package-spouse-order.mjs')) process.exit(process.env.FAIL_STAGE === 'spouse' ? 22 : 0);
 if (name === 'node-stub' && (args[0] || '').endsWith('package-pdf-layout.mjs')) process.exit(process.env.FAIL_STAGE === 'layout' ? 20 : 0);
 if (name === 'node-stub' && (args[0] || '').endsWith('package-membership.mjs')) process.exit(process.env.FAIL_STAGE === 'membership' ? 21 : 0);

@@ -114,6 +114,7 @@ function loadFamilyCreate() {
     }
   };
   const context = {
+    contributions: require('../cloudfunctions/youpuUserApi/contributions'),
     getOpenid: function () { return 'fake-openid'; },
     requireActiveUser: async function () { return { _id: 'fake-user' }; },
     cleanText: domain.cleanText,
