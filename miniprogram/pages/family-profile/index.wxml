@@ -1,0 +1,25 @@
+<view class="reading-root {{elderMode ? 'reading-elder' : ''}} {{readingLarge ? 'reading-large' : ''}}" style="{{readingStyle}}{{readingDockStyle}}">
+  <view class="loading-panel" wx:if="{{loading}}"><text>正在读取家谱资料...</text></view>
+  <view class="page-shell" wx:elif="{{error}}"><view class="empty-panel"><text class="empty-title">无法打开资料</text><text class="empty-description">{{error}}</text><button class="secondary-button" bindtap="retry">重新加载</button></view></view>
+  <view class="page-shell family-reading-page {{editing ? 'profile-editing-page' : ''}}" wx:else>
+    <view class="profile-paper surface-card" wx:if="{{!editing}}">
+      <view class="profile-header"><text class="profile-name">{{family.name || '未填写'}}</text><view class="profile-toolbar"><text class="profile-access">已加入家人可见</text><button plain="true" class="profile-text-button" wx:if="{{isAdmin}}" bindtap="edit">编辑资料</button></view></view>
+      <view class="profile-section profile-introduction"><text class="profile-section-title">简介</text><text class="profile-body profile-description {{!family.description ? 'profile-unfilled' : ''}}">{{family.description || '未填写'}}</text></view>
+      <view class="profile-section" id="profile-overview"><text class="profile-section-title">家族概况</text><view class="profile-facts"><view class="profile-fact" wx:for="{{facts}}" wx:key="key"><text class="profile-fact-label">{{item.label}}</text><text class="profile-fact-value {{!item.value ? 'profile-unfilled' : ''}}">{{item.value || '未填写'}}</text></view></view></view>
+      <view class="profile-section" id="profile-generationPoem"><text class="profile-section-title">字辈</text><text class="profile-body {{!profile.generationPoem ? 'profile-unfilled' : ''}}">{{profile.generationPoem || '未填写'}}</text></view>
+      <view class="profile-section" id="profile-familyMotto"><text class="profile-section-title">家训</text><text class="profile-body {{!profile.familyMotto ? 'profile-unfilled' : ''}}">{{profile.familyMotto || '未填写'}}</text></view>
+      <view class="profile-section" id="profile-history"><text class="profile-section-title">家族历史</text><text class="profile-body {{!profile.history ? 'profile-unfilled' : ''}}">{{profile.history || '未填写'}}</text></view>
+      <button plain="true" class="profile-records" bindtap="openContributions"><text>资料编写记录</text><text aria-hidden="true">›</text></button>
+    </view>
+    <view class="profile-paper surface-card profile-edit-paper" wx:else>
+      <text class="profile-section-title">编辑家谱资料</text>
+    <text class="muted-text">只需填写已知内容，选填项可留空。</text>
+    <view class="profile-form">
+      <view id="field-{{item.key}}" class="profile-field {{fieldError === item.key ? 'profile-field-error' : ''}}" wx:for="{{fields}}" wx:key="key"><text class="field-label">{{item.label}} · {{item.key === 'name' ? '必填' : '选填'}}</text><textarea wx:if="{{item.multiline}}" class="profile-input profile-textarea" aria-label="{{item.label}}" maxlength="{{item.max}}" value="{{form[item.key]}}" data-field="{{item.key}}" disabled="{{saving || !canEdit}}" bindinput="inputField" auto-height cursor-spacing="{{(readingBodySize || 16) * 2 + 56}}"></textarea><input wx:else class="profile-input" aria-label="{{item.label}}" maxlength="{{item.max}}" value="{{form[item.key]}}" data-field="{{item.key}}" disabled="{{saving || !canEdit}}" bindinput="inputField" cursor-spacing="{{(readingBodySize || 16) * 2 + 56}}" /><text class="profile-field-message" wx:if="{{fieldError === item.key}}" role="alert">{{saveError}}</text><text class="profile-help">{{form[item.key].length}} / {{item.max}} 字{{item.help ? ' · ' + item.help : ''}}</text></view>
+    </view>
+    <view id="field-featuredSection" class="profile-form"><text class="field-label">家庭页重点展示</text><picker range="{{featuredOptions}}" range-key="label" value="{{featuredIndex}}" disabled="{{saving || !canEdit}}" bindchange="changeFeatured"><view class="profile-picker">{{featuredOptions[featuredIndex].label}}　⌄</view></picker><text class="profile-help">在家庭页概况下方展示这部分的简短摘要。内容需先填写。</text></view>
+    <text class="profile-error" role="alert" wx:if="{{saveError}}">{{saveError}}</text>
+    <view class="submit-actions profile-edit-dock"><view class="profile-edit-actions"><button class="secondary-button" disabled="{{saving}}" bindtap="cancel">取消</button><button class="primary-button" disabled="{{saving || !hasChanges || !canEdit}}" loading="{{saving}}" bindtap="save">保存资料</button></view></view><text class="profile-help">保存后，已加入这份家谱的家人即可看到。</text>
+    </view>
+  </view>
+</view>

@@ -35,7 +35,7 @@ test('运营 API 保持首次进入自动建档，并批量计算当前有效参
   const userApi = fs.readFileSync(path.join(root, 'cloudfunctions/youpuUserApi/index.js'), 'utf8');
   const opsApi = fs.readFileSync(path.join(root, 'cloudfunctions/youpuOpsApi/index.js'), 'utf8');
   const profile = fs.readFileSync(path.join(root, 'miniprogram/pages/profile/index.js'), 'utf8');
-  const app = fs.readFileSync(path.join(root, 'miniprogram/app.js'), 'utf8');
+  const app = fs.readFileSync(path.join(root, 'assets/family-profile/app.js'), 'utf8');
   const admin = fs.readFileSync(path.join(root, 'admin/src/App.vue'), 'utf8');
   assert.match(userApi, /async function authLogin[\s\S]*ensureUser\(openid\)/);
   assert.match(app, /api\.call\('auth\.login'/);

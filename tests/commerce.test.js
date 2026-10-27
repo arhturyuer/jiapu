@@ -250,7 +250,7 @@ test('会员状态集中家庭页展示，我的页广告另有会员购买入�
   assert.doesNotMatch(profileSource, /membershipDisplay|openMembership\s*:/);
   assert.match(profileSource, /adAccess\.refresh\(this, app, 'profile', app\.getCurrentFamily\(\)\)/);
   assert.match(profile, /adVisible && adLoaded[\s\S]*bindtap="openAdMembership"/);
-  assert.match(members, /family-membership-badge[\s\S]*membershipTierText/);
+  assert.match(members, /setting-row" bindtap="openMembership"[\s\S]*membershipTierText/);
   assert.deepEqual(display.fromFamily({ membership: { active: false } }), {
     active: false, tierText: '免费版', detailText: '升级后全体家人共享会员权益'
   });

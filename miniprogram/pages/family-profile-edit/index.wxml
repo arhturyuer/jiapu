@@ -1,0 +1,1 @@
+<view class="reading-root {{elderMode ? 'reading-elder' : ''}} {{readingLarge ? 'reading-large' : ''}}" style="{{readingStyle}}{{readingDockStyle}}"><view class="loading-panel"><text>正在打开家谱资料...</text></view></view>

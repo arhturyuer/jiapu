@@ -55,6 +55,18 @@ function createPage(definition) {
   return page;
 }
 
+test('家谱资料详情缓存复用，保存更新、权限失效及账户切换不沿用旧资料', async () => {
+  const api = require('../miniprogram/utils/api'); const original = api.call; const app = createApp(); let calls = 0;
+  api.call = async () => { calls++; return { family: { _id: 'family', name: '测试' }, profile: { history: '原历史' } }; };
+  try {
+    await app.getFamilyProfile('family'); await app.getFamilyProfile('family'); assert.equal(calls, 1);
+    app.applyFamilyUpdate({ _id: 'family', name: '测试' }, { history: '新历史' });
+    assert.equal((await app.getFamilyProfile('family')).profile.history, '新历史'); assert.equal(calls, 1);
+    app.invalidateFamilyData('family'); await app.getFamilyProfile('family'); assert.equal(calls, 2);
+    app.globalData.user = { _id: 'other' }; await app.getFamilyProfile('family'); assert.equal(calls, 3);
+  } finally { api.call = original; }
+});
+
 test('图谱缓存命中、并发请求去重，强制刷新和写入失效会重新请求', async function () {
   const api = require('../miniprogram/utils/api');
   const originalCall = api.call;

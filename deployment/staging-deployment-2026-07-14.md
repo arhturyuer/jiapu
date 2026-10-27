@@ -2,7 +2,7 @@
 
 > 文档状态：历史记录；记录时点：2026-07-14。不作为当前操作指引。文中 cloud1-d5gs5yj4l283d9c6d 当时称 staging，现为仓库 production 目标；禁止照抄旧 staging 命令操作该环境。 当前入口：[现行说明](../docs/正式发布运行手册.md)。
 
-> 历史快照：本文件记录 2026-07-14 的当时状态，不是现行部署手册。当前环境隔离、四个定时器和小程序上传流程以 `deployment/staging-runbook.md`、`docs/有谱开发部署说明.md` 和 `docs/正式发布运行手册.md` 为准。
+> 历史快照：本文件记录 2026-07-14 的当时状态，不是现行部署手册。
 
 ## 环境与授权
 
@@ -40,7 +40,7 @@
 
 ## 免费套餐降级与正式发布阻断项
 
-CloudBase 明确返回 `OperationDenied.FreePackageDenied`，当前套餐不能设置云存储 `CUSTOM` 规则。预发布暂时回读为 `PRIVATE`（仅创建者和管理员可读写），可用于功能联调，但不满足“客户端不可直读原图”的正式发布要求。升级套餐后必须：
+CloudBase 明确返回 `OperationDenied.FreePackageDenied`，当前套餐不能设置云存储 `CUSTOM` 规则。升级套餐后必须：
 
 1. 不设置 `ALLOW_PRIVATE_STORAGE_FALLBACK`，重新运行 `deployment/apply-security.mjs`，并回读为 `CUSTOM`。
 2. 在 CloudBase 控制台给初始运营邮箱重设密码，完成首次改密和八个后台模块的浏览器验收。
@@ -49,4 +49,4 @@ CloudBase 明确返回 `OperationDenied.FreePackageDenied`，当前套餐不能�
 5. 配置错误率、P95、审核积压、资源 80% 和注销失败告警，并完成真实备份恢复演练与 30 天保留方案。
 6. 完成备案、主体认证、服务类目、隐私指引、客服、审核说明；之后才可切换 `production`、上传 `v1.0.0` 和提交微信审核。
 
-本记录不代表已正式发布，不创建 `v1.0.0` 标签。
+本记录，不创建 `v1.0.0` 标签。

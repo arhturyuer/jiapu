@@ -1,0 +1,69 @@
+.family-reading-page { padding-bottom: calc(32px + env(safe-area-inset-bottom)); }
+.profile-paper { padding: 24px 20px 8px; }
+.profile-name { display: block; color: #17231F; font-size: var(--reading-font-24, 24px); font-weight: 600; line-height: 1.45; overflow-wrap: anywhere; }
+.profile-body { display: block; margin-top: 12px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.85; }
+.profile-description { color: #65706A; }
+.profile-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.profile-access { display: block; color: #65706A; font-size: var(--reading-font-13, 14px); line-height: 1.6; }
+.profile-section { padding: 24px 0; border-bottom: 1px solid #E7EAE5; }
+.profile-section-title { display: block; color: #17231F; font-size: var(--reading-font-18, 18px); font-weight: 600; line-height: 1.6; }
+.profile-facts { margin-top: 14px; }
+.profile-fact { display: flex; align-items: flex-start; gap: 16px; margin-top: 10px; line-height: 1.8; }
+.profile-fact:first-child { margin-top: 0; }
+.profile-fact-label { flex: none; width: 2.5em; color: #65706A; }
+.profile-fact-value { min-width: 0; flex: 1; white-space: pre-wrap; overflow-wrap: anywhere; }
+.profile-records { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; min-height: 52px; padding: 12px 0; color: #65706A; background: transparent; text-align: left; font-size: var(--reading-font-14, 16px); }
+.reading-elder .profile-text-button, .reading-elder .profile-records { min-height: 60px; }
+@media (min-width: 600px) { .profile-paper { padding: 32px 32px 12px; } }
+
+.family-reading-page { max-width: 752px; margin: 0 auto; }
+.profile-edit-paper { padding-bottom: 24px; }
+.profile-form { margin-top: 24px; }
+.profile-field + .profile-field { margin-top: 24px; }
+.field-label { display: block; margin-bottom: 8px; color: #17231F; font-weight: 600; line-height: 1.6; }
+.profile-input { box-sizing: border-box; width: 100%; min-height: 48px; border: 1px solid #D8DED9; border-radius: 10px; background: #F3F2EC; padding: 12px; font-size: inherit; }
+.profile-textarea { min-height: 120px; line-height: 1.8; }
+.profile-help { display: block; margin-top: 8px; color: #65706A; font-size: var(--reading-font-13, 14px); line-height: 1.6; overflow-wrap: anywhere; }
+.profile-picker { min-height: 44px; padding: 10px; border: 1px solid #D8DED9; border-radius: 10px; overflow-wrap: anywhere; }
+.profile-error { display: block; margin-top: 20px; color: #B43D3D; white-space: pre-wrap; }
+.profile-field-error .profile-input { border-color: #B43D3D; }
+.profile-edit-actions { display: flex; gap: 12px; width: 100%; max-width: 688px; margin: 0 auto; }
+.profile-edit-actions button { flex: 1; min-width: 0; width: 0; min-height: 48px; margin: 0; padding: 12px 8px; line-height: 1.5; white-space: normal; }
+.reading-elder .profile-picker, .reading-elder .profile-edit-actions button, .reading-elder .profile-input { min-height: 60px; }
+
+.profile-field-message { display: block; margin-top: 8px; color: #B43D3D; line-height: 1.6; }
+
+.profile-section .profile-body { min-height: 1.85em; }
+.profile-introduction { padding: 20px 0 16px; border-bottom: 0; }
+.reading-root .profile-paper button.profile-text-button,
+.reading-root .profile-paper button.profile-records {
+  display: flex;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 8px 0;
+  min-width: 0;
+  max-width: 100%;
+  width: auto;
+  height: auto;
+  min-height: 44px;
+  align-items: center;
+  justify-content: flex-start;
+  text-align: left;
+  color: #245C4A;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  line-height: 1.6;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.reading-root .profile-toolbar button.profile-text-button { margin-left: auto; flex: none; }
+.reading-root .profile-paper button.profile-records { width: 100%; min-height: 52px; justify-content: space-between; padding: 12px 0; color: #65706A; }
+.reading-root.reading-elder .profile-paper button.profile-text-button,
+.reading-root.reading-elder .profile-paper button.profile-records { min-height: 60px; }
+
+.reading-root .profile-paper button::after { border: 0; }
+
+.profile-unfilled { color: #65706A; }
+.family-reading-page.profile-editing-page { padding-bottom: var(--reading-dock-space, calc(140px + env(safe-area-inset-bottom))); }
+.profile-edit-dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); background: #FFFEFA; border-top: 1px solid #D8DED9; box-shadow: 0 -4px 14px rgba(36,92,74,.04); }

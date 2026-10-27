@@ -1,3 +1,4 @@
+const familyProfile = require('./family-profile');
 const nodePresentation = require('./pdf-shared/node-presentation');
 const cloud = require('wx-server-sdk');
 const crypto = require('crypto');
@@ -427,6 +428,7 @@ function publicFamily(family, currentRole) {
     _id: family._id,
     name: family.name || '',
     description: family.description || '',
+    ...familyProfile.summary(family),
     status: family.status || 'active',
     personCount: family.personCount || 0,
     relationCount: family.relationCount || 0,
@@ -792,6 +794,15 @@ async function requireOwnedMedia(assetId, openid, familyId, kind) {
 }
 
 async function moderateText(openid, values) {
+  const chunks = [];
+  for (const value of values) {
+    const text = typeof value === 'string' ? value : '';
+    for (let start = 0; start < text.length; start += 500) chunks.push(text.slice(start, start + 500));
+  }
+  for (let start = 0; start < chunks.length; start += 4) await moderateTextBatch(openid, chunks.slice(start, start + 4));
+}
+
+async function moderateTextBatch(openid, values) {
   const content = values.map(function (item) { return cleanText(item, 500); }).filter(Boolean).join('\n').slice(0, 2500);
   if (!content || process.env.CONTENT_MODERATION_MODE === 'off') return { suggest: 'pass' };
   const contentHash = hash(content, 48);
@@ -1529,30 +1540,39 @@ async function familyList(event) {
   return { families: families, nextCursor: page.nextCursor, hasMore: page.hasMore };
 }
 
+async function familyProfileRead(event) {
+  assert(typeof event.familyId === 'string' && event.familyId.length > 0 && event.familyId.length <= 80, 'INVALID_FAMILY_PROFILE', '缺少有效的家谱信息');
+  const openid = getOpenid();
+  await requireActiveUser(openid);
+  const access = await requireMembership(event.familyId, ACTIVE_ROLES, db, openid);
+  return { family: publicFamily(access.family, access.membership.role), profile: familyProfile.full(access.family) };
+}
+
 async function familyUpdate(event) {
   const openid = getOpenid();
   await requireActiveUser(openid);
   const name = cleanText(event.name, 40);
   const description = cleanText(event.description, 200);
   assert(name, 'FAMILY_NAME_REQUIRED', '请填写家谱名称');
-  await moderateText(openid, [name, description]);
+  const changes = familyProfile.patch(event, assert);
+  const initial = await requireMembership(event.familyId, ['admin'], db, openid);
+  familyProfile.validateFeatured(Object.assign({}, initial.family, changes), assert);
+  await moderateText(openid, [name, description, ...Object.keys(changes).filter(key => key !== 'featuredSection').map(key => changes[key])]);
   return mutate('family.update', event, openid, async function (transaction) {
     const access = await requireMembership(event.familyId, ['admin'], transaction, openid);
-    contributions.family(transaction, access.family, { name, description });
+    const updated = Object.assign({}, access.family, changes, { name, description });
+    familyProfile.validateFeatured(updated, assert);
+    contributions.family(transaction, access.family, updated);
     await updateFamilyContent(transaction, event.familyId, {
-      data: { name: name, description: description, updatedAt: db.serverDate() }
+      data: Object.assign({}, changes, { name, description, updatedAt: db.serverDate() })
     });
     await audit(transaction, {
-      familyId: event.familyId,
-      openid: openid,
-      actorName: access.membership.displayName,
-      action: 'family.update',
-      objectType: 'family',
-      objectId: event.familyId,
-      summary: '更新家谱资料',
-      requestId: event.requestId
+      familyId: event.familyId, openid, actorName: access.membership.displayName,
+      action: 'family.update', objectType: 'family', objectId: event.familyId,
+      summary: '更新家谱资料', requestId: event.requestId
     });
-    return { family: publicFamily(await getFamily(transaction, event.familyId), 'admin') };
+    const saved = await getFamily(transaction, event.familyId);
+    return { family: publicFamily(saved, 'admin'), profile: familyProfile.full(saved) };
   });
 }
 
@@ -4065,6 +4085,7 @@ const handlers = {
   'family.create': familyCreate,
   'family.list': familyList,
   'family.update': familyUpdate,
+  'family.profile': familyProfileRead,
   'family.archive': familyArchive,
   'family.restore': familyRestore,
   'family.dashboard': familyDashboard,

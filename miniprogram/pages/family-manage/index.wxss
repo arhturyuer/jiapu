@@ -49,3 +49,11 @@
   .revoke-button { width: 56px; height: 31px; border: 1px solid rgba(180, 61, 61, 0.16); border-radius: 9px; }
 }
 /* large-screen:end */
+
+.manage-description { display: block; margin: 8px 0 12px; color: #65706A; font-size: var(--reading-font-13, 14px); line-height: 1.6; }
+.manage-profile-entry, .invite-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 44px; padding: 12px 0; background: transparent; text-align: left; font-size: inherit; }
+.manage-profile-entry .setting-title, .manage-profile-entry .member-role { display: block; }
+.member-row { flex-wrap: wrap; gap: 8px; padding: 12px 0; }
+.member-copy { flex-basis: 140px; overflow-wrap: anywhere; }
+.member-action { min-height: 44px; width: auto; padding: 8px 0; background: transparent; font-size: var(--reading-font-13, 14px); }
+.reading-elder .member-action, .reading-elder .manage-profile-entry, .reading-elder .invite-heading { min-height: 60px; }

@@ -1,21 +1,7 @@
-@import "../../styles/contribution-entry.wxss";
 .family-page { padding-bottom: calc(56rpx + env(safe-area-inset-bottom)); }
 .empty-action { width: 360rpx; }
-.family-hero { padding: 32rpx 32rpx 16rpx; }
-.family-hero-top { display: flex; flex-direction: column; }
-.family-title-row { width: 100%; min-width: 0; display: flex; align-items: flex-start; gap: 14rpx; }
-.family-name, .family-role { display: block; }
-.family-name { min-width: 0; flex: 1; font-size: var(--reading-font-22, 22px); font-weight: 600; line-height: 1.25; white-space: normal; word-break: break-all; }
-.family-role { margin-top: 14rpx; color: #65706A; font-size: var(--reading-font-13, 14px); line-height: 1.55; }
-.family-membership-badge { height:55rpx; padding:0 16rpx; display:flex; flex:none; align-items:center; gap:5rpx; color:#654B1B; background:#FFF0CA; border-radius:999rpx; font-size: var(--reading-font-11, 14px); font-weight:650; line-height:1; }.family-membership-badge.active { color:#FFFFFF; background:#34715D; }.family-membership-badge-pressed { opacity:.72; }.family-membership-arrow { font-size: var(--reading-font-13, 14px); line-height:1; }
-.invite-button { width: 0; min-width: 0; height: 68rpx; padding: 0 14rpx; display: inline-flex; flex: 1; align-items: center; justify-content: center; color: #FFFFFF; background: #245C4A; border-radius: 20rpx; box-shadow: 0 8rpx 18rpx rgba(36, 92, 74, 0.18); font-size: var(--reading-font-12_5, 14px); font-weight: 600; line-height: 1; white-space: nowrap; }
-.invite-button:active { background: #194636; }
-.family-description { margin-top: 24rpx; display: block; color: #65706A; line-height: 1.6; }
-.family-progress-row { width: 100%; margin-top: 28rpx; display: flex; align-items: center; gap: 20rpx; }
-.family-progress-main { width: 0; min-width: 0; flex: 1; }
 .progress-track { height: 12rpx; overflow: hidden; background: #E1E5E1; border-radius: 12rpx; }
 .progress-value { height: 100%; background: #245C4A; border-radius: 12rpx; }
-.progress-text { margin-top: 12rpx; display: block; color: #65706A; font-size: var(--reading-font-12, 14px); }
 .stats-grid { margin-top: 20rpx; display: grid; grid-template-columns: 1fr 1fr; gap: 16rpx; }
 .share-card-canvas { position: fixed; left: -1600rpx; top: -1600rpx; width: 750px; height: 600px; opacity: 0; pointer-events: none; }
 .onboarding-card { margin-top: 20rpx; padding: 28rpx; }
@@ -71,16 +57,8 @@
 @media (min-width: 600px) {
   .family-page { padding-bottom: calc(28px + env(safe-area-inset-bottom)); }
   .empty-action { width: 180px; }
-  .family-hero { padding: 16px 16px 8px; }
-  .family-title-row { gap: 7px; }
-  .family-role { margin-top: 7px; }
-  .family-membership-badge { height:27.5px; padding:0 8px; gap:2.5px; border-radius:499.5px; }
-  .invite-button { height: 34px; padding: 0 7px; border-radius: 10px; box-shadow: 0 4px 9px rgba(36, 92, 74, 0.18); }
-  .family-description { margin-top: 12px; }
-  .family-progress-row { margin-top: 14px; gap: 10px; }
   .progress-track { height: 6px; border-radius: 6px; }
   .progress-value { border-radius: 6px; }
-  .progress-text { margin-top: 6px; }
   .stats-grid { margin-top: 10px; gap: 8px; }
   .share-card-canvas { left: -800px; top: -800px; }
   .onboarding-card { margin-top: 10px; padding: 14px; }
@@ -119,3 +97,24 @@
   .banner-ad { margin-top:20px; }
 }
 /* large-screen:end */
+
+.family-hero { padding: 20px; }
+.family-title-row { display: flex; align-items: flex-start; gap: 12px; }
+.family-name { display: block; flex: 1; min-width: 0; color: #17231F; font-size: var(--reading-font-22, 22px); font-weight: 600; line-height: 1.45; white-space: normal; overflow-wrap: anywhere; }
+.family-card-arrow { flex: none; align-self: flex-start; color: #65706A; font-size: 24px; line-height: calc(var(--reading-font-22, 22px) * 1.45); }
+.family-description, .family-featured-copy { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; white-space: pre-wrap; line-height: 1.75; }
+.family-description { margin-top: 10px; color: #65706A; }
+.family-profile-facts { margin-top: 16px; }
+.family-fact { display: flex; align-items: flex-start; gap: 12px; line-height: 1.7; }
+.family-fact + .family-fact { margin-top: 6px; }
+.family-fact-label { flex: none; width: 2.5em; color: #65706A; font-size: var(--reading-font-14, 16px); }
+.family-fact-value { flex: 1; min-width: 0; font-size: var(--reading-font-14, 16px); overflow-wrap: anywhere; }
+.family-featured { margin-top: 18px; padding-top: 14px; border-top: 1px solid #E7EAE5; }
+.family-featured-label { display: block; margin-bottom: 6px; color: #65706A; font-size: var(--reading-font-13, 14px); }
+.family-featured-copy { color: #17231F; }
+.family-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; justify-content: space-between; padding: 12px 0; }
+.family-role { min-width: 0; flex: 1; color: #65706A; font-size: var(--reading-font-13, 14px); line-height: 1.6; }
+.invite-button { width: auto; flex: none; min-height: 44px; padding: 10px 16px; color: #245C4A; background: #E4EFEA; border: 1px solid #D8DED9; border-radius: 12px; font-size: var(--reading-font-14, 16px); line-height: 1.5; }
+.family-completion { margin-top: 16px; }
+.family-completion-heading { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; color: #65706A; font-size: var(--reading-font-13, 14px); }
+.reading-elder .family-actions, .reading-elder .invite-button { min-height: 60px; }

@@ -9,7 +9,7 @@ function business(condition, code) { if (!condition) throw Object.assign(new Err
 function harness(role = 'viewer') {
   const db = createDatabase(); const files = new Map(); const dispatched = []; let downloadHook; let deleteHook;
   db.put('users', 'actor', { status: 'active', nickName: '虚构用户' });
-  db.put('families', 'source', { name: '虚构家谱', description: '家谱简介', status: 'active', proLifetime: true });
+  db.put('families', 'source', { name: '虚构家谱', description: '家谱简介', surname: '虚', ancestralHome: '虚构祖籍', hallName: '虚构堂号', generationPoem: '甲乙\n丙丁', history: '虚构历史'.repeat(100), familyMotto: '家训', featuredSection: 'familyMotto', status: 'active', proLifetime: true });
   db.put('family_memberships', 'source-member', { familyId: 'source', userId: 'actor', role, status: 'active' });
   db.put('persons', 'p1', { familyId: 'source', name: '同名', gender: 'male', bio: '完整简介', status: 'active', avatarAssetId: 'photo', birthDate: '1980-01-01', birthDateInfo: { calendar: 'lunar', precision: 'day', year: 1980, month: 1, day: 1 }, birthDateRange: { start: '1980-01-01', end: '1980-01-01' } });
   db.put('persons', 'p2', { familyId: 'source', name: '同名', gender: 'female', status: 'active' });
@@ -62,6 +62,7 @@ test('三种角色可复制，原谱资料、日期、排行和头像完整且�
     assert.equal(status.personCount, 3); assert.equal(status.relationCount, 3);
     const target = h.db.get('families', status.family._id);
     assert.equal(target.creatorId, 'actor'); assert.equal(target.description, '家谱简介');
+    for (const field of ['surname', 'ancestralHome', 'hallName', 'generationPoem', 'history', 'familyMotto', 'featuredSection']) assert.equal(target[field], h.db.get('families', 'source')[field]);
     assert.equal(target.proLifetime, undefined); assert.equal(target.adminCount, 1);
     const persons = h.db.all('persons').filter(p => p.familyId === target._id);
     const person = persons.find(p => p.gender === 'male');
@@ -176,9 +177,12 @@ test('超过单次时间预算保存检查点后续派发，断点继续不重�
   const first = await worker.process(task.taskId);
   assert.equal(first.continued, true); assert.equal(h.db.get('family_copy_tasks', task.taskId).status, 'pending');
   assert.equal(h.db.all('families').length, 1); h.db.writeHook = null;
+  const snapshotHistory = h.db.get('families', 'source').history;
+  h.db.put('families', 'source', { ...h.db.get('families', 'source'), history: '快照后变化' });
   await worker.process(task.taskId);
   assert.equal(h.db.get('family_copy_tasks', task.taskId).status, 'completed');
   assert.equal(h.db.all('persons').filter(p => p.familyId !== 'source').length, 3);
+  assert.equal(h.db.all('families').find(row => row._id !== 'source').history, snapshotHistory);
 });
 
 test('资料修改审计在同一事务更新 contentRevision，拒绝和邀请不更新', async () => {

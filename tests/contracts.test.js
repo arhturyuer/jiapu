@@ -55,7 +55,7 @@ test('小程序只通过用户 API 访问数据且调用动作都有服务端路
 
 test('归档与注销入口遵守弹窗限制并保留可处理的失败信息', function () {
   const clientApi = fs.readFileSync(path.join(root, 'miniprogram/utils/api.js'), 'utf8');
-  const familyManage = fs.readFileSync(path.join(root, 'miniprogram/pages/family-manage/index.js'), 'utf8');
+  const familyManage = fs.readFileSync(path.join(root, 'assets/family-profile/manage.js'), 'utf8');
   const familyTemplate = fs.readFileSync(path.join(root, 'miniprogram/pages/family-manage/index.wxml'), 'utf8');
   const privacy = fs.readFileSync(path.join(root, 'miniprogram/pages/privacy/index.js'), 'utf8');
   const privacyTemplate = fs.readFileSync(path.join(root, 'miniprogram/pages/privacy/index.wxml'), 'utf8');
@@ -139,6 +139,11 @@ test('关于页使用正式版实际版本并按最新在前展示受控更新�
   const uploadScript = fs.readFileSync(path.join(root, 'deployment/upload-miniprogram.sh'), 'utf8');
   const verifier = fs.readFileSync(path.join(root, 'deployment/verify-release-note.mjs'), 'utf8');
   assert.deepEqual(releaseInfo.validateReleaseNotes(releaseNotes), [
+  { version: '1.6.33', summary: '家谱资料移除目录，未填内容显示未填写；编辑保存按钮固定底部并按实际高度预留表单空间。' },
+  { version: '1.6.32', summary: '家谱资料阅读状态展示全部字段，未填写内容留空，修正编辑入口与资料编写记录按钮的对齐。' },
+  { version: '1.6.31', summary: '家谱资料合并为同页阅读和整页编辑，全部字段连续填写，优化概况、字辈、家训与历史的展示顺序。' },
+  { version: '1.6.30', summary: '优化家庭页家谱资料卡片，分离管理操作；家谱资料支持整页阅读与章节目录定位。' },
+  { version: '1.6.29', summary: '新增家谱资料阅读与分组编辑，支持家族概况、字辈、历史和家训及家庭页重点展示，优化已加入家人与邀请管理。' },
   { version: '1.6.28', summary: '人物与家谱新增资料编写入口，所有家谱成员可免费查看编写者、字段修改前后值和审核详情。' },
   { version: '1.6.27', summary: '优化示例首页图标和公开页面返回导航，我的页帮助与反馈新增修谱指南入口。' },
   { version: '1.6.26', summary: '新增夫妻顺序手动调整，本人与配偶共同排序，支持单配偶左右互换，并同步图片、PDF和家谱复制。' },
@@ -337,7 +342,7 @@ test('家谱页和家庭页空状态使用一致的三级创建引导', function
 
 test('家庭页保留首次引导，家谱页在三位成员后提供可关闭的邀请待办', function () {
   const userApi = fs.readFileSync(path.join(root, 'cloudfunctions/youpuUserApi/index.js'), 'utf8');
-  const members = fs.readFileSync(path.join(root, 'miniprogram/pages/members/index.js'), 'utf8');
+  const members = fs.readFileSync(path.join(root, 'assets/family-profile/members.js'), 'utf8');
   const membersTemplate = fs.readFileSync(path.join(root, 'miniprogram/pages/members/index.wxml'), 'utf8');
   const tree = fs.readFileSync(path.join(root, 'miniprogram/pages/tree/index.js'), 'utf8');
   const treeTemplate = fs.readFileSync(path.join(root, 'miniprogram/pages/tree/index.wxml'), 'utf8');
@@ -361,7 +366,7 @@ test('家庭页保留首次引导，家谱页在三位成员后提供可关闭�
 });
 
 test('分享弹框预先准备本机邀请码并直接转发给微信好友', function () {
-  const members = fs.readFileSync(path.join(root, 'miniprogram/pages/members/index.js'), 'utf8');
+  const members = fs.readFileSync(path.join(root, 'assets/family-profile/members.js'), 'utf8');
   const membersTemplate = fs.readFileSync(path.join(root, 'miniprogram/pages/members/index.wxml'), 'utf8');
   const tree = fs.readFileSync(path.join(root, 'miniprogram/pages/tree/index.js'), 'utf8');
   const treeTemplate = fs.readFileSync(path.join(root, 'miniprogram/pages/tree/index.wxml'), 'utf8');
@@ -659,7 +664,7 @@ test('家谱详情支持谱内人物搜索分页、人物详情、风险和运�
 });
 
 test('客户端不接收或缓存原始微信 openid', function () {
-  const appSource = fs.readFileSync(path.join(root, 'miniprogram/app.js'), 'utf8');
+  const appSource = fs.readFileSync(path.join(root, 'assets/family-profile/app.js'), 'utf8');
   const userApi = fs.readFileSync(path.join(root, 'cloudfunctions/youpuUserApi/index.js'), 'utf8');
   assert.doesNotMatch(appSource, /data\.openid|setStorageSync\(['"]youpu_openid/);
   const publicAccountBody = userApi.match(/function publicAccount\(user\) \{([\s\S]*?)\n\}/);

@@ -21,7 +21,7 @@
 | `cloudfunctions/youpuPaymentNotify/` | 支付通知代码；production 部署目标使用 V2 名称 |
 | `cloudfunctions/familyFunctions/` | 遗留代码；调用状态待核验，不作为默认回滚方案 |
 | `admin/` | 运营后台 |
-| `deployment/` | 环境护栏、部署清单、云端预检与人工上传工具 |
+| `deployment/` | 环境护栏、部署清单、云端预检 |
 | `scripts/`、`tests/` | 本地检查、生成工具和回归测试 |
 | `docs/` | 现行规范、验收说明和明确标记的历史资料 |
 
@@ -54,7 +54,7 @@ VITE_CLOUDBASE_ENV=<独立staging环境ID> bash scripts/check.sh --build-admin
 
 ## 部署与人工发布
 
-AI 负责服务端部署及验证，人工负责小程序上传、体验版设置、提交审核与发布。完整流程和授权要求见[正式发布运行手册](docs/正式发布运行手册.md)，每次交接使用[版本模板](docs/releases/TEMPLATE.md)。
+AI 负责服务端部署及验证。完整流程和授权要求见[正式发布运行手册](docs/正式发布运行手册.md)，每次交接使用[版本模板](docs/releases/TEMPLATE.md)。
 
 默认仅允许独立 staging。完成[staging 建立手册](deployment/staging-runbook.md)的本机配置后，首次初始化按以下命令进行；日常部署按改动选择组件：
 
@@ -68,3 +68,5 @@ AI 负责服务端部署及验证，人工负责小程序上传、体验版设�
 production 只允许在当前请求明确授权后操作，并通过原有脚本护栏；“部署”“上线”“验收通过”不能推断为生产授权。生产环境标识以受控配置为准，staging 标识及密钥保存在 Git 忽略的本机配置，生产个人数据不得复制到 staging。
 
 详细部署契约见[开发部署说明](docs/有谱开发部署说明.md)，验收按[发布验收清单](docs/发布验收清单.md)选择适用项目。本地检查成功不代表已部署或已发布。
+
+交付状态仅维护服务端的部署、验证、回滚与运维待办；小程序发布生命周期不再登记或追问。开发改动、测试及接口兼容证据仍按现行规范维护。

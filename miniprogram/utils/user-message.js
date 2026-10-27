@@ -1,4 +1,6 @@
 const MESSAGE_BY_CODE = {
+  INVALID_FAMILY_PROFILE: '请检查资料字数和重点展示内容后重试',
+  ACCOUNT_SESSION_CHANGED: '账户或家谱已变化，请重新进入页面',
   PDF_IN_PROGRESS: '已有 PDF 正在生成，请稍后查看',
   PDF_DAILY_LIMIT: '今天已生成 20 次 PDF，请明天再试',
   PDF_NOT_FOUND: 'PDF 任务已无法查看，请重新生成',

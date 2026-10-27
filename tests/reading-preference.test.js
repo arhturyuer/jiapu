@@ -215,6 +215,9 @@ test('大字底栏按实际高度留白，避免将页面宽度换算成错误�
   await new Promise(function (resolve) { setTimeout(resolve, 10); });
   assert.equal(page.data.readingDockStyle, '--reading-dock-space:254px;');
   height = 340;
+  page.route = 'pages/family-profile/index';
+  reading.watchDock(page);
+  page.setData({ editing: true });
   reading.measureDock(page);
   await new Promise(function (resolve) { setTimeout(resolve, 10); });
   assert.equal(page.data.readingDockStyle, '--reading-dock-space:364px;');

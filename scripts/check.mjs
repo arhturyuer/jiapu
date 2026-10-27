@@ -43,6 +43,7 @@ try {
   run(node, [resolve(root, 'scripts/check-docs.mjs')]);
   run(node, [resolve(root, 'scripts/package-spouse-order.mjs'), '--check']);
   run(node, [resolve(root, 'scripts/package-contributions.mjs'), '--check']);
+  run(node, [resolve(root, 'scripts/package-family-profile.mjs'), '--check']);
   run(node, [resolve(root, 'scripts/package-pdf-layout.mjs'), '--check']);
   run(node, [resolve(root, 'scripts/package-membership.mjs'), '--check']);
   const tests = files.filter(function (file) { return /^tests\/[^/]+\.test\.js$/.test(file); });

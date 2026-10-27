@@ -141,7 +141,7 @@ test('家谱和家庭页为所有已加入角色提供不越权的分享选择�
   const membersTemplate = source('miniprogram/pages/members/index.wxml');
   const treeTemplate = source('miniprogram/pages/tree/index.wxml');
   assert.doesNotMatch(membersTemplate + treeTemplate, /关闭分享卡片/);
-  assert.match(membersTemplate, /<button class="invite-button" catchtap="openShareSheet">邀请家人<\/button>/);
+  assert.match(membersTemplate, /<button class="invite-button" bindtap="openShareSheet">邀请家人<\/button>/);
   assert.match(membersTemplate, /data-role="member" bindtap="chooseShareRole" wx:if="\{\{currentRole !== 'viewer'\}\}"/);
   assert.match(treeTemplate, /<view[^>]*class="toolbar-share landscape-hidden" bindtap="startShare"><text[^>]*>邀请家人<\/text><\/view>/);
   assert.match(treeTemplate, /<view[^>]*class="action-cell action-cell-wide" bindtap="shareSelectedPerson">/);

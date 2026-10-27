@@ -78,7 +78,7 @@ test('分享卡缓存指纹会随展示信息变化', function () {
 });
 
 test('全部分享入口设置图片，系统菜单进入建谱页', function () {
-  const members = fs.readFileSync(path.join(root, 'miniprogram/pages/members/index.js'), 'utf8');
+  const members = fs.readFileSync(path.join(root, 'assets/family-profile/members.js'), 'utf8');
   const tree = fs.readFileSync(path.join(root, 'miniprogram/pages/tree/index.js'), 'utf8');
   const example = fs.readFileSync(path.join(root, 'miniprogram/pages/example/index.js'), 'utf8');
   const createFamily = fs.readFileSync(path.join(root, 'miniprogram/pages/create-family/index.js'), 'utf8');

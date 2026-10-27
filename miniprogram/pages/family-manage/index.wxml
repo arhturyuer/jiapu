@@ -11,33 +11,31 @@
   </view>
 
   <block wx:if="{{family.status === 'active'}}">
-    <view class="manage-section" wx:if="{{isAdmin}}">
-      <view class="section-heading"><text class="section-title">家谱资料</text></view>
-      <view class="form-card surface-card">
-        <text class="field-label">家谱名称</text><input aria-label="姓名，必填" class="field-input" maxlength="40" value="{{name}}" data-field="name" bindinput="inputField" />
-        <text class="field-label second-label">一句介绍</text><textarea aria-label="家谱说明" class="field-textarea" maxlength="200" value="{{description}}" data-field="description" bindinput="inputField"></textarea>
-        <button class="primary-button save-button" loading="{{saving}}" bindtap="saveFamily">保存资料</button>
-      </view>
-    </view>
+    <view class="manage-section"><view class="member-list surface-card"><button class="manage-profile-entry" bindtap="openFamilyProfile"><view><text class="setting-title">家谱资料</text><text class="member-role">家族概况、字辈、历史与家训</text></view><text aria-hidden="true">›</text></button></view></view>
 
     <view class="manage-section" id="collaborator-section">
-      <view class="section-heading"><text class="section-title">共同维护</text><text class="muted-text">{{collaborators.length}} 人</text></view>
+      <view class="section-heading"><text class="section-title">已加入的家人</text><text class="muted-text">{{collaborators.length}} 人</text></view>
+      <text class="manage-description">这里是已加入这份家谱的使用者，与谱中记录的人物不同。</text>
       <view class="member-list surface-card">
         <view class="member-row" wx:for="{{collaborators}}" wx:key="_id">
           <view class="member-avatar">{{item.initial}}</view>
-          <view class="member-copy"><text class="member-name">{{item.displayName}}</text><text class="member-role">{{item.roleText}}</text></view>
-          <view class="member-actions" wx:if="{{isAdmin}}"><text data-reading-control="true" aria-role="button" class="member-action" data-id="{{item._id}}" bindtap="changeRole">改角色</text><text data-reading-control="true" aria-role="button" class="member-action" wx:if="{{item.role !== 'admin'}}" data-id="{{item._id}}" bindtap="transferAdmin">设管理员</text><text data-reading-control="true" aria-role="button" class="member-action" wx:if="{{item.role !== 'admin'}}" data-id="{{item._id}}" bindtap="transferOwnership">转让</text></view>
+          <view class="member-copy"><text class="member-name">{{item.displayName}}</text><text class="member-role">{{item.roleText}}</text><text class="member-role">{{item.roleDescription}}</text></view>
+          <button class="member-action" wx:if="{{isAdmin}}" data-id="{{item._id}}" bindtap="managePermissions">管理权限</button>
         </view>
       </view>
     </view>
 
     <view class="manage-section" wx:if="{{isAdmin}}">
-      <view class="section-heading"><text class="section-title">邀请管理</text><text class="muted-text">{{invitations.length}} 条</text></view>
-      <view class="empty-invite surface-card" wx:if="{{!invitations.length}}">还没有生成过邀请</view>
-      <view class="invite-list surface-card" wx:else>
-        <view class="invite-row" wx:for="{{invitations}}" wx:key="_id"><view class="invite-copy"><text class="invite-name">{{item.inviteTitle}}</text><text class="invite-meta">{{item.statusText}} · {{item.usageText}}</text></view><button class="revoke-button" wx:if="{{item.displayStatus === 'active'}}" data-id="{{item._id}}" bindtap="revokeInvite">撤销</button></view>
-        <button class="secondary-button" wx:if="{{hasMoreInvites}}" loading="{{loadingMoreInvites}}" bindtap="loadMoreInvites">加载更多邀请</button>
-      </view>
+      <button class="invite-heading" bindtap="toggleInvites"><text class="section-title">邀请管理</text><text class="muted-text">{{invitesExpanded ? '收起 ⌃' : '展开查看 ›'}}</text></button>
+      <block wx:if="{{invitesExpanded}}">
+        <view class="empty-invite surface-card" wx:if="{{invitesLoading && !invitesLoaded}}">正在读取邀请...</view>
+        <view class="empty-invite surface-card" wx:elif="{{invitesLoaded && !invitations.length}}">还没有生成过邀请</view>
+        <view class="invite-list surface-card" wx:if="{{invitations.length}}">
+          <view class="invite-row" wx:for="{{invitations}}" wx:key="_id"><view class="invite-copy"><text class="invite-name">{{item.inviteTitle}}</text><text class="invite-meta">{{item.statusText}} · {{item.usageText}}</text></view><button class="revoke-button" wx:if="{{item.displayStatus === 'active'}}" data-id="{{item._id}}" bindtap="revokeInvite">撤销</button></view>
+          <button class="secondary-button" wx:if="{{hasMoreInvites && !invitesError}}" loading="{{loadingMoreInvites}}" disabled="{{invitesLoading}}" bindtap="loadMoreInvites">加载更多邀请</button>
+        </view>
+        <view class="empty-invite surface-card" wx:if="{{invitesError}}"><text>{{invitesError}}</text><button class="secondary-button" bindtap="retryInvites">重新加载邀请</button></view>
+      </block>
     </view>
 
     <view class="manage-section">

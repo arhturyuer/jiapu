@@ -1,3 +1,4 @@
+const PROFILE_FIELDS = ['surname', 'ancestralHome', 'hallName', 'generationPoem', 'history', 'familyMotto', 'featuredSection'];
 const crypto = require('crypto');
 const RUNTIME_ENVIRONMENT = process.env.TCB_ENV || process.env.JOB_FUNCTION_NAMESPACE || '';
 const BATCH_SIZE = 20;
@@ -99,7 +100,7 @@ function createWorker(options) {
       const after = (await access(task, db)).family;
       if (Number(before.contentRevision || 0) !== Number(after.contentRevision || 0)) continue;
       validateGraph(persons, relations);
-      dataset = { description: before.description || '', persons, relations };
+      dataset = { description: before.description || '', profile: fields(before, PROFILE_FIELDS), persons, relations };
       break;
     }
     if (!dataset) fail('GRAPH_CHANGED');
@@ -114,7 +115,7 @@ function createWorker(options) {
       }
     }
     await write(task, token, null, {
-      snapshotReady: true, description: dataset.description, personCount: dataset.persons.length,
+      snapshotReady: true, description: dataset.description, profile: dataset.profile, personCount: dataset.persons.length,
       relationCount: dataset.relations.length, avatarCount: dataset.persons.filter(p => p.avatarAssetId).length,
       stage: 'persons'
     });
@@ -275,7 +276,7 @@ function createWorker(options) {
       await write(task, token, async function (tx) {
         const currentAccess = await access(task, tx);
         const user = currentAccess.user;
-        const family = { name: task.name, description: task.description, creatorId: task.userId, status: 'active', privacy: 'private', schemaVersion: 3,
+        const family = { ...fields(task.profile || {}, PROFILE_FIELDS), name: task.name, description: task.description, creatorId: task.userId, status: 'active', privacy: 'private', schemaVersion: 3,
           hasSpouseDisplayOrder: people.some(p => p.spouseDisplayOrder && p.spouseDisplayOrder.length),
           personCount: people.length, relationCount: relations.length, relationRevision: relations.length, contentRevision: 0, adminCount: 1,
           createdAt: db.serverDate(), updatedAt: db.serverDate() };

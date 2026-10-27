@@ -83,7 +83,7 @@ function detach(page) {
 }
 
 function measureDock(page) {
-  if (page._deviceHidden || !page.createSelectorQuery || !/pages\/(add-member|edit-member|membership)\/index/.test(page.route || '')) return;
+  if (page._deviceHidden || !page.createSelectorQuery || !/pages\/(add-member|edit-member|membership|family-profile)\/index/.test(page.route || '')) return;
   clearTimeout(page._readingDockTimer);
   page._readingDockTimer = setTimeout(function () {
     page._readingDockTimer = null;
@@ -101,7 +101,7 @@ function measureDock(page) {
 }
 
 function watchDock(page) {
-  if (page._readingDockWatched || !/pages\/(add-member|edit-member|membership)\/index/.test(page.route || '')) return;
+  if (page._readingDockWatched || !/pages\/(add-member|edit-member|membership|family-profile)\/index/.test(page.route || '')) return;
   page._readingDockWatched = true;
   const original = page.setData;
   page.setData = function (patch, callback) {

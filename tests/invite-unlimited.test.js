@@ -8,7 +8,7 @@ const domain = require('../cloudfunctions/youpuUserApi/domain');
 const shareInvite = require('../miniprogram/utils/share-invite');
 
 const root = path.resolve(__dirname, '..');
-const manageSource = fs.readFileSync(path.join(root, 'miniprogram/pages/family-manage/index.js'), 'utf8');
+const manageSource = fs.readFileSync(path.join(root, 'assets/family-profile/manage.js'), 'utf8');
 
 function withStorage(run) {
   const previousWx = global.wx;

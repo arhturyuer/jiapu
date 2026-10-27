@@ -1,3 +1,4 @@
+const familyProfile = require('./family-profile');
 const crypto = require('crypto');
 const date = require('./pdf-shared/person-date');
 const ACTIONS = new Set(['family.create', 'family.update', 'person.create_related', 'person.update', 'person.delete', 'relation.link_existing', 'relation.remove', 'relation.reorder_children', 'relation.reorder_spouses']);
@@ -30,8 +31,12 @@ function person(scope, before, after) {
   append(scope, [target._id], changes);
 }
 function family(scope, before, after) {
-  append(scope, [], ['name', 'description'].filter(key => (before && before[key] || '') !== (after[key] || '')).map(key => ({ objectName: after.name, field: key, label: key === 'name' ? '家谱名称' : '家谱介绍', before: before && before[key] || '不详', after: after[key] || '不详' })));
+  const display = (row, field) => field === 'featuredSection' ? familyProfile.FEATURED[row && row[field] || 'none'] || familyProfile.FEATURED.none : row && row[field] || '不详';
+  append(scope, [], Object.keys(familyProfile.LABELS).filter(field => display(before, field) !== display(after, field)).map(field => ({
+    objectName: after.name, field, label: familyProfile.LABELS[field], before: display(before, field), after: display(after, field)
+  })));
 }
+
 function relation(scope, row, first, second, removed = false) {
   const description = first.name + (row.type === 'spouse' ? '与' : '是') + second.name + (row.type === 'spouse' ? '为配偶' : '的家长');
   append(scope, [row.fromPersonId, row.toPersonId], [{ objectName: '亲属关系', field: 'relation', label: '亲属关系', before: removed ? description : '无此关系', after: removed ? '已移除' : description }]);

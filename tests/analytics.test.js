@@ -158,7 +158,7 @@ test('自动采集故障不会把已提交的业务结果变成失败', async ()
 });
 
 test('客户端缓存访问每天按用户家谱上报一次，失败可重试，切日重置', async () => {
-  const app = fs.readFileSync(path.join(root, 'miniprogram/app.js'), 'utf8');
+  const app = fs.readFileSync(path.join(root, 'assets/family-profile/app.js'), 'utf8');
   const source = app.slice(app.indexOf('  recordVisit: function'), app.indexOf('  getPersonDetail: function'));
   let clock = Date.parse('2026-10-01T15:59:59Z');
   let calls = 0;
@@ -346,7 +346,7 @@ test('同一个用户多份家谱分别计数，期间率按总分母而非日�
 });
 
 test('前台停留跨北京时间零点后仍采集用户与正在展示的缓存页面', async () => {
-  const source = fs.readFileSync(path.join(root, 'miniprogram/app.js'), 'utf8');
+  const source = fs.readFileSync(path.join(root, 'assets/family-profile/app.js'), 'utf8');
   const methods = source.slice(source.indexOf('  recordVisit: function'), source.indexOf('  getPersonDetail: function'));
   let clock = Date.parse('2026-10-01T15:59:59Z'); const calls = [];
   const page = { route: 'pages/example/index', data: { loading: false, example: {}, slug: 'fixture' } };

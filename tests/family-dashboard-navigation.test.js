@@ -10,15 +10,19 @@ function read(relativePath) {
   return fs.readFileSync(path.join(root, relativePath), 'utf8');
 }
 
-test('家庭页顶部卡片打开当前家庭权限管理，内部按钮独立响应', function () {
+test('家庭卡片只展示资料，管理操作位于卡片之外', function () {
   const template = read('miniprogram/pages/members/index.wxml');
-  assert.match(template, /<view[^>]*aria-role="button"[^>]*aria-label="家庭与权限管理"[^>]*class="family-hero surface-card"[^>]*bindtap="openFamilyManage"/);
-  assert.match(template, /class="family-membership-badge[^>]*catchtap="openMembership"/);
-  assert.match(template, /class="invite-button" catchtap="openShareSheet"/);
+  assert.match(template, /<view[^>]*aria-role="button"[^>]*aria-label="查看家谱资料"[^>]*class="family-hero surface-card"[^>]*bindtap="openFamilyProfile"/);
+  const card = template.slice(template.indexOf('class="family-hero surface-card"'), template.indexOf('<view class="family-actions"'));
+  assert.match(card, /family-card-arrow/);
+  assert.doesNotMatch(card, /bindtap="openMembership"|invite-button|progress-track|contribution-entry|family-profile-entry/);
+  assert.match(template, /class="family-actions"[\s\S]*class="invite-button" bindtap="openShareSheet"/);
+  assert.match(template, /setting-row" bindtap="openMembership"/);
+  assert.match(template, /setting-row" bindtap="openContributions"/);
 
   let definition;
   const navigations = [];
-  vm.runInNewContext(read('miniprogram/pages/members/index.js'), {
+  vm.runInNewContext(read('assets/family-profile/members.js'), {
     getApp: function () { return {}; },
     Page: function (value) { definition = value; },
     wx: { navigateTo: function (options) { navigations.push(options.url); } },
@@ -29,14 +33,14 @@ test('家庭页顶部卡片打开当前家庭权限管理，内部按钮独立�
     }
   });
   const page = Object.assign({}, definition, { data: { currentFamily: null } });
-  page.openFamilyManage();
+  page.openFamilyProfile();
   assert.deepEqual(navigations, []);
   for (const familyId of ['family-1', 'family-2']) {
     page.data.currentFamily = { _id: familyId };
     for (const role of ['admin', 'member', 'viewer']) {
       page.data.currentRole = role;
-      page.openFamilyManage();
-      assert.equal(navigations.at(-1), '/pages/family-manage/index?familyId=' + familyId);
+      page.openFamilyProfile();
+      assert.equal(navigations.at(-1), '/pages/family-profile/index?familyId=' + familyId);
     }
   }
   assert.equal(navigations.length, 6);
@@ -44,7 +48,7 @@ test('家庭页顶部卡片打开当前家庭权限管理，内部按钮独立�
 
 test('家庭页四项统计均提供对应入口', function () {
   const template = read('miniprogram/pages/members/index.wxml');
-  const source = read('miniprogram/pages/members/index.js');
+  const source = read('assets/family-profile/members.js');
   assert.match(template, /bindtap="openPersonList"/);
   assert.match(template, /bindtap="openGraph"/);
   assert.match(template, /bindtap="openCollaborators"/);
@@ -57,7 +61,7 @@ test('家庭页四项统计均提供对应入口', function () {
 
 test('家庭页集中家谱管理入口并移除最近动态', function () {
   const template = read('miniprogram/pages/members/index.wxml');
-  const source = read('miniprogram/pages/members/index.js');
+  const source = read('assets/family-profile/members.js');
   const profileTemplate = read('miniprogram/pages/profile/index.wxml');
   const profileSource = read('miniprogram/pages/profile/index.js');
   const userApi = read('cloudfunctions/youpuUserApi/index.js');
@@ -66,7 +70,7 @@ test('家庭页集中家谱管理入口并移除最近动态', function () {
   const legacyDashboard = legacyApi.match(/async function familyDashboard\(event\) \{([\s\S]*?)\n\}/);
 
   assert.match(template, /家谱管理/);
-  ['切换家谱', '家谱变更历史', '完整家庭备份', '家谱显示设置', '家庭与权限管理', '家谱回收站'].forEach(function (label) {
+  ['切换家谱', '家谱变更历史', '完整家庭备份', '家谱显示设置', '家人权限与家谱管理', '家谱回收站'].forEach(function (label) {
     assert.match(template, new RegExp(label));
   });
   assert.match(source, /app\.loadFamilyPages\(true/);
@@ -84,7 +88,7 @@ test('家庭页集中家谱管理入口并移除最近动态', function () {
 
 test('家庭页不展示共同维护成员模块和查看完整家谱按钮', function () {
   const template = read('miniprogram/pages/members/index.wxml');
-  const source = read('miniprogram/pages/members/index.js');
+  const source = read('assets/family-profile/members.js');
   const style = read('miniprogram/pages/members/index.wxss');
 
   assert.doesNotMatch(template, /collaborator-scroll|collaborator-card|查看完整家谱/);
@@ -96,14 +100,12 @@ test('家庭页顶部卡片在窄屏完整展示家谱名称', function () {
   const template = read('miniprogram/pages/members/index.wxml');
   const style = read('miniprogram/pages/members/index.wxss');
 
-  assert.match(template, /family-title-row[\s\S]*family-name[\s\S]*family-membership-badge/);
-  assert.match(template, /family-progress-row[\s\S]*progress-track[\s\S]*invite-button/);
-  assert.match(style, /\.family-hero-top\s*\{[^}]*flex-direction:\s*column/);
-  assert.match(style, /\.family-name\s*\{[^}]*flex:\s*1[^}]*white-space:\s*normal[^}]*word-break:\s*break-all/);
-  assert.match(style, /\.family-membership-badge\s*\{[^}]*height:\s*55rpx[^}]*align-items:\s*center/);
-  assert.match(style, /\.family-progress-row\s*\{[^}]*width:\s*100%[^}]*display:\s*flex/);
-  assert.match(style, /\.family-progress-main\s*\{[^}]*width:\s*0[^}]*flex:\s*1/);
-  assert.match(style, /\.invite-button\s*\{[^}]*width:\s*0[^}]*height:\s*68rpx[^}]*flex:\s*1[^}]*white-space:\s*nowrap/);
+  assert.match(template, /family-title-row[\s\S]*family-name[\s\S]*family-card-arrow/);
+  assert.match(template, /family-completion[\s\S]*progress-track/);
+  assert.match(style, /\.family-name\s*\{[^}]*flex:\s*1[^}]*white-space:\s*normal[^}]*overflow-wrap:\s*anywhere/);
+  assert.match(style, /\.family-fact-label\s*\{[^}]*width:\s*2\.5em/);
+  assert.match(style, /\.family-fact-value\s*\{[^}]*min-width:\s*0/);
+  assert.match(style, /\.invite-button\s*\{[^}]*min-height:\s*44px/);
   assert.doesNotMatch(style, /\.family-name\s*\{[^}]*text-overflow:\s*ellipsis/);
 });
 
